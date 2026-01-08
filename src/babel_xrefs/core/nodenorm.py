@@ -35,6 +35,8 @@ class NodeNorm:
     def get_identifier(self, curie):
         result = self.normalize_curie(curie)
         logging.debug(f"Normalizing {curie} with NodeNorm to result: {result}")
+        if not result:
+            return Identifier(curie=curie)
         for identifier in result.get('equivalent_identifiers', []):
             if identifier['identifier'] == curie:
                 logging.debug(f"Found exact match for {curie}: {identifier}")
