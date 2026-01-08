@@ -104,6 +104,9 @@ class BabelXRefs:
         :return: A list of cross-references containing that CURIE.
         """
 
+        if ignore_curies_in_expansion:
+            logging.info(f"Ignoring {len(ignore_curies_in_expansion)}: {ignore_curies_in_expansion}")
+
         xrefs = set()
         for curie in curies:
             logging.info(f"Searching for cross-references for {curie}")
@@ -114,6 +117,6 @@ class BabelXRefs:
             new_curies = list(set([curie for xref in xrefs for curie in xref.curies]) - set(curies) - ignore_curies_in_expansion)
             if new_curies:
                 logging.info(f"Expanding cross-references to {new_curies}")
-                xrefs.update(self.get_curie_xrefs(new_curies, expand=True, ignore_curies_in_expansion=ignore_curies_in_expansion | set(new_curies), label_curies=label_curies))
+                xrefs.update(self.get_curie_xrefs(new_curies, expand=True, ignore_curies_in_expansion=ignore_curies_in_expansion | set(curies) | set(new_curies), label_curies=label_curies))
 
         return sorted(xrefs)
