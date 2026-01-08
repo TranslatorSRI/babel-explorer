@@ -42,7 +42,7 @@ class LabeledCrossReference(CrossReference):
         self.obj_biolink_type = obj_biolink_type
 
     def __str__(self):
-        return f"""LabeledCrossReference(subj="{self.subj}", obj="{self.obj}", subj_label="{self.subj_label}", obj_label="{self.obj_label}", subj_label="{self.subj_label}", obj_label="{self.obj_label}")"""
+        return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", obj_label="{self.obj_label}", subj_label="{self.subj_label}", obj_label="{self.obj_label}")"""
 
 class BabelXRefs:
     def __init__(self, downloader: BabelDownloader, nodenorm: NodeNorm = None):
