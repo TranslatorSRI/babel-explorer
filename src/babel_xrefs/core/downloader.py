@@ -2,6 +2,7 @@ import functools
 import os
 import urllib.parse
 import time
+import hashlib
 import requests
 from tqdm import tqdm
 import logging
@@ -39,6 +40,56 @@ class BabelDownloader:
         filepath = os.path.join(self.local_path, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         return filepath
+
+    def _calculate_md5(self, file_path, chunk_size=1024*1024):
+        """
+        Calculate MD5 checksum of a file.
+
+        Args:
+            file_path: Path to the file to checksum
+            chunk_size: Size of chunks to read (default 1MB)
+
+        Returns:
+            str: Hexadecimal MD5 checksum
+        """
+        md5_hash = hashlib.md5()
+        with open(file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(chunk_size), b''):
+                md5_hash.update(chunk)
+        return md5_hash.hexdigest()
+
+    def _fetch_remote_md5(self, url):
+        """
+        Fetch MD5 checksum from remote .md5 file.
+
+        Args:
+            url: URL to the .md5 file
+
+        Returns:
+            str: MD5 checksum if found, None if file doesn't exist or is malformed
+        """
+        try:
+            response = requests.get(url, timeout=10)
+            if response.status_code == 404:
+                self.logger.debug(f"No .md5 file found at {url}")
+                return None
+            response.raise_for_status()
+
+            # Parse MD5 file content
+            # Format is typically: "md5hash  filename" or just "md5hash"
+            content = response.text.strip()
+            md5_match = content.split()[0]  # Take first token
+
+            # Validate it's a valid MD5 (32 hex characters)
+            if len(md5_match) == 32 and all(c in '0123456789abcdef' for c in md5_match.lower()):
+                return md5_match.lower()
+            else:
+                self.logger.warning(f"Malformed .md5 file at {url}: {content}")
+                return None
+
+        except requests.RequestException as e:
+            self.logger.debug(f"Could not fetch .md5 file from {url}: {e}")
+            return None
 
     def _stream_download(self, response, local_path, resume_byte_pos, chunk_size):
         """
@@ -142,7 +193,13 @@ class BabelDownloader:
     @functools.lru_cache(maxsize=None)
     def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024*1024):
         """
-        Download a file from the Babel server to local storage.
+        Download a file from the Babel server to local storage with MD5 validation.
+
+        If a .md5 file exists on the server, this method will:
+        1. Check if the local file exists
+        2. Verify its MD5 checksum matches the expected value
+        3. Delete and re-download if checksums don't match
+        4. Skip download if checksums match
 
         Args:
             dirpath: Relative path from url_base to the file
@@ -155,11 +212,48 @@ class BabelDownloader:
         os.makedirs(os.path.dirname(local_path_to_download_to), exist_ok=True)
 
         url_to_download = urllib.parse.urljoin(self.url_base, dirpath)
+        md5_url = url_to_download + '.md5'
+
+        # Check if file already exists and validate with MD5 if available
+        if os.path.exists(local_path_to_download_to):
+            self.logger.info(f"Local file exists: {local_path_to_download_to}")
+
+            # Try to fetch remote MD5 checksum
+            expected_md5 = self._fetch_remote_md5(md5_url)
+
+            if expected_md5:
+                self.logger.info(f"Validating MD5 checksum (expected: {expected_md5})")
+
+                # Calculate local file's MD5
+                actual_md5 = self._calculate_md5(local_path_to_download_to, chunk_size)
+                self.logger.info(f"Local file MD5: {actual_md5}")
+
+                if actual_md5 == expected_md5:
+                    # File is valid, skip download
+                    self.logger.info(f"MD5 checksum matches - file is valid, skipping download")
+                    bytes_downloaded = os.path.getsize(local_path_to_download_to)
+                    self.logger.info(f"Using existing file: {local_path_to_download_to} ({bytes_downloaded} bytes)")
+                    return local_path_to_download_to
+                else:
+                    # Checksums don't match - delete and re-download
+                    self.logger.warning(f"MD5 checksum mismatch! Expected {expected_md5}, got {actual_md5}")
+                    self.logger.warning(f"Deleting corrupted file and re-downloading: {local_path_to_download_to}")
+                    os.remove(local_path_to_download_to)
 
         self.logger.info(f"Downloading {url_to_download} to {local_path_to_download_to}")
 
         # Download with retry logic
         self._download_with_retry(url_to_download, local_path_to_download_to, chunk_size)
+
+        # Verify MD5 after download if available
+        expected_md5 = self._fetch_remote_md5(md5_url)
+        if expected_md5:
+            actual_md5 = self._calculate_md5(local_path_to_download_to, chunk_size)
+            if actual_md5 == expected_md5:
+                self.logger.info(f"Post-download MD5 verification passed: {actual_md5}")
+            else:
+                self.logger.error(f"Post-download MD5 verification failed! Expected {expected_md5}, got {actual_md5}")
+                raise RuntimeError(f"Downloaded file has incorrect MD5 checksum")
 
         bytes_downloaded = os.path.getsize(local_path_to_download_to)
         self.logger.info(f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes")

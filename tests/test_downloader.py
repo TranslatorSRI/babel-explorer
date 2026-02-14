@@ -2,12 +2,14 @@
 Tests for the BabelDownloader class.
 
 These tests verify that the downloader can successfully fetch large Parquet files
-from the Babel server using wget and properly manage local file caching.
+from the Babel server and properly manage local file caching with MD5 validation.
 """
 
 import os
 import shutil
+import hashlib
 import pytest
+from unittest.mock import Mock, patch, MagicMock
 from babel_xrefs.core.downloader import BabelDownloader
 
 
@@ -192,3 +194,203 @@ def test_invalid_local_path():
         # Clean up
         if os.path.exists(invalid_path):
             os.remove(invalid_path)
+
+
+def test_md5_validation_matching_checksum(test_data_dir):
+    """
+    Test that MD5 validation skips download when checksums match.
+
+    This test:
+    1. Creates a local file with known content
+    2. Mocks the .md5 file to return the correct checksum
+    3. Verifies the download is skipped (no actual HTTP download occurs)
+    """
+    downloader = BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
+
+    # Create a test file with known content
+    test_file = "test_file.txt"
+    local_path = os.path.join(test_data_dir, test_file)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+    test_content = b"This is test content for MD5 validation"
+    with open(local_path, 'wb') as f:
+        f.write(test_content)
+
+    # Calculate the expected MD5
+    expected_md5 = hashlib.md5(test_content).hexdigest()
+
+    # Mock the _fetch_remote_md5 to return the matching checksum
+    with patch.object(downloader, '_fetch_remote_md5', return_value=expected_md5):
+        # Mock _download_with_retry to ensure it's NOT called
+        with patch.object(downloader, '_download_with_retry') as mock_download:
+            # Clear the cache before testing
+            downloader.get_downloaded_file.cache_clear()
+
+            result_path = downloader.get_downloaded_file(test_file)
+
+            # Verify the download was skipped
+            mock_download.assert_not_called()
+            assert result_path == local_path
+            assert os.path.exists(result_path)
+
+    print(f"\n✓ MD5 validation correctly skipped download for matching checksum: {expected_md5}")
+
+
+def test_md5_validation_mismatched_checksum(test_data_dir):
+    """
+    Test that MD5 validation deletes and re-downloads file when checksums don't match.
+
+    This test:
+    1. Creates a local file with wrong content
+    2. Mocks the .md5 file to return a different checksum
+    3. Verifies the file is deleted and re-downloaded
+    """
+    downloader = BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
+
+    # Create a test file with incorrect content
+    test_file = "test_file_mismatch.txt"
+    local_path = os.path.join(test_data_dir, test_file)
+    os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+    wrong_content = b"This is WRONG content"
+    with open(local_path, 'wb') as f:
+        f.write(wrong_content)
+
+    # Use a different MD5 (this is MD5 of "correct content")
+    correct_content = b"This is CORRECT content"
+    expected_md5 = hashlib.md5(correct_content).hexdigest()
+
+    # Track whether file was deleted
+    original_exists = os.path.exists(local_path)
+
+    # Mock the _fetch_remote_md5 to return the mismatched checksum
+    with patch.object(downloader, '_fetch_remote_md5', return_value=expected_md5):
+        # Mock _download_with_retry to create the "correct" file
+        def mock_download(url, path, chunk_size):
+            with open(path, 'wb') as f:
+                f.write(correct_content)
+
+        with patch.object(downloader, '_download_with_retry', side_effect=mock_download):
+            # Clear the cache before testing
+            downloader.get_downloaded_file.cache_clear()
+
+            result_path = downloader.get_downloaded_file(test_file)
+
+            # Verify the file exists and has correct content
+            assert os.path.exists(result_path)
+            with open(result_path, 'rb') as f:
+                assert f.read() == correct_content
+
+    print(f"\n✓ MD5 validation correctly deleted and re-downloaded file with mismatched checksum")
+
+
+def test_md5_validation_no_md5_file(test_data_dir):
+    """
+    Test that download proceeds normally when no .md5 file exists.
+
+    This test:
+    1. Mocks the .md5 file fetch to return None (404)
+    2. Verifies the download proceeds normally
+    """
+    downloader = BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
+
+    test_file = "test_file_no_md5.txt"
+    local_path = os.path.join(test_data_dir, test_file)
+
+    test_content = b"Test content without MD5 file"
+
+    # Mock the _fetch_remote_md5 to return None (no .md5 file)
+    with patch.object(downloader, '_fetch_remote_md5', return_value=None):
+        # Mock _download_with_retry to create the file
+        def mock_download(url, path, chunk_size):
+            with open(path, 'wb') as f:
+                f.write(test_content)
+
+        with patch.object(downloader, '_download_with_retry', side_effect=mock_download) as mock_download_method:
+            # Clear the cache before testing
+            downloader.get_downloaded_file.cache_clear()
+
+            result_path = downloader.get_downloaded_file(test_file)
+
+            # Verify download was called (normal download path)
+            mock_download_method.assert_called_once()
+            assert os.path.exists(result_path)
+            with open(result_path, 'rb') as f:
+                assert f.read() == test_content
+
+    print(f"\n✓ Download proceeded normally when no .md5 file exists")
+
+
+def test_md5_validation_malformed_md5_file(test_data_dir):
+    """
+    Test that download proceeds normally when .md5 file is malformed.
+
+    This test:
+    1. Mocks the .md5 file fetch to return None (malformed content)
+    2. Verifies the download proceeds normally with a warning
+    """
+    downloader = BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
+
+    test_file = "test_file_malformed_md5.txt"
+    local_path = os.path.join(test_data_dir, test_file)
+
+    test_content = b"Test content with malformed MD5 file"
+
+    # Mock the _fetch_remote_md5 to return None (malformed .md5 file)
+    with patch.object(downloader, '_fetch_remote_md5', return_value=None):
+        # Mock _download_with_retry to create the file
+        def mock_download(url, path, chunk_size):
+            with open(path, 'wb') as f:
+                f.write(test_content)
+
+        with patch.object(downloader, '_download_with_retry', side_effect=mock_download) as mock_download_method:
+            # Clear the cache before testing
+            downloader.get_downloaded_file.cache_clear()
+
+            result_path = downloader.get_downloaded_file(test_file)
+
+            # Verify download was called (normal download path)
+            mock_download_method.assert_called_once()
+            assert os.path.exists(result_path)
+
+    print(f"\n✓ Download proceeded normally when .md5 file is malformed")
+
+
+def test_md5_post_download_validation(test_data_dir):
+    """
+    Test that MD5 validation occurs after download and fails if checksum is wrong.
+
+    This test:
+    1. Downloads a new file
+    2. Mocks the .md5 file to return a checksum
+    3. Mocks the download to create a file with WRONG content
+    4. Verifies a RuntimeError is raised for checksum mismatch
+    """
+    downloader = BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
+
+    test_file = "test_file_post_validation.txt"
+    local_path = os.path.join(test_data_dir, test_file)
+
+    # Expected content and MD5
+    correct_content = b"Expected content"
+    expected_md5 = hashlib.md5(correct_content).hexdigest()
+
+    # Wrong content that will be downloaded
+    wrong_content = b"Wrong content downloaded"
+
+    # Mock the _fetch_remote_md5 to return the expected checksum
+    with patch.object(downloader, '_fetch_remote_md5', return_value=expected_md5):
+        # Mock _download_with_retry to create a file with WRONG content
+        def mock_download(url, path, chunk_size):
+            with open(path, 'wb') as f:
+                f.write(wrong_content)
+
+        with patch.object(downloader, '_download_with_retry', side_effect=mock_download):
+            # Clear the cache before testing
+            downloader.get_downloaded_file.cache_clear()
+
+            # Should raise RuntimeError due to post-download MD5 mismatch
+            with pytest.raises(RuntimeError, match="incorrect MD5 checksum"):
+                downloader.get_downloaded_file(test_file)
+
+    print(f"\n✓ Post-download MD5 validation correctly detected checksum mismatch")
