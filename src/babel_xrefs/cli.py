@@ -2,7 +2,7 @@
 import click
 import logging
 from babel_xrefs.core.downloader import BabelDownloader
-from babel_xrefs.babel_xrefs import BabelXRefs
+from babel_xrefs.core.babel_xrefs import BabelXRefs
 from babel_xrefs.core.nodenorm import NodeNorm
 
 
