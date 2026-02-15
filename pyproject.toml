@@ -1,5 +1,5 @@
 [project]
-name = "babel-xrefs"
+name = "babel-explorer"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -22,4 +22,4 @@ dev = [
 ]
 
 [project.scripts]
-babel-xrefs = "babel_xrefs.cli:cli"
+babel-explorer = "babel_explorer.cli:cli"

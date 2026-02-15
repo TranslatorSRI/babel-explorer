@@ -6,8 +6,8 @@ import logging
 import duckdb
 import functools
 
-from babel_xrefs.core.downloader import BabelDownloader
-from babel_xrefs.core.nodenorm import NodeNorm
+from babel_explorer.core.downloader import BabelDownloader
+from babel_explorer.core.nodenorm import NodeNorm
 
 
 @dataclasses.dataclass(frozen=True)

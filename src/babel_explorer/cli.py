@@ -1,9 +1,9 @@
-# Command line interface for babel-xrefs
+# Command line interface for babel-explorer
 import click
 import logging
-from babel_xrefs.core.downloader import BabelDownloader
-from babel_xrefs.core.babel_xrefs import BabelXRefs
-from babel_xrefs.core.nodenorm import NodeNorm
+from babel_explorer.core.downloader import BabelDownloader
+from babel_explorer.core.babel_xrefs import BabelXRefs
+from babel_explorer.core.nodenorm import NodeNorm
 
 
 @click.group()

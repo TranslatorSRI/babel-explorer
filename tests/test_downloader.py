@@ -10,7 +10,7 @@ import shutil
 import hashlib
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from babel_xrefs.core.downloader import BabelDownloader
+from babel_explorer.core.downloader import BabelDownloader
 
 
 # Constants for test configuration
