@@ -1,1 +1,1 @@
-# Tests for babel-xrefs
+# Tests for babel-explorer
