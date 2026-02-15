@@ -44,17 +44,39 @@ class LabeledCrossReference(CrossReference):
     def __str__(self):
         return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", obj_label="{self.obj_label}", subj_label="{self.subj_label}", obj_label="{self.obj_label}")"""
 
+@dataclasses.dataclass(frozen=True)
+class IdentifierRecord:
+    """A record from the Identifiers.parquet file."""
+    curie: str
+    extra_fields: tuple = ()
+
+    @staticmethod
+    def from_row(row: tuple, column_names: list[str]):
+        """Create an IdentifierRecord from a DuckDB result row and its column names."""
+        curie_idx = column_names.index('curie')
+        extra = tuple(
+            (col, row[i]) for i, col in enumerate(column_names) if i != curie_idx
+        )
+        return IdentifierRecord(curie=row[curie_idx], extra_fields=extra)
+
+    def __str__(self):
+        parts = [f"curie={self.curie!r}"]
+        for name, value in self.extra_fields:
+            parts.append(f"{name}={value!r}")
+        return f"IdentifierRecord({', '.join(parts)})"
+
+
 class BabelXRefs:
     def __init__(self, downloader: BabelDownloader, nodenorm: NodeNorm = None):
         self.downloader = downloader
         self.nodenorm = nodenorm
 
-    def get_curie_ids(self, curies: list[str]):
+    def get_curie_ids(self, curies: list[str]) -> list[IdentifierRecord]:
         """
         Search for all identifiers in the /ids/ files for a particular CURIE.
 
-        :param curie: A CURIE to search for.
-        :return: A list of cross-references containing that CURIE.
+        :param curies: A list of CURIEs to search for.
+        :return: A list of IdentifierRecords containing those CURIEs.
         """
 
         identifier_parquet = self.downloader.get_downloaded_file('duckdb/Identifiers.parquet')
@@ -64,11 +86,10 @@ class BabelXRefs:
         duckdb_path = self.downloader.get_output_file('output/duckdbs/xrefs.duckdb')
         db = duckdb.connect(duckdb_path)
         identifier_table = db.read_parquet(identifier_parquet)
-        xrefs = db.execute(f"SELECT * FROM identifier_table WHERE curie IN $1", [curies])
+        result = db.execute(f"SELECT * FROM identifier_table WHERE curie IN $1", [curies])
 
-        # TODO: convert into case classes.
-
-        return xrefs.fetchall()
+        column_names = [desc[0] for desc in result.description]
+        return [IdentifierRecord.from_row(row, column_names) for row in result.fetchall()]
 
     @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):

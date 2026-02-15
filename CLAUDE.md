@@ -48,8 +48,17 @@ uv run babel-explorer xrefs MONDO:0004979 --local-dir data/2025nov19 --babel-url
 ### Development Commands
 
 ```bash
-# Run tests
-uv run pytest
+# Run all tests (includes large file downloads)
+uv run pytest -v
+
+# Run unit tests only (fast, no network)
+uv run pytest -v -m "not integration"
+
+# Run integration tests without 2GB+ downloads
+uv run pytest -v -m "integration and not slow"
+
+# Run a single test file
+uv run pytest -v tests/test_nodenorm.py
 
 # Run linter
 uv run ruff check
@@ -68,7 +77,7 @@ uv run ruff format
    - Uses `@functools.lru_cache` to avoid re-downloading
    - **Important**: Requires `wget` to be installed on the system
 
-2. **BabelXRefs** (`src/babel_explorer/babel_xrefs.py`):
+2. **BabelXRefs** (`src/babel_explorer/core/babel_xrefs.py`):
    - Main query engine for cross-references
    - Uses DuckDB to query Parquet files (`Concord.parquet`, `Identifiers.parquet`, `Metadata.parquet`)
    - Supports recursive expansion of cross-references
@@ -99,17 +108,43 @@ uv run ruff format
 - **Recursive expansion**: The `--expand` flag recursively follows all cross-references to build complete graphs
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
 
+## Testing
+
+### Test Structure
+
+Tests live in `tests/` and are split into fast **unit tests** (mocked, no network) and slower **integration tests** (real downloads and API calls). Pytest markers control which tests run:
+
+- **`@pytest.mark.integration`** — requires network access (downloads Parquet files or calls NodeNorm API)
+- **`@pytest.mark.slow`** — downloads very large files (2 GB+)
+
+| File | Unit | Integration | Slow | Total |
+|------|------|-------------|------|-------|
+| `tests/test_downloader.py` | 22 | 3 | 1 | 26 |
+| `tests/test_babel_xrefs.py` | 22 | 8 | 1 | 31 |
+| `tests/test_nodenorm.py` | 18 | 5 | 0 | 23 |
+
+### Test Infrastructure
+
+- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. Teardown removes the `data/test/` directory so the next run starts fresh.
+- **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
+- **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
+
+### Key Dataclasses
+
+- **`CrossReference`** — Frozen dataclass for Concord.parquet rows (filename, subj, pred, obj)
+- **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
+- **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields). Returned by `BabelXRefs.get_curie_ids()`.
+
 ## Important Notes
 
-- **System dependency**: This project requires `wget` to be installed (used by BabelDownloader)
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
 - **Babel versions**: The default Babel version is `2025nov19`, but this can be customized via `--local-dir` and `--babel-url`
-- **No tests yet**: The project currently has pytest configured but no test files exist
-- **Empty model.py**: The `src/babel_explorer/core/model.py` file exists but is currently empty; data classes are defined in `babel_explorer.py` and `nodenorm.py` instead
 
 ## File Locations
 
 - Source code: `src/babel_explorer/`
+- Tests: `tests/`
+- Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `data/<version>/duckdb/*.parquet`
 - Generated DuckDB databases: `data/<version>/output/duckdbs/`
 - Entry point: `src/babel_explorer/cli.py`
