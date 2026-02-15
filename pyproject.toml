@@ -23,3 +23,9 @@ dev = [
 
 [project.scripts]
 babel-explorer = "babel_explorer.cli:cli"
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: tests requiring network access (deselect with '-m \"not integration\"')",
+    "slow: tests downloading very large files 2GB+ (deselect with '-m \"not slow\"')",
+]
