@@ -11,10 +11,15 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
 def create_app(
-    local_dir: str = "data/2025nov19",
-    babel_url: str = "https://stars.renci.org:443/var/babel/2025nov19/",
-    nodenorm_url: str = "https://nodenormalization-sri.renci.org/",
+    local_dir: str | None = None,
+    babel_url: str | None = None,
+    nodenorm_url: str | None = None,
 ) -> FastAPI:
+    import os
+
+    local_dir = local_dir or os.environ.get("BABEL_LOCAL_DIR", "data/2025nov19")
+    babel_url = babel_url or os.environ.get("BABEL_URL", "https://stars.renci.org:443/var/babel/2025nov19/")
+    nodenorm_url = nodenorm_url or os.environ.get("BABEL_NODENORM_URL", "https://nodenormalization-sri.renci.org/")
     app = FastAPI(title="Babel Explorer")
 
     app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
