@@ -52,7 +52,10 @@ def index(request: Request):
 
 @router.get("/nodenorm")
 def nodenorm_page(request: Request):
-    return _render(request, "nodenorm.html", {"default_url": request.app.state.nodenorm_url})
+    return _render(request, "nodenorm.html", {
+        "default_url": request.app.state.nodenorm_url,
+        "nodenorm_urls": NodeNorm.URLs,
+    })
 
 
 @router.get("/xrefs")
@@ -67,7 +70,10 @@ def ids_page(request: Request):
 
 @router.get("/test-concord")
 def test_concord_page(request: Request):
-    return _render(request, "test_concord.html", {"default_url": request.app.state.nodenorm_url})
+    return _render(request, "test_concord.html", {
+        "default_url": request.app.state.nodenorm_url,
+        "nodenorm_urls": NodeNorm.URLs,
+    })
 
 
 # ---------------------------------------------------------------------------

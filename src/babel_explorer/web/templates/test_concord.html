@@ -10,9 +10,19 @@
     <textarea class="form-control" id="curies" name="curies" rows="5" placeholder="MONDO:0004979&#10;HP:0000001"></textarea>
   </div>
   <div class="mb-3">
-    <label for="nodenorm_url" class="form-label">NodeNorm URL</label>
-    <input type="text" class="form-control" id="nodenorm_url" name="nodenorm_url" value="{{ default_url }}">
+    <label for="nodenorm_select" class="form-label">NodeNorm Instance</label>
+    <select class="form-select" id="nodenorm_select" onchange="onNodeNormSelect(this)">
+      {% for name, url in nodenorm_urls.items() %}
+      <option value="{{ url }}" {% if url == default_url %}selected{% endif %}>{{ name }} ({{ url }})</option>
+      {% endfor %}
+      <option value="__custom__">Custom URL...</option>
+    </select>
   </div>
+  <div class="mb-3" id="custom-url-group" style="display:none;">
+    <label for="custom_url_input" class="form-label">Custom URL</label>
+    <input type="text" class="form-control" id="custom_url_input" placeholder="https://...">
+  </div>
+  <input type="hidden" id="nodenorm_url" name="nodenorm_url" value="{{ default_url }}">
   <button type="submit" class="btn btn-primary">Look Up</button>
   <span id="loading" class="htmx-indicator">
     <div class="spinner-border spinner-border-sm text-primary ms-2" role="status">
@@ -22,4 +32,21 @@
 </form>
 
 <div id="results-container" class="mt-4"></div>
+
+<script>
+function onNodeNormSelect(sel) {
+  var customGroup = document.getElementById('custom-url-group');
+  var hidden = document.getElementById('nodenorm_url');
+  var customInput = document.getElementById('custom_url_input');
+  if (sel.value === '__custom__') {
+    customGroup.style.display = '';
+    hidden.value = customInput.value;
+    customInput.oninput = function() { hidden.value = customInput.value; };
+  } else {
+    customGroup.style.display = 'none';
+    hidden.value = sel.value;
+    customInput.oninput = null;
+  }
+}
+</script>
 {% endblock %}
