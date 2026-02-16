@@ -82,5 +82,21 @@ def test_concord(curies, nodenorm_url):
                 print(f"{curie}\t{identifier.curie}\t\t{identifier.biolink_type}")
 
 
+@cli.command("web")
+@click.option("--host", type=str, default="127.0.0.1", help="Host to bind to")
+@click.option("--port", type=int, default=8000, help="Port to bind to")
+@click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
+@click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel/2025nov19/", help="Base URL of the Babel server")
+@click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def web(host, port, local_dir, babel_url, nodenorm_url, reload):
+    """Start the web server."""
+    import uvicorn
+    from babel_explorer.web import create_app
+
+    app = create_app(local_dir=local_dir, babel_url=babel_url, nodenorm_url=nodenorm_url)
+    uvicorn.run(app, host=host, port=port, reload=reload)
+
+
 if __name__ == "__main__":
     cli()

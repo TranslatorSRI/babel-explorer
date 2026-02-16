@@ -1,0 +1,37 @@
+<p>{{ records|length }} result{{ "s" if records|length != 1 else "" }} found.</p>
+
+<div class="mb-2">
+  <button class="btn btn-sm btn-outline-secondary" onclick="copyTableAsTSV('results-table')">Copy as TSV</button>
+  <a class="btn btn-sm btn-outline-secondary" id="csv-download" href="#">Download CSV</a>
+</div>
+
+<div class="table-responsive">
+<table class="table table-striped table-sm" id="results-table">
+  <thead>
+    <tr>
+      <th>CURIE</th>
+      {% for name in extra_names %}
+      <th>{{ name }}</th>
+      {% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for rec in records %}
+    <tr>
+      <td>{{ rec.curie }}</td>
+      {% for name in extra_names %}
+      <td>{{ dict(rec.extra_fields).get(name, '') }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<script>
+(function() {
+  const curies = document.getElementById('curies').value.trim().split('\n').filter(Boolean);
+  const params = curies.map(c => 'curie=' + encodeURIComponent(c.trim())).join('&');
+  document.getElementById('csv-download').href = '/api/ids/csv?' + params;
+})();
+</script>
