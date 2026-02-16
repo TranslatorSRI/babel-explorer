@@ -43,6 +43,12 @@ uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 
 # Use custom Babel server or local directory
 uv run babel-explorer xrefs MONDO:0004979 --local-dir data/2025nov19 --babel-url https://stars.renci.org:443/var/babel_outputs/2025nov19/
+
+# Start the web server
+uv run babel-explorer web
+
+# Start with custom options
+uv run babel-explorer web --host 0.0.0.0 --port 9000 --reload
 ```
 
 ### Development Commands
@@ -91,7 +97,15 @@ uv run ruff format
 
 4. **CLI** (`src/babel_explorer/cli.py`):
    - Click-based command-line interface
-   - Three main commands: `xrefs`, `ids`, `test-concord`
+   - Four main commands: `xrefs`, `ids`, `test-concord`, `web`
+
+5. **Web Frontend** (`src/babel_explorer/web/`):
+   - FastAPI + Jinja2 + htmx + Bootstrap 5 (CDN) web interface
+   - App factory in `web/__init__.py` — `create_app(local_dir, babel_url, nodenorm_url)`
+   - All routes in `web/routes.py` — HTML pages, htmx partials, JSON API, CSV downloads
+   - Templates in `web/templates/` with `_partials/` for htmx fragments
+   - Sync route handlers (core code is synchronous; FastAPI runs them in a threadpool)
+   - Four tools exposed: NodeNorm, XRefs, IDs, Test Concordance
 
 ### Data Flow
 
@@ -122,6 +136,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 | `tests/test_downloader.py` | 22 | 3 | 1 | 26 |
 | `tests/test_babel_xrefs.py` | 22 | 8 | 1 | 31 |
 | `tests/test_nodenorm.py` | 18 | 5 | 0 | 23 |
+| `tests/test_web.py` | 24 | 0 | 0 | 24 |
 
 ### Test Infrastructure
 
@@ -147,4 +162,6 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `data/<version>/duckdb/*.parquet`
 - Generated DuckDB databases: `data/<version>/output/duckdbs/`
+- Web frontend: `src/babel_explorer/web/`
+- Web templates: `src/babel_explorer/web/templates/`
 - Entry point: `src/babel_explorer/cli.py`

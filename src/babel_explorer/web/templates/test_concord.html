@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Test Concordance - Babel Explorer{% endblock %}
+{% block content %}
+<h2>Test Concordance</h2>
+<p>See all equivalent identifiers (clique members) for CURIEs via NodeNorm.</p>
+
+<form hx-post="/htmx/test-concord" hx-target="#results-container" hx-indicator="#loading">
+  <div class="mb-3">
+    <label for="curies" class="form-label">CURIEs (one per line)</label>
+    <textarea class="form-control" id="curies" name="curies" rows="5" placeholder="MONDO:0004979&#10;HP:0000001"></textarea>
+  </div>
+  <div class="mb-3">
+    <label for="nodenorm_url" class="form-label">NodeNorm URL</label>
+    <input type="text" class="form-control" id="nodenorm_url" name="nodenorm_url" value="{{ default_url }}">
+  </div>
+  <button type="submit" class="btn btn-primary">Look Up</button>
+  <span id="loading" class="htmx-indicator">
+    <div class="spinner-border spinner-border-sm text-primary ms-2" role="status">
+      <span class="visually-hidden">Loading...</span>
+    </div>
+  </span>
+</form>
+
+<div id="results-container" class="mt-4"></div>
+{% endblock %}
