@@ -28,6 +28,15 @@ class Identifier:
         return identifier
 
 class NodeNorm:
+    # A list of NodeNorm instances to choose from.
+    URLs = {
+        "NodeNorm Dev": "https://nodenormalization-sri.renci.org/",
+        "NodeNorm Exp": "https://nodenormalization-exp.apps.renci.org/",
+        "Translator NodeNorm Production": "https://nodenorm.transltr.io/",
+        "Translator NodeNorm Test": "https://nodenorm.test.transltr.io/",
+        "Translator NodeNorm CI": "https://nodenorm.ci.transltr.io/",
+    }
+
     def __init__(self, nodenorm_url: str=""):
         self.nodenorm_url = nodenorm_url
 
