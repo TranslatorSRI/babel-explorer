@@ -96,7 +96,7 @@ def htmx_nodenorm(request: Request, curies: str = Form(""), nodenorm_url: str = 
                 "label": ident.label,
                 "biolink_type": ident.biolink_type,
                 "taxa": ", ".join(ident.taxa) if ident.taxa else "",
-                "description": "; ".join(ident.description) if ident.description else "",
+                "description": ident.description if ident.description else "",
             })
         return _render(request, "_partials/nodenorm_results.html", {"rows": rows})
     except Exception as exc:
