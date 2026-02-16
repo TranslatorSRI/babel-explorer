@@ -91,11 +91,18 @@ def test_concord(curies, nodenorm_url):
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 def web(host, port, local_dir, babel_url, nodenorm_url, reload):
     """Start the web server."""
+    import os
     import uvicorn
-    from babel_explorer.web import create_app
 
-    app = create_app(local_dir=local_dir, babel_url=babel_url, nodenorm_url=nodenorm_url)
-    uvicorn.run(app, host=host, port=port, reload=reload)
+    os.environ["BABEL_LOCAL_DIR"] = local_dir
+    os.environ["BABEL_URL"] = babel_url
+    os.environ["BABEL_NODENORM_URL"] = nodenorm_url
+
+    if reload:
+        uvicorn.run("babel_explorer.web:create_app", host=host, port=port, reload=True, factory=True)
+    else:
+        from babel_explorer.web import create_app
+        uvicorn.run(create_app(), host=host, port=port)
 
 
 if __name__ == "__main__":
