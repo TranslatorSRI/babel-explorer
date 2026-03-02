@@ -1,7 +1,7 @@
 [project]
 name = "babel-explorer"
 version = "0.1.0"
-description = "Add your description here"
+description = "Tool for querying and exploring Babel APIs and intermediate files"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
