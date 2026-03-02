@@ -32,7 +32,7 @@ class NodeNorm:
         self.nodenorm_url = nodenorm_url
 
     @functools.lru_cache(maxsize=None)
-    def get_identifier(self, curie):
+    def get_identifier(self, curie: str):
         result = self.normalize_curie(curie)
         logging.debug(f"Normalizing {curie} with NodeNorm to result: {result}")
         if not result:
