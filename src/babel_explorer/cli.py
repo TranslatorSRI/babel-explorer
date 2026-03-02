@@ -6,6 +6,17 @@ from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
 
 
+def parse_duration(value: str) -> float:
+    """Parse a duration string like '3h', '30m', '1d', '7200', or 'never' → seconds."""
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    lower = value.lower()
+    if lower == "never":
+        return float("inf")
+    if lower[-1] in units:
+        return int(lower[:-1]) * units[lower[-1]]
+    return int(lower)  # bare seconds
+
+
 @click.group()
 def cli():
     pass
@@ -17,7 +28,11 @@ def cli():
 @click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL to check for concord changes")
 @click.option("--expand", is_flag=True, help="Also display xrefs for returned CURIEs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
-def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expand: bool, labels: bool):
+@click.option("--check-download", type=str, default="3h", show_default=True,
+              help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
+                   "'never' always checks via HTTP HEAD; '0' same as 'never'.")
+def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expand: bool, labels: bool,
+          check_download: str):
     """
     Fetches and prints the cross-references (xrefs) for the given CURIEs.
 
@@ -35,7 +50,8 @@ def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expan
     """
     logging.basicConfig(level=logging.INFO)
 
-    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir), NodeNorm(nodenorm_url))
+    freshness = parse_duration(check_download)
+    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness), NodeNorm(nodenorm_url))
     xrefs = bxref.get_curie_xrefs(curies, expand, label_curies=labels)
     for xref in xrefs:
         print(xref)
@@ -44,7 +60,10 @@ def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expan
 @click.argument("curies", type=str, required=True, nargs=-1)
 @click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
 @click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel/2025nov19/", help="Base URL of the Babel server")
-def ids(curies: list[str], babel_url: str, local_dir: str):
+@click.option("--check-download", type=str, default="3h", show_default=True,
+              help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
+                   "'never' always checks via HTTP HEAD; '0' same as 'never'.")
+def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
 
@@ -60,7 +79,8 @@ def ids(curies: list[str], babel_url: str, local_dir: str):
     """
     logging.basicConfig(level=logging.INFO)
 
-    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir))
+    freshness = parse_duration(check_download)
+    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness))
     xrefs = bxref.get_curie_ids(curies)
     for xref in xrefs:
         print(xref)

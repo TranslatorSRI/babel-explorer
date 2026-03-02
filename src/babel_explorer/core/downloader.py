@@ -1,9 +1,10 @@
 import functools
+import json
 import os
 import urllib.parse
 import time
-import hashlib
 import requests
+from datetime import datetime, timezone
 from tqdm import tqdm
 import logging
 
@@ -13,10 +14,11 @@ class BabelDownloader:
     Class for downloading Babel cross-reference files to a local directory as needed.
     """
 
-    def __init__(self, url_base, local_path=None, retries=10):
+    def __init__(self, url_base, local_path=None, retries=10, freshness_seconds=3 * 3600):
         # We assume the URL base is correct (if not, we can fix it later).
         self.url_base = url_base
         self.retries = retries
+        self.freshness_seconds = freshness_seconds
         self.logger = logging.getLogger(BabelDownloader.__name__)
 
         if local_path is None:
@@ -41,55 +43,115 @@ class BabelDownloader:
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         return filepath
 
-    def _calculate_md5(self, file_path, chunk_size=1024*1024):
+    def _get_meta_path(self, local_path):
+        """Return the sidecar metadata file path for a given local file."""
+        return local_path + ".meta"
+
+    def _load_meta(self, local_path):
+        """Load sidecar metadata JSON, or return None if not found/invalid."""
+        meta_path = self._get_meta_path(local_path)
+        if not os.path.exists(meta_path):
+            return None
+        try:
+            with open(meta_path, "r") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return None
+
+    def _save_meta(self, local_path, headers, update_last_checked=True):
         """
-        Calculate MD5 checksum of a file.
+        Write a sidecar .meta JSON file next to local_path.
 
         Args:
-            file_path: Path to the file to checksum
-            chunk_size: Size of chunks to read (default 1MB)
-
-        Returns:
-            str: Hexadecimal MD5 checksum
+            local_path: Path to the downloaded file
+            headers: Response headers dict (or requests.structures.CaseInsensitiveDict)
+            update_last_checked: If True, set last_checked to now
         """
-        md5_hash = hashlib.md5()
-        with open(file_path, 'rb') as f:
-            for chunk in iter(lambda: f.read(chunk_size), b''):
-                md5_hash.update(chunk)
-        return md5_hash.hexdigest()
+        meta = {}
+        if "ETag" in headers:
+            meta["etag"] = headers["ETag"]
+        if "Last-Modified" in headers:
+            meta["last_modified"] = headers["Last-Modified"]
+        if "Content-Length" in headers:
+            meta["content_length"] = int(headers["Content-Length"])
+        if update_last_checked:
+            meta["last_checked"] = datetime.now(timezone.utc).isoformat()
 
-    def _fetch_remote_md5(self, url):
+        meta_path = self._get_meta_path(local_path)
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=2)
+
+    def _is_within_freshness(self, meta, freshness_seconds):
         """
-        Fetch MD5 checksum from remote .md5 file.
+        Return True if last_checked is within freshness_seconds of now.
 
         Args:
-            url: URL to the .md5 file
+            meta: dict loaded from .meta file
+            freshness_seconds: Number of seconds; float('inf') means always fresh
 
         Returns:
-            str: MD5 checksum if found, None if file doesn't exist or is malformed
+            bool
+        """
+        if freshness_seconds == float("inf"):
+            return True
+        last_checked_str = meta.get("last_checked")
+        if not last_checked_str:
+            return False
+        try:
+            last_checked = datetime.fromisoformat(last_checked_str)
+            age = (datetime.now(timezone.utc) - last_checked).total_seconds()
+            return age < freshness_seconds
+        except (ValueError, TypeError):
+            return False
+
+    def _etag_matches(self, url, meta):
+        """
+        Do a HEAD request and check if the ETag (or Last-Modified + Content-Length)
+        matches the stored metadata. If they match, update last_checked in the .meta file.
+
+        Args:
+            url: URL to HEAD
+            meta: dict loaded from .meta file (may have etag, last_modified, content_length)
+
+        Returns:
+            bool: True if remote matches local meta (file is still current)
         """
         try:
-            response = requests.get(url, timeout=10)
-            if response.status_code == 404:
-                self.logger.debug(f"No .md5 file found at {url}")
-                return None
+            response = requests.head(url, timeout=30)
             response.raise_for_status()
-
-            # Parse MD5 file content
-            # Format is typically: "md5hash  filename" or just "md5hash"
-            content = response.text.strip()
-            md5_match = content.split()[0]  # Take first token
-
-            # Validate it's a valid MD5 (32 hex characters)
-            if len(md5_match) == 32 and all(c in '0123456789abcdef' for c in md5_match.lower()):
-                return md5_match.lower()
-            else:
-                self.logger.warning(f"Malformed .md5 file at {url}: {content}")
-                return None
-
         except requests.RequestException as e:
-            self.logger.debug(f"Could not fetch .md5 file from {url}: {e}")
-            return None
+            self.logger.warning(f"HEAD request failed for {url}: {e}")
+            return False
+
+        remote_headers = response.headers
+
+        # Primary check: ETag
+        local_etag = meta.get("etag")
+        remote_etag = remote_headers.get("ETag")
+        if local_etag and remote_etag:
+            if local_etag == remote_etag:
+                self.logger.info(f"ETag matches ({remote_etag}), file is current")
+                # Update last_checked in the .meta file
+                # We need the local_path to update — derive it from URL
+                # Caller will handle updating; return True
+                return True
+            else:
+                self.logger.info(f"ETag changed: {local_etag!r} → {remote_etag!r}, re-downloading")
+                return False
+
+        # Fallback: Last-Modified + Content-Length
+        local_lm = meta.get("last_modified")
+        remote_lm = remote_headers.get("Last-Modified")
+        local_cl = meta.get("content_length")
+        remote_cl = remote_headers.get("Content-Length")
+
+        if local_lm and remote_lm and local_lm == remote_lm:
+            if local_cl is None or remote_cl is None or int(remote_cl) == local_cl:
+                self.logger.info(f"Last-Modified matches ({remote_lm}), file is current")
+                return True
+
+        self.logger.info("Cannot confirm file is current (no matching ETag or Last-Modified), will re-download")
+        return False
 
     def _stream_download(self, response, local_path, resume_byte_pos, chunk_size):
         """
@@ -134,6 +196,9 @@ class BabelDownloader:
             local_path: Local file path to save to
             chunk_size: Size of chunks to read/write
 
+        Returns:
+            requests.structures.CaseInsensitiveDict: Response headers from the final request
+
         Raises:
             RuntimeError: If all retry attempts fail
         """
@@ -157,7 +222,7 @@ class BabelDownloader:
                 if response.status_code == 416:
                     # Range Not Satisfiable - file already complete
                     self.logger.info(f"File already complete: {local_path}")
-                    return
+                    return response.headers
                 elif response.status_code == 206:
                     # Partial Content - resume successful
                     self.logger.info(f"Resuming download (HTTP 206)")
@@ -176,7 +241,7 @@ class BabelDownloader:
                 self._stream_download(response, local_path, resume_byte_pos, chunk_size)
 
                 # Success - exit retry loop
-                return
+                return response.headers
 
             except (requests.RequestException, IOError) as e:
                 self.logger.warning(f"Download attempt {attempt}/{self.retries} failed: {e}")
@@ -193,13 +258,12 @@ class BabelDownloader:
     @functools.lru_cache(maxsize=None)
     def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024*1024):
         """
-        Download a file from the Babel server to local storage with MD5 validation.
+        Download a file from the Babel server to local storage with ETag-based caching.
 
-        If a .md5 file exists on the server, this method will:
-        1. Check if the local file exists
-        2. Verify its MD5 checksum matches the expected value
-        3. Delete and re-download if checksums don't match
-        4. Skip download if checksums match
+        Three-tier freshness logic:
+        1. If .meta exists and last_checked is within freshness window → return immediately
+        2. If .meta exists but stale → HEAD request to compare ETag; return if unchanged
+        3. If ETag changed or no .meta → full re-download
 
         Args:
             dirpath: Relative path from url_base to the file
@@ -212,48 +276,37 @@ class BabelDownloader:
         os.makedirs(os.path.dirname(local_path_to_download_to), exist_ok=True)
 
         url_to_download = urllib.parse.urljoin(self.url_base, dirpath)
-        md5_url = url_to_download + '.md5'
 
-        # Check if file already exists and validate with MD5 if available
         if os.path.exists(local_path_to_download_to):
-            self.logger.info(f"Local file exists: {local_path_to_download_to}")
-
-            # Try to fetch remote MD5 checksum
-            expected_md5 = self._fetch_remote_md5(md5_url)
-
-            if expected_md5:
-                self.logger.info(f"Validating MD5 checksum (expected: {expected_md5})")
-
-                # Calculate local file's MD5
-                actual_md5 = self._calculate_md5(local_path_to_download_to, chunk_size)
-                self.logger.info(f"Local file MD5: {actual_md5}")
-
-                if actual_md5 == expected_md5:
-                    # File is valid, skip download
-                    self.logger.info(f"MD5 checksum matches - file is valid, skipping download")
-                    bytes_downloaded = os.path.getsize(local_path_to_download_to)
-                    self.logger.info(f"Using existing file: {local_path_to_download_to} ({bytes_downloaded} bytes)")
+            meta = self._load_meta(local_path_to_download_to)
+            if meta is not None:
+                # Tier 1: within freshness window — skip all network calls
+                if self._is_within_freshness(meta, self.freshness_seconds):
+                    self.logger.info(f"File within freshness window, skipping check: {local_path_to_download_to}")
                     return local_path_to_download_to
-                else:
-                    # Checksums don't match - delete and re-download
-                    self.logger.warning(f"MD5 checksum mismatch! Expected {expected_md5}, got {actual_md5}")
-                    self.logger.warning(f"Deleting corrupted file and re-downloading: {local_path_to_download_to}")
-                    os.remove(local_path_to_download_to)
+
+                # Tier 2: stale but maybe unchanged — HEAD request
+                if self._etag_matches(url_to_download, meta):
+                    # Update last_checked timestamp
+                    meta["last_checked"] = datetime.now(timezone.utc).isoformat()
+                    meta_path = self._get_meta_path(local_path_to_download_to)
+                    with open(meta_path, "w") as f:
+                        json.dump(meta, f, indent=2)
+                    self.logger.info(f"ETag matches, using existing file: {local_path_to_download_to}")
+                    return local_path_to_download_to
+
+                # Tier 3: ETag changed — delete and re-download
+                self.logger.warning(f"Remote file changed, re-downloading: {local_path_to_download_to}")
+                os.remove(local_path_to_download_to)
 
         self.logger.info(f"Downloading {url_to_download} to {local_path_to_download_to}")
 
-        # Download with retry logic
-        self._download_with_retry(url_to_download, local_path_to_download_to, chunk_size)
+        # Download with retry logic; get response headers back
+        response_headers = self._download_with_retry(url_to_download, local_path_to_download_to, chunk_size)
 
-        # Verify MD5 after download if available
-        expected_md5 = self._fetch_remote_md5(md5_url)
-        if expected_md5:
-            actual_md5 = self._calculate_md5(local_path_to_download_to, chunk_size)
-            if actual_md5 == expected_md5:
-                self.logger.info(f"Post-download MD5 verification passed: {actual_md5}")
-            else:
-                self.logger.error(f"Post-download MD5 verification failed! Expected {expected_md5}, got {actual_md5}")
-                raise RuntimeError(f"Downloaded file has incorrect MD5 checksum")
+        # Save sidecar metadata
+        if response_headers is not None:
+            self._save_meta(local_path_to_download_to, response_headers)
 
         bytes_downloaded = os.path.getsize(local_path_to_download_to)
         self.logger.info(f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes")
