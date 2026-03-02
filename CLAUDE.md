@@ -72,10 +72,10 @@ uv run ruff format
 ### Core Components
 
 1. **BabelDownloader** (`src/babel_explorer/core/downloader.py`):
-   - Downloads Babel intermediate files from a remote server using `wget`
+   - Downloads Babel intermediate files from a remote HTTP(S) server using Python's `requests` library (streaming downloads)
    - Caches files locally in configurable directory (default: `data/2025nov19/`)
    - Uses `@functools.lru_cache` to avoid re-downloading
-   - **Important**: Requires `wget` to be installed on the system
+   - **Important**: Requires network access but no external tools like `wget`
 
 2. **BabelXRefs** (`src/babel_explorer/core/babel_xrefs.py`):
    - Main query engine for cross-references
