@@ -26,12 +26,12 @@ def cli():
 @click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
 @click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel/2025nov19/", help="Base URL of the Babel server")
 @click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL to check for concord changes")
-@click.option("--expand", is_flag=True, help="Also display xrefs for returned CURIEs")
+@click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
 @click.option("--check-download", type=str, default="3h", show_default=True,
               help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
                    "'never' always checks via HTTP HEAD; '0' same as 'never'.")
-def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expand: bool, labels: bool,
+def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, recurse: bool, labels: bool,
           check_download: str):
     """
     Fetches and prints the cross-references (xrefs) for the given CURIEs.
@@ -52,7 +52,7 @@ def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, expan
 
     freshness = parse_duration(check_download)
     bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness), NodeNorm(nodenorm_url))
-    xrefs = bxref.get_curie_xrefs(curies, expand, label_curies=labels)
+    xrefs = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
     for xref in xrefs:
         print(xref)
 
