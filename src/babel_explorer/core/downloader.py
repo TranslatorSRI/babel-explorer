@@ -282,7 +282,7 @@ class BabelDownloader:
             if meta is not None:
                 # Tier 1: within freshness window — skip all network calls
                 if self._is_within_freshness(meta, self.freshness_seconds):
-                    self.logger.info(f"File within freshness window, skipping check: {local_path_to_download_to}")
+                    self.logger.info(f"File within freshness window ({self.freshness_seconds} seconds), skipping check: {local_path_to_download_to}")
                     return local_path_to_download_to
 
                 # Tier 2: stale but maybe unchanged — HEAD request
