@@ -9,6 +9,7 @@ import os
 import shutil
 
 import pytest
+from filelock import FileLock
 
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
@@ -39,20 +40,22 @@ def valid_curies() -> list[str]:
 
 
 @pytest.fixture(scope="session")
-def test_data_dir():
+def test_data_dir(request):
     """
-    Provide a clean test data directory for the entire session.
+    Provide a test data directory for the entire session.
 
     Creates the directory before tests, removes it after all tests complete.
+    When running under pytest-xdist, only the first worker (gw0) performs cleanup.
     """
-    if os.path.exists(TEST_DATA_DIR):
-        shutil.rmtree(TEST_DATA_DIR)
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
     os.makedirs(TEST_DATA_DIR, exist_ok=True)
 
     yield TEST_DATA_DIR
 
-    if os.path.exists(TEST_DATA_DIR):
-        shutil.rmtree(TEST_DATA_DIR)
+    # Only the first xdist worker (or a non-xdist run) cleans up the directory.
+    if worker_id in ("master", "gw0"):
+        if os.path.exists(TEST_DATA_DIR):
+            shutil.rmtree(TEST_DATA_DIR)
 
 
 @pytest.fixture(scope="session")
@@ -62,15 +65,19 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
 
 
 @pytest.fixture(scope="session")
-def downloaded_concord(shared_downloader) -> str:
+def downloaded_concord(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Concord.parquet (~626 MB). Returns the local path."""
-    return shared_downloader.get_downloaded_file(CONCORD_FILE)
+    lock_path = os.path.join(test_data_dir, "concord.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(CONCORD_FILE)
 
 
 @pytest.fixture(scope="session")
-def downloaded_metadata(shared_downloader) -> str:
+def downloaded_metadata(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Metadata.parquet (small). Returns the local path."""
-    return shared_downloader.get_downloaded_file(METADATA_FILE)
+    lock_path = os.path.join(test_data_dir, "metadata.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(METADATA_FILE)
 
 
 @pytest.fixture(scope="session")
@@ -83,9 +90,11 @@ def downloaded_parquet_files(downloaded_concord, downloaded_metadata) -> dict[st
 
 
 @pytest.fixture(scope="session")
-def downloaded_identifiers(shared_downloader) -> str:
+def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Identifiers.parquet (2 GB+). Returns the local path."""
-    return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
+    lock_path = os.path.join(test_data_dir, "identifiers.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
 
 
 @pytest.fixture(scope="session")
