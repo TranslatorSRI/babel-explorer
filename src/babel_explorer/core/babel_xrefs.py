@@ -82,9 +82,8 @@ class BabelXRefs:
         identifier_parquet = self.downloader.get_downloaded_file('duckdb/Identifiers.parquet')
         concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
 
-        # Query the Parquet files using DuckDB.
-        duckdb_path = self.downloader.get_output_file('output/duckdbs/xrefs.duckdb')
-        db = duckdb.connect(duckdb_path)
+        # Query the Parquet files using DuckDB (in-memory; nothing is persisted).
+        db = duckdb.connect()
         identifier_table = db.read_parquet(identifier_parquet)
         result = db.execute(f"SELECT * FROM identifier_table WHERE curie IN $1", [curies])
 
@@ -96,8 +95,7 @@ class BabelXRefs:
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
         concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
 
-        duckdb_path = self.downloader.get_output_file('output/duckdbs/xrefs.duckdb')
-        db = duckdb.connect(duckdb_path)
+        db = duckdb.connect()
         concord_table = db.read_parquet(concord_parquet)
         xref_tuples = db.execute(f"SELECT filename, subj, pred, obj FROM concord_table WHERE subj=$1 OR obj=$1", [curie]).fetchall()
         xrefs = list(map(lambda rec: CrossReference.from_tuple(rec), xref_tuples))

@@ -17,7 +17,9 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "filelock>=3.16",
     "pytest>=8.3.5",
+    "pytest-xdist[psutil]>=3.6",
     "ruff>=0.11.0",
 ]
 
@@ -25,6 +27,7 @@ dev = [
 babel-explorer = "babel_explorer.cli:cli"
 
 [tool.pytest.ini_options]
+addopts = "-n auto"
 markers = [
     "integration: tests requiring network access (deselect with '-m \"not integration\"')",
     "slow: tests downloading very large files 2GB+ (deselect with '-m \"not slow\"')",

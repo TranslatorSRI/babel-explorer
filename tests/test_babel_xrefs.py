@@ -203,7 +203,7 @@ class TestBabelXRefsMocked:
         xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
         with patch.object(bx, 'get_curie_xref', return_value=[xr]):
             bx.get_curie_xref.cache_clear()
-            result = bx.get_curie_xrefs(["A:1"], expand=False)
+            result = bx.get_curie_xrefs(["A:1"], recurse=False)
             assert len(result) == 1
             assert result[0] == xr
 
@@ -220,7 +220,7 @@ class TestBabelXRefsMocked:
             return []
 
         with patch.object(bx, 'get_curie_xref', side_effect=mock_get_curie_xref):
-            result = bx.get_curie_xrefs(["A:1"], expand=True)
+            result = bx.get_curie_xrefs(["A:1"], recurse=True)
             assert xr1 in result
             assert xr2 in result
 
@@ -230,7 +230,7 @@ class TestBabelXRefsMocked:
         xr_a = CrossReference(filename="a", subj="A:1", pred="p", obj="B:1")
 
         with patch.object(bx, 'get_curie_xref', return_value=[xr_b, xr_a]):
-            result = bx.get_curie_xrefs(["X:1"], expand=False)
+            result = bx.get_curie_xrefs(["X:1"], recurse=False)
             assert result == [xr_a, xr_b]
 
 
@@ -265,7 +265,7 @@ def test_get_curie_xref_returns_known_xrefs(babel_xrefs, curie):
 def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
     """get_curie_xrefs without expansion returns sorted, non-empty results."""
     babel_xrefs.get_curie_xref.cache_clear()
-    results = babel_xrefs.get_curie_xrefs([curie], expand=False)
+    results = babel_xrefs.get_curie_xrefs([curie], recurse=False)
     assert len(results) > 0
     assert results == sorted(results)
 
@@ -275,9 +275,9 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
     """Expanded results are at least as many as non-expanded."""
     babel_xrefs.get_curie_xref.cache_clear()
-    non_expanded = babel_xrefs.get_curie_xrefs([curie], expand=False)
+    non_expanded = babel_xrefs.get_curie_xrefs([curie], recurse=False)
     babel_xrefs.get_curie_xref.cache_clear()
-    expanded = babel_xrefs.get_curie_xrefs([curie], expand=True)
+    expanded = babel_xrefs.get_curie_xrefs([curie], recurse=True)
     assert len(expanded) >= len(non_expanded)
 
 
@@ -286,9 +286,9 @@ def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
 def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
     """Non-expanded results are a subset of expanded results."""
     babel_xrefs.get_curie_xref.cache_clear()
-    non_expanded = set(babel_xrefs.get_curie_xrefs([curie], expand=False))
+    non_expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=False))
     babel_xrefs.get_curie_xref.cache_clear()
-    expanded = set(babel_xrefs.get_curie_xrefs([curie], expand=True))
+    expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=True))
     assert non_expanded.issubset(expanded)
 
 
