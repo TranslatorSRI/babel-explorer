@@ -1,3 +1,5 @@
 # Valid CURIEs for integration tests.
 # Add new CURIEs here to expand test coverage — tests are parametrized over this list.
 MONDO:0004979
+MONDO:0005044
+NCIT:C55060
