@@ -3,6 +3,7 @@
 # why we consider two identifiers to be identical.
 import dataclasses
 import logging
+import warnings
 import duckdb
 import functools
 
@@ -114,28 +115,77 @@ class BabelXRefs:
 
         return xrefs
 
+    def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
+        """Traverse the cross-reference graph in one DuckDB WITH RECURSIVE query."""
+        if not curies:
+            return []
+
+        concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
+        concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
+
+        db = duckdb.connect()
+        concord_table = db.read_parquet(concord_parquet)
+        result = db.execute("""
+            WITH RECURSIVE
+            edges(a, b) AS (
+                SELECT subj, obj FROM concord_table
+                UNION ALL
+                SELECT obj, subj FROM concord_table
+            ),
+            frontier(curie) AS (
+                SELECT unnest($1::VARCHAR[])
+                UNION
+                SELECT e.b
+                FROM   edges e
+                INNER JOIN frontier f ON e.a = f.curie
+            )
+            SELECT DISTINCT c.filename, c.subj, c.pred, c.obj
+            FROM concord_table c
+            WHERE c.subj IN (SELECT curie FROM frontier)
+               OR c.obj  IN (SELECT curie FROM frontier)
+            ORDER BY c.filename, c.subj, c.obj, c.pred
+        """, [curies])
+
+        xrefs = [CrossReference.from_tuple(row) for row in result.fetchall()]
+
+        if label_curies:
+            xrefs = [LabeledCrossReference(
+                subj=xref.subj,
+                obj=xref.obj,
+                filename=xref.filename,
+                pred=xref.pred,
+                subj_label=self.nodenorm.get_identifier(xref.subj).label,
+                subj_biolink_type=self.nodenorm.get_identifier(xref.subj).biolink_type,
+                obj_label=self.nodenorm.get_identifier(xref.obj).label,
+                obj_biolink_type=self.nodenorm.get_identifier(xref.obj).biolink_type,
+            ) for xref in xrefs]
+
+        return xrefs
+
     def get_curie_xrefs(self, curies: list[str], recurse: bool = False, ignore_curies_in_expansion: set = set(), label_curies: bool = False):
         """
         Search for all identifiers that are cross-referenced to the given CURIE.
 
-        :param curie: A CURIE to search for.
+        :param curies: A list of CURIEs to search for.
         :param recurse: Whether to expand the cross-references (i.e. recursively follow all identifiers).
-        :return: A list of cross-references containing that CURIE.
+        :param ignore_curies_in_expansion: Deprecated when recurse=True; has no effect.
+        :param label_curies: Whether to annotate results with labels from NodeNorm.
+        :return: A list of cross-references containing those CURIEs.
         """
 
-        if ignore_curies_in_expansion:
-            logging.info(f"Ignoring {len(ignore_curies_in_expansion)}: {ignore_curies_in_expansion}")
+        if recurse:
+            if ignore_curies_in_expansion:
+                warnings.warn(
+                    "ignore_curies_in_expansion has no effect when recurse=True; "
+                    "cycle detection is handled automatically by the SQL query.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+            return self._get_curie_xrefs_recursive(curies, label_curies)
 
         xrefs = set()
         for curie in curies:
             logging.info(f"Searching for cross-references for {curie}")
             xrefs.update(self.get_curie_xref(curie, label_curies))
-
-        if recurse:
-            # Get a unique set of referenced curies, not including the ones currently queried.
-            new_curies = list(set([curie for xref in xrefs for curie in xref.curies]) - set(curies) - ignore_curies_in_expansion)
-            if new_curies:
-                logging.info(f"Expanding cross-references to {new_curies}")
-                xrefs.update(self.get_curie_xrefs(new_curies, recurse=True, ignore_curies_in_expansion=ignore_curies_in_expansion | set(curies) | set(new_curies), label_curies=label_curies))
 
         return sorted(xrefs)

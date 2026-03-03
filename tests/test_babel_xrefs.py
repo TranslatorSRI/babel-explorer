@@ -212,17 +212,49 @@ class TestBabelXRefsMocked:
         xr1 = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
         xr2 = CrossReference(filename="f", subj="B:2", pred="p", obj="C:3")
 
-        def mock_get_curie_xref(curie, label_curies=False):
-            if curie == "A:1":
-                return [xr1]
-            elif curie == "B:2":
-                return [xr2]
-            return []
-
-        with patch.object(bx, 'get_curie_xref', side_effect=mock_get_curie_xref):
+        with patch.object(bx, '_get_curie_xrefs_recursive', return_value=[xr1, xr2]) as mock_rec:
             result = bx.get_curie_xrefs(["A:1"], recurse=True)
+            mock_rec.assert_called_once_with(["A:1"], False)
             assert xr1 in result
             assert xr2 in result
+
+    def test_get_curie_xrefs_recursive_sql_traversal(self, tmp_path):
+        """_get_curie_xrefs_recursive uses SQL graph traversal, not Python recursion."""
+        import duckdb as real_duckdb
+
+        bx = self._make_bx(tmp_path)
+
+        # Write a tiny Parquet file: graph A-B, B-C, D-E (disconnected from A-B-C)
+        parquet_path = str(tmp_path / "test_concord.parquet")
+        setup_db = real_duckdb.connect()
+        setup_db.execute(f"""
+            COPY (
+                SELECT * FROM (VALUES
+                    ('f1.tsv', 'A:1', 'skos:exactMatch', 'B:2'),
+                    ('f1.tsv', 'B:2', 'skos:exactMatch', 'C:3'),
+                    ('f2.tsv', 'D:4', 'skos:exactMatch', 'E:5')
+                ) AS t(filename, subj, pred, obj)
+            ) TO '{parquet_path}' (FORMAT PARQUET)
+        """)
+        setup_db.close()
+
+        with patch.object(bx.downloader, 'get_downloaded_file', return_value=parquet_path):
+            # Starting from A:1 should reach B:2 and C:3 but not the D-E component
+            result = bx._get_curie_xrefs_recursive(["A:1"])
+            pairs = {(xr.subj, xr.obj) for xr in result}
+            assert ("A:1", "B:2") in pairs
+            assert ("B:2", "C:3") in pairs
+            assert ("D:4", "E:5") not in pairs
+
+            # Starting from D:4 should only reach E:5
+            result = bx._get_curie_xrefs_recursive(["D:4"])
+            pairs = {(xr.subj, xr.obj) for xr in result}
+            assert ("D:4", "E:5") in pairs
+            assert ("A:1", "B:2") not in pairs
+
+            # Empty input returns empty list
+            result = bx._get_curie_xrefs_recursive([])
+            assert result == []
 
     def test_results_are_sorted(self, tmp_path):
         bx = self._make_bx(tmp_path)
