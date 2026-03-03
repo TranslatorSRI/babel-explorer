@@ -45,15 +45,21 @@ def test_data_dir(request):
     Provide a test data directory for the entire session.
 
     Creates the directory before tests, removes it after all tests complete.
-    When running under pytest-xdist, only the first worker (gw0) performs cleanup.
+    When running under pytest-xdist, cleanup is skipped: worker sessions end at
+    unpredictable times and deleting the shared directory from one worker while
+    others are still reading the same files causes flaky IO errors.  The files
+    are re-used (or re-validated) on the next run via the freshness-window logic
+    in BabelDownloader.get_downloaded_file.
     """
     worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
     os.makedirs(TEST_DATA_DIR, exist_ok=True)
 
     yield TEST_DATA_DIR
 
-    # Only the first xdist worker (or a non-xdist run) cleans up the directory.
-    if worker_id in ("master", "gw0"):
+    # Only clean up when running without xdist (sequential run).  In a parallel
+    # run each worker session may finish at a different time; gw0 cleaning up
+    # while gw5 is still reading Concord.parquet causes spurious failures.
+    if worker_id == "master":
         if os.path.exists(TEST_DATA_DIR):
             shutil.rmtree(TEST_DATA_DIR)
 
