@@ -116,12 +116,12 @@ class BabelXRefs:
 
         return xrefs
 
-    def get_curie_xrefs(self, curies: list[str], expand: bool = False, ignore_curies_in_expansion: set = set(), label_curies: bool = False):
+    def get_curie_xrefs(self, curies: list[str], recurse: bool = False, ignore_curies_in_expansion: set = set(), label_curies: bool = False):
         """
         Search for all identifiers that are cross-referenced to the given CURIE.
 
         :param curie: A CURIE to search for.
-        :param expand: Whether to expand the cross-references (i.e. recursively follow all identifiers).
+        :param recurse: Whether to expand the cross-references (i.e. recursively follow all identifiers).
         :return: A list of cross-references containing that CURIE.
         """
 
@@ -133,11 +133,11 @@ class BabelXRefs:
             logging.info(f"Searching for cross-references for {curie}")
             xrefs.update(self.get_curie_xref(curie, label_curies))
 
-        if expand:
+        if recurse:
             # Get a unique set of referenced curies, not including the ones currently queried.
             new_curies = list(set([curie for xref in xrefs for curie in xref.curies]) - set(curies) - ignore_curies_in_expansion)
             if new_curies:
                 logging.info(f"Expanding cross-references to {new_curies}")
-                xrefs.update(self.get_curie_xrefs(new_curies, expand=True, ignore_curies_in_expansion=ignore_curies_in_expansion | set(curies) | set(new_curies), label_curies=label_curies))
+                xrefs.update(self.get_curie_xrefs(new_curies, recurse=True, ignore_curies_in_expansion=ignore_curies_in_expansion | set(curies) | set(new_curies), label_curies=label_curies))
 
         return sorted(xrefs)
