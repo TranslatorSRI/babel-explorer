@@ -105,7 +105,10 @@ class BabelDownloader:
     def _etag_matches(self, url, meta):
         """
         Do a HEAD request and check if the ETag (or Last-Modified + Content-Length)
-        matches the stored metadata. If they match, update last_checked in the .meta file.
+        matches the stored metadata.
+
+        Does not write to disk — the caller is responsible for updating last_checked
+        when this returns True.
 
         Args:
             url: URL to HEAD
@@ -129,9 +132,6 @@ class BabelDownloader:
         if local_etag and remote_etag:
             if local_etag == remote_etag:
                 self.logger.info(f"ETag matches ({remote_etag}), file is current")
-                # Update last_checked in the .meta file
-                # We need the local_path to update — derive it from URL
-                # Caller will handle updating; return True
                 return True
             else:
                 self.logger.info(f"ETag changed: {local_etag!r} → {remote_etag!r}, re-downloading")
