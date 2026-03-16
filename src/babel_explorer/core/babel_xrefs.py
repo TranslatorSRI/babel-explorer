@@ -151,25 +151,17 @@ class BabelXRefs:
 
         return xrefs
 
-    def get_curie_xrefs(self, curies: list[str], recurse: bool = False, ignore_curies_in_expansion: set | None = None, label_curies: bool = False):
+    def get_curie_xrefs(self, curies: list[str], recurse: bool = False, label_curies: bool = False):
         """
         Search for all identifiers that are cross-referenced to the given CURIE.
 
         :param curies: A list of CURIEs to search for.
         :param recurse: Whether to expand the cross-references (i.e. recursively follow all identifiers).
-        :param ignore_curies_in_expansion: Deprecated when recurse=True; has no effect.
         :param label_curies: Whether to annotate results with labels from NodeNorm.
         :return: A list of cross-references containing those CURIEs.
         """
 
         if recurse:
-            if ignore_curies_in_expansion:
-                warnings.warn(
-                    "ignore_curies_in_expansion has no effect when recurse=True; "
-                    "cycle detection is handled automatically by the SQL query.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
             return self._get_curie_xrefs_recursive(curies, label_curies)
 
         xrefs = set()
