@@ -85,14 +85,12 @@ def xrefs(
     """
     Fetches and prints the cross-references (xrefs) for the given CURIEs.
 
-    This function searches for xrefs associated with the provided CURIEs.
-
     \f
 
     :param curies: A list of CURIEs (Compact URI) for which cross-references need
         to be retrieved.
     :type curies: list[str]
-    :param babel_url: Base URL of the Babel server
+    :param babel_url: Base URL of the Babel server from which to download DuckDB files.
     :type babel_url: str
 
     :return: None
