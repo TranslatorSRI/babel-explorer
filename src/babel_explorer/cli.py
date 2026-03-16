@@ -95,7 +95,7 @@ def test_concord(curies, nodenorm_url):
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)
-        for identifier in identifiers:
+        for identifier in (identifiers or []):
             if identifier.label:
                 print(f"{curie}\t{identifier.curie}\t{identifier.label}\t{identifier.biolink_type}")
             else:
