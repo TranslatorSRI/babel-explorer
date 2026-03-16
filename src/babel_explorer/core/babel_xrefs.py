@@ -81,7 +81,6 @@ class BabelXRefs:
         """
 
         identifier_parquet = self.downloader.get_downloaded_file('duckdb/Identifiers.parquet')
-        concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
 
         # Query the Parquet files using DuckDB (in-memory; nothing is persisted).
         db = duckdb.connect()
@@ -94,26 +93,29 @@ class BabelXRefs:
     @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
-        concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
 
         db = duckdb.connect()
         concord_table = db.read_parquet(concord_parquet)
         xref_tuples = db.execute(f"SELECT filename, subj, pred, obj FROM concord_table WHERE subj=$1 OR obj=$1", [curie]).fetchall()
-        xrefs = list(map(lambda rec: CrossReference.from_tuple(rec), xref_tuples))
+        xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
 
         if label_curies:
-            xrefs = map(lambda xref: LabeledCrossReference(
-                subj=xref.subj,
-                obj=xref.obj,
-                filename=xref.filename,
-                pred=xref.pred,
-                subj_label=self.nodenorm.get_identifier(xref.subj).label,
-                subj_biolink_type=self.nodenorm.get_identifier(xref.subj).biolink_type,
-                obj_label=self.nodenorm.get_identifier(xref.obj).label,
-                obj_biolink_type=self.nodenorm.get_identifier(xref.obj).biolink_type,
-            ), xrefs)
+            xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
 
         return xrefs
+
+    def _to_labeled_xref(self, xref: CrossReference) -> LabeledCrossReference:
+        """Convert a CrossReference to a LabeledCrossReference using NodeNorm."""
+        return LabeledCrossReference(
+            subj=xref.subj,
+            obj=xref.obj,
+            filename=xref.filename,
+            pred=xref.pred,
+            subj_label=self.nodenorm.get_identifier(xref.subj).label,
+            subj_biolink_type=self.nodenorm.get_identifier(xref.subj).biolink_type,
+            obj_label=self.nodenorm.get_identifier(xref.obj).label,
+            obj_biolink_type=self.nodenorm.get_identifier(xref.obj).biolink_type,
+        )
 
     def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
         """Traverse the cross-reference graph in one DuckDB WITH RECURSIVE query."""
@@ -121,7 +123,6 @@ class BabelXRefs:
             return []
 
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
-        concord_metadata_parquet = self.downloader.get_downloaded_file('duckdb/Metadata.parquet')
 
         db = duckdb.connect()
         concord_table = db.read_parquet(concord_parquet)
@@ -149,20 +150,11 @@ class BabelXRefs:
         xrefs = [CrossReference.from_tuple(row) for row in result.fetchall()]
 
         if label_curies:
-            xrefs = [LabeledCrossReference(
-                subj=xref.subj,
-                obj=xref.obj,
-                filename=xref.filename,
-                pred=xref.pred,
-                subj_label=self.nodenorm.get_identifier(xref.subj).label,
-                subj_biolink_type=self.nodenorm.get_identifier(xref.subj).biolink_type,
-                obj_label=self.nodenorm.get_identifier(xref.obj).label,
-                obj_biolink_type=self.nodenorm.get_identifier(xref.obj).biolink_type,
-            ) for xref in xrefs]
+            xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
 
         return xrefs
 
-    def get_curie_xrefs(self, curies: list[str], recurse: bool = False, ignore_curies_in_expansion: set = set(), label_curies: bool = False):
+    def get_curie_xrefs(self, curies: list[str], recurse: bool = False, ignore_curies_in_expansion: set | None = None, label_curies: bool = False):
         """
         Search for all identifiers that are cross-referenced to the given CURIE.
 

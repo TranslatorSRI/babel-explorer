@@ -192,8 +192,8 @@ class TestBabelXRefsMocked:
                 with patch("babel_explorer.core.babel_xrefs.duckdb.connect", return_value=mock_db):
                     bx.get_curie_xref.cache_clear()
                     result = bx.get_curie_xref("A:1")
-                    # Downloader should be called for Concord and Metadata
-                    assert mock_dl.call_count == 2
+                    # Downloader should be called for Concord only (Metadata unused here)
+                    assert mock_dl.call_count == 1
                     result_list = list(result)
                     assert len(result_list) == 1
                     assert isinstance(result_list[0], CrossReference)
