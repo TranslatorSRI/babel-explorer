@@ -75,7 +75,11 @@ class TestIdentifier:
         assert a < b
 
     def test_sorting(self):
-        items = [Identifier(curie="C:3"), Identifier(curie="A:1"), Identifier(curie="B:2")]
+        items = [
+            Identifier(curie="C:3"),
+            Identifier(curie="A:1"),
+            Identifier(curie="B:2"),
+        ]
         result = sorted(items)
         assert [x.curie for x in result] == ["A:1", "B:2", "C:3"]
 
@@ -108,7 +112,9 @@ class TestNormalizeCurieMocked:
         mock_resp.json.return_value = {"X:1": {"id": {"identifier": "X:1"}}}
         mock_resp.raise_for_status = Mock()
 
-        with patch("babel_explorer.core.nodenorm.requests.get", return_value=mock_resp) as mock_get:
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get", return_value=mock_resp
+        ) as mock_get:
             nn.normalize_curie("X:1")
             mock_get.assert_called_once()
             args, kwargs = mock_get.call_args
@@ -132,7 +138,9 @@ class TestNormalizeCurieMocked:
         mock_resp.json.return_value = {"X:1": {"id": "X:1"}}
         mock_resp.raise_for_status = Mock()
 
-        with patch("babel_explorer.core.nodenorm.requests.get", return_value=mock_resp) as mock_get:
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get", return_value=mock_resp
+        ) as mock_get:
             nn.normalize_curie("X:1")
             nn.normalize_curie("X:1")
             mock_get.assert_called_once()
@@ -162,7 +170,7 @@ class TestGetIdentifierMocked:
                 {"identifier": "X:2", "label": "Beta"},
             ],
         }
-        with patch.object(nn, 'normalize_curie', return_value=api_result):
+        with patch.object(nn, "normalize_curie", return_value=api_result):
             ident = nn.get_identifier("X:1")
             assert ident.curie == "X:1"
             assert ident.label == "Alpha"
@@ -174,14 +182,14 @@ class TestGetIdentifierMocked:
                 {"identifier": "X:2", "label": "Beta"},
             ],
         }
-        with patch.object(nn, 'normalize_curie', return_value=api_result):
+        with patch.object(nn, "normalize_curie", return_value=api_result):
             ident = nn.get_identifier("X:1")
             assert ident.curie == "X:1"
             assert ident.label == ""
 
     def test_falsy_result_returns_bare_identifier(self):
         nn = self._make_nn()
-        with patch.object(nn, 'normalize_curie', return_value=None):
+        with patch.object(nn, "normalize_curie", return_value=None):
             ident = nn.get_identifier("X:1")
             assert ident.curie == "X:1"
             assert ident.label == ""
@@ -193,7 +201,7 @@ class TestGetIdentifierMocked:
                 {"identifier": "X:1", "label": "Alpha"},
             ],
         }
-        with patch.object(nn, 'normalize_curie', return_value=api_result) as mock_norm:
+        with patch.object(nn, "normalize_curie", return_value=api_result) as mock_norm:
             nn.get_identifier("X:1")
             nn.get_identifier("X:1")
             mock_norm.assert_called_once()
@@ -214,7 +222,7 @@ class TestGetCliqueIdentifiersMocked:
                 {"identifier": "X:2", "label": "Beta"},
             ],
         }
-        with patch.object(nn, 'normalize_curie', return_value=api_result):
+        with patch.object(nn, "normalize_curie", return_value=api_result):
             result = nn.get_clique_identifiers("X:1")
             assert len(result) == 2
             assert all(isinstance(x, Identifier) for x in result)
@@ -222,7 +230,7 @@ class TestGetCliqueIdentifiersMocked:
     def test_missing_key_returns_none(self):
         nn = self._make_nn()
         api_result = {"id": {"identifier": "X:1"}}  # no equivalent_identifiers
-        with patch.object(nn, 'normalize_curie', return_value=api_result):
+        with patch.object(nn, "normalize_curie", return_value=api_result):
             result = nn.get_clique_identifiers("X:1")
             assert result is None
 
@@ -231,7 +239,7 @@ class TestGetCliqueIdentifiersMocked:
         api_result = {
             "equivalent_identifiers": [{"identifier": "X:1"}],
         }
-        with patch.object(nn, 'normalize_curie', return_value=api_result) as mock_norm:
+        with patch.object(nn, "normalize_curie", return_value=api_result) as mock_norm:
             nn.get_clique_identifiers("X:1")
             nn.get_clique_identifiers("X:1")
             mock_norm.assert_called_once()
