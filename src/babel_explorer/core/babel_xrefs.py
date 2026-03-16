@@ -29,18 +29,12 @@ class CrossReference:
     def __lt__(self, other):
         return (self.filename, self.subj, self.obj, self.pred) < (other.filename, other.subj, other.obj, other.pred)
 
+@dataclasses.dataclass(frozen=True)
 class LabeledCrossReference(CrossReference):
     subj_label: str
     subj_biolink_type: str
     obj_label: str
     obj_biolink_type: str
-
-    def __init__(self, subj: str, pred: str, obj: str, filename: str, subj_label: str, subj_biolink_type: str, obj_label: str, obj_biolink_type: str):
-        super().__init__(subj=subj, obj=obj, filename=filename, pred=pred)
-        self.subj_label = subj_label
-        self.subj_biolink_type = subj_biolink_type
-        self.obj_label = obj_label
-        self.obj_biolink_type = obj_biolink_type
 
     def __str__(self):
         return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", subj_biolink_type="{self.subj_biolink_type}", obj_label="{self.obj_label}", obj_biolink_type="{self.obj_biolink_type}")"""
