@@ -1,6 +1,7 @@
 import functools
 import json
 import os
+import tempfile
 import urllib.parse
 import time
 import requests
@@ -22,11 +23,7 @@ class BabelDownloader:
         self.logger = logging.getLogger(BabelDownloader.__name__)
 
         if local_path is None:
-            # Default to using TMPDIR.
-            # TODO: replace with a real temporary directory.
-            tmpdir = os.environ.get("TMPDIR")
-            if tmpdir:
-                local_path = tmpdir
+            local_path = tempfile.gettempdir()
 
         # Make sure the local path is an existing directory or that we can create it.
         if not os.path.exists(local_path):
