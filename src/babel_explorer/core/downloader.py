@@ -213,32 +213,32 @@ class BabelDownloader:
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
                 # Make streaming request with timeout for connection (not total time)
-                response = requests.get(url, headers=headers, stream=True, timeout=30)
+                with requests.get(url, headers=headers, stream=True, timeout=30) as response:
 
-                # Handle different response codes
-                if response.status_code == 416:
-                    # Range Not Satisfiable - file already complete
-                    self.logger.info(f"File already complete: {local_path}")
+                    # Handle different response codes
+                    if response.status_code == 416:
+                        # Range Not Satisfiable - file already complete
+                        self.logger.info(f"File already complete: {local_path}")
+                        return response.headers
+                    elif response.status_code == 206:
+                        # Partial Content - resume successful
+                        self.logger.info(f"Resuming download (HTTP 206)")
+                    elif response.status_code == 200:
+                        # OK - server doesn't support resume or no Range header was sent
+                        if resume_byte_pos > 0:
+                            self.logger.warning(f"Server doesn't support resume, restarting from beginning")
+                            resume_byte_pos = 0
+                            # Remove partial file
+                            if os.path.exists(local_path):
+                                os.remove(local_path)
+                    else:
+                        response.raise_for_status()
+
+                    # Stream download with progress bar
+                    self._stream_download(response, local_path, resume_byte_pos, chunk_size)
+
+                    # Success - exit retry loop
                     return response.headers
-                elif response.status_code == 206:
-                    # Partial Content - resume successful
-                    self.logger.info(f"Resuming download (HTTP 206)")
-                elif response.status_code == 200:
-                    # OK - server doesn't support resume or no Range header was sent
-                    if resume_byte_pos > 0:
-                        self.logger.warning(f"Server doesn't support resume, restarting from beginning")
-                        resume_byte_pos = 0
-                        # Remove partial file
-                        if os.path.exists(local_path):
-                            os.remove(local_path)
-                else:
-                    response.raise_for_status()
-
-                # Stream download with progress bar
-                self._stream_download(response, local_path, resume_byte_pos, chunk_size)
-
-                # Success - exit retry loop
-                return response.headers
 
             except (requests.RequestException, IOError) as e:
                 self.logger.warning(f"Download attempt {attempt}/{self.retries} failed: {e}")
