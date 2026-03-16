@@ -30,6 +30,8 @@ class Identifier:
 class NodeNorm:
     def __init__(self, nodenorm_url: str=""):
         self.nodenorm_url = nodenorm_url
+        if self.nodenorm_url and not self.nodenorm_url.endswith("/"):
+            self.nodenorm_url += "/"
 
     @functools.lru_cache(maxsize=None)
     def get_identifier(self, curie: str):
