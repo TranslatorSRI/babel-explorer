@@ -77,12 +77,11 @@ class BabelXRefs:
         identifier_parquet = self.downloader.get_downloaded_file('duckdb/Identifiers.parquet')
 
         # Query the Parquet files using DuckDB (in-memory; nothing is persisted).
-        db = duckdb.connect()
-        identifier_table = db.read_parquet(identifier_parquet)
-        result = db.execute(f"SELECT * FROM identifier_table WHERE curie IN $1", [curies])
-
-        column_names = [desc[0] for desc in result.description]
-        return [IdentifierRecord.from_row(row, column_names) for row in result.fetchall()]
+        with duckdb.connect() as db:
+            identifier_table = db.read_parquet(identifier_parquet)
+            result = db.execute("SELECT * FROM identifier_table WHERE curie IN $1", [curies])
+            column_names = [desc[0] for desc in result.description]
+            return [IdentifierRecord.from_row(row, column_names) for row in result.fetchall()]
 
     @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):
@@ -91,14 +90,13 @@ class BabelXRefs:
 
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
 
-        db = duckdb.connect()
-        concord_table = db.read_parquet(concord_parquet)
-        xref_tuples = db.execute(f"SELECT filename, subj, pred, obj FROM concord_table WHERE subj=$1 OR obj=$1", [curie]).fetchall()
-        xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
+        with duckdb.connect() as db:
+            concord_table = db.read_parquet(concord_parquet)
+            xref_tuples = db.execute("SELECT filename, subj, pred, obj FROM concord_table WHERE subj=$1 OR obj=$1", [curie]).fetchall()
 
+        xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
         if label_curies:
             xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
-
         return xrefs
 
     def _to_labeled_xref(self, xref: CrossReference) -> LabeledCrossReference:
@@ -123,9 +121,9 @@ class BabelXRefs:
 
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
 
-        db = duckdb.connect()
-        concord_table = db.read_parquet(concord_parquet)
-        result = db.execute("""
+        with duckdb.connect() as db:
+            concord_table = db.read_parquet(concord_parquet)
+            rows = db.execute("""
             WITH RECURSIVE
             edges(a, b) AS (
                 SELECT subj, obj FROM concord_table
@@ -144,9 +142,9 @@ class BabelXRefs:
             WHERE c.subj IN (SELECT curie FROM frontier)
                OR c.obj  IN (SELECT curie FROM frontier)
             ORDER BY c.filename, c.subj, c.obj, c.pred
-        """, [curies])
+        """, [curies]).fetchall()
 
-        xrefs = [CrossReference.from_tuple(row) for row in result.fetchall()]
+        xrefs = [CrossReference.from_tuple(row) for row in rows]
 
         if label_curies:
             xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
