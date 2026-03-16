@@ -30,7 +30,7 @@ uv run babel-explorer --help
 uv run babel-explorer xrefs MONDO:0004979
 
 # Get cross-references with expansion (recursive lookup)
-uv run babel-explorer xrefs MONDO:0004979 --expand
+uv run babel-explorer xrefs MONDO:0004979 --recurse
 
 # Get cross-references with labels from NodeNorm
 uv run babel-explorer xrefs MONDO:0004979 --labels
