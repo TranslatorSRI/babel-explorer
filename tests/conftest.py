@@ -116,6 +116,8 @@ def babel_xrefs(shared_downloader, downloaded_parquet_files) -> BabelXRefs:
 
 
 @pytest.fixture(scope="session")
-def babel_xrefs_with_nodenorm(shared_downloader, nodenorm, downloaded_parquet_files) -> BabelXRefs:
+def babel_xrefs_with_nodenorm(
+    shared_downloader, nodenorm, downloaded_parquet_files
+) -> BabelXRefs:
     """A BabelXRefs instance with NodeNorm, Concord + Metadata already downloaded."""
     return BabelXRefs(shared_downloader, nodenorm)

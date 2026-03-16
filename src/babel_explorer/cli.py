@@ -42,18 +42,46 @@ def parse_duration(value: str) -> float:
 def cli():
     pass
 
+
 @cli.command("xrefs")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
-@click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel_outputs/2025nov19/", help="Base URL of the Babel server")
-@click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL to check for concord changes")
+@click.option(
+    "--local-dir",
+    type=str,
+    default="data/2025nov19",
+    help="Local location to save Babel download files to",
+)
+@click.option(
+    "--babel-url",
+    type=str,
+    default="https://stars.renci.org:443/var/babel_outputs/2025nov19/",
+    help="Base URL of the Babel server",
+)
+@click.option(
+    "--nodenorm-url",
+    type=str,
+    default="https://nodenormalization-sri.renci.org/",
+    help="NodeNorm URL to check for concord changes",
+)
 @click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
-@click.option("--check-download", type=str, default="3h", show_default=True,
-              help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-                   "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.")
-def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, recurse: bool, labels: bool,
-          check_download: str):
+@click.option(
+    "--check-download",
+    type=str,
+    default="3h",
+    show_default=True,
+    help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
+    "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
+)
+def xrefs(
+    curies: list[str],
+    babel_url: str,
+    nodenorm_url,
+    local_dir: str,
+    recurse: bool,
+    labels: bool,
+    check_download: str,
+):
     """
     Fetches and prints the cross-references (xrefs) for the given CURIEs.
 
@@ -72,18 +100,37 @@ def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, recur
     logging.basicConfig(level=logging.INFO)
 
     freshness = parse_duration(check_download)
-    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness), NodeNorm(nodenorm_url))
+    bxref = BabelXRefs(
+        BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness),
+        NodeNorm(nodenorm_url),
+    )
     xrefs = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
     for xref in xrefs:
         print(xref)
 
+
 @cli.command("ids")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
-@click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel_outputs/2025nov19/", help="Base URL of the Babel server")
-@click.option("--check-download", type=str, default="3h", show_default=True,
-              help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-                   "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.")
+@click.option(
+    "--local-dir",
+    type=str,
+    default="data/2025nov19",
+    help="Local location to save Babel download files to",
+)
+@click.option(
+    "--babel-url",
+    type=str,
+    default="https://stars.renci.org:443/var/babel_outputs/2025nov19/",
+    help="Base URL of the Babel server",
+)
+@click.option(
+    "--check-download",
+    type=str,
+    default="3h",
+    show_default=True,
+    help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
+    "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
+)
 def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
@@ -101,14 +148,22 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     logging.basicConfig(level=logging.INFO)
 
     freshness = parse_duration(check_download)
-    bxref = BabelXRefs(BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness))
+    bxref = BabelXRefs(
+        BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness)
+    )
     xrefs = bxref.get_curie_ids(curies)
     for xref in xrefs:
         print(xref)
 
+
 @cli.command("test-concord")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL to check for concord changes")
+@click.option(
+    "--nodenorm-url",
+    type=str,
+    default="https://nodenormalization-sri.renci.org/",
+    help="NodeNorm URL to check for concord changes",
+)
 def test_concord(curies, nodenorm_url):
     # We're trying to answer a simple question here: if the CURIEs we mention were combined, how would the cliques change in NodeNorm?
     # By definition, this can only combine all the cliques mentioned in the CURIEs.
@@ -116,9 +171,11 @@ def test_concord(curies, nodenorm_url):
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)
-        for identifier in (identifiers or []):
+        for identifier in identifiers or []:
             if identifier.label:
-                print(f"{curie}\t{identifier.curie}\t{identifier.label}\t{identifier.biolink_type}")
+                print(
+                    f"{curie}\t{identifier.curie}\t{identifier.label}\t{identifier.biolink_type}"
+                )
             else:
                 print(f"{curie}\t{identifier.curie}\t\t{identifier.biolink_type}")
 

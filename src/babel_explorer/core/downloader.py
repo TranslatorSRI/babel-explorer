@@ -15,7 +15,14 @@ class BabelDownloader:
     Class for downloading Babel cross-reference files to a local directory as needed.
     """
 
-    def __init__(self, url_base, local_path=None, retries=10, freshness_seconds=3 * 3600, timeout: int = 30):
+    def __init__(
+        self,
+        url_base,
+        local_path=None,
+        retries=10,
+        freshness_seconds=3 * 3600,
+        timeout: int = 30,
+    ):
         # We assume the URL base is correct (if not, we can fix it later).
         self.url_base = url_base
         self.retries = retries
@@ -33,7 +40,9 @@ class BabelDownloader:
         elif os.path.exists(local_path) and os.path.isdir(local_path):
             self.local_path = local_path
         else:
-            raise ValueError(f"Invalid local_path (must be an existing directory): '{local_path}'")
+            raise ValueError(
+                f"Invalid local_path (must be an existing directory): '{local_path}'"
+            )
 
     @functools.lru_cache(maxsize=None)
     def get_output_file(self, filename):
@@ -134,7 +143,9 @@ class BabelDownloader:
                 self.logger.info(f"ETag matches ({remote_etag}), file is current")
                 return True
             else:
-                self.logger.info(f"ETag changed: {local_etag!r} → {remote_etag!r}, re-downloading")
+                self.logger.info(
+                    f"ETag changed: {local_etag!r} → {remote_etag!r}, re-downloading"
+                )
                 return False
 
         # Fallback: Last-Modified + Content-Length
@@ -145,10 +156,14 @@ class BabelDownloader:
 
         if local_lm and remote_lm and local_lm == remote_lm:
             if local_cl is None or remote_cl is None or int(remote_cl) == local_cl:
-                self.logger.info(f"Last-Modified matches ({remote_lm}), file is current")
+                self.logger.info(
+                    f"Last-Modified matches ({remote_lm}), file is current"
+                )
                 return True
 
-        self.logger.info("Cannot confirm file is current (no matching ETag or Last-Modified), will re-download")
+        self.logger.info(
+            "Cannot confirm file is current (no matching ETag or Last-Modified), will re-download"
+        )
         return False
 
     def _stream_download(self, response, local_path, resume_byte_pos, chunk_size):
@@ -162,23 +177,23 @@ class BabelDownloader:
             chunk_size: Size of chunks to read/write
         """
         # Get total size from Content-Length header (may not be present)
-        content_length = response.headers.get('Content-Length')
+        content_length = response.headers.get("Content-Length")
         if content_length:
             total_size = int(content_length) + resume_byte_pos
         else:
             total_size = None
 
         # Open file in append mode if resuming, write mode otherwise
-        mode = 'ab' if resume_byte_pos > 0 else 'wb'
+        mode = "ab" if resume_byte_pos > 0 else "wb"
 
         with open(local_path, mode) as f:
             with tqdm(
                 total=total_size,
                 initial=resume_byte_pos,
-                unit='B',
+                unit="B",
                 unit_scale=True,
                 unit_divisor=1024,
-                desc=os.path.basename(local_path)
+                desc=os.path.basename(local_path),
             ) as progress_bar:
                 for chunk in response.iter_content(chunk_size=chunk_size):
                     if chunk:
@@ -210,12 +225,13 @@ class BabelDownloader:
                 # Prepare headers for resume
                 headers = {}
                 if resume_byte_pos > 0:
-                    headers['Range'] = f'bytes={resume_byte_pos}-'
+                    headers["Range"] = f"bytes={resume_byte_pos}-"
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
                 # Make streaming request with timeout for connection (not total time)
-                with requests.get(url, headers=headers, stream=True, timeout=self.timeout) as response:
-
+                with requests.get(
+                    url, headers=headers, stream=True, timeout=self.timeout
+                ) as response:
                     # Handle different response codes
                     if response.status_code == 416:
                         # Range Not Satisfiable - file already complete
@@ -223,11 +239,13 @@ class BabelDownloader:
                         return response.headers
                     elif response.status_code == 206:
                         # Partial Content - resume successful
-                        self.logger.info(f"Resuming download (HTTP 206)")
+                        self.logger.info("Resuming download (HTTP 206)")
                     elif response.status_code == 200:
                         # OK - server doesn't support resume or no Range header was sent
                         if resume_byte_pos > 0:
-                            self.logger.warning(f"Server doesn't support resume, restarting from beginning")
+                            self.logger.warning(
+                                "Server doesn't support resume, restarting from beginning"
+                            )
                             resume_byte_pos = 0
                             # Remove partial file
                             if os.path.exists(local_path):
@@ -236,25 +254,31 @@ class BabelDownloader:
                         response.raise_for_status()
 
                     # Stream download with progress bar
-                    self._stream_download(response, local_path, resume_byte_pos, chunk_size)
+                    self._stream_download(
+                        response, local_path, resume_byte_pos, chunk_size
+                    )
 
                     # Success - exit retry loop
                     return response.headers
 
             except (requests.RequestException, IOError) as e:
-                self.logger.warning(f"Download attempt {attempt}/{self.retries} failed: {e}")
+                self.logger.warning(
+                    f"Download attempt {attempt}/{self.retries} failed: {e}"
+                )
 
                 if attempt < self.retries:
                     # Calculate exponential backoff with max of 60 seconds
-                    wait_time = min(2 ** attempt, 60)
+                    wait_time = min(2**attempt, 60)
                     self.logger.info(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
                     # All retries exhausted
-                    raise RuntimeError(f"Failed to download {url} after {self.retries} attempts: {e}")
+                    raise RuntimeError(
+                        f"Failed to download {url} after {self.retries} attempts: {e}"
+                    )
 
     @functools.lru_cache(maxsize=None)
-    def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024*1024):
+    def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024 * 1024):
         """
         Download a file from the Babel server to local storage with ETag-based caching.
 
@@ -280,7 +304,9 @@ class BabelDownloader:
             if meta is not None:
                 # Tier 1: within freshness window — skip all network calls
                 if self._is_within_freshness(meta, self.freshness_seconds):
-                    self.logger.info(f"File within freshness window ({self.freshness_seconds} seconds), skipping check: {local_path_to_download_to}")
+                    self.logger.info(
+                        f"File within freshness window ({self.freshness_seconds} seconds), skipping check: {local_path_to_download_to}"
+                    )
                     return local_path_to_download_to
 
                 # Tier 2: stale but maybe unchanged — HEAD request
@@ -290,24 +316,34 @@ class BabelDownloader:
                     meta_path = self._get_meta_path(local_path_to_download_to)
                     with open(meta_path, "w") as f:
                         json.dump(meta, f, indent=2)
-                    self.logger.info(f"ETag matches, using existing file: {local_path_to_download_to}")
+                    self.logger.info(
+                        f"ETag matches, using existing file: {local_path_to_download_to}"
+                    )
                     return local_path_to_download_to
 
                 # Tier 3: ETag changed — delete and re-download
-                self.logger.warning(f"Remote file changed, re-downloading: {local_path_to_download_to}")
+                self.logger.warning(
+                    f"Remote file changed, re-downloading: {local_path_to_download_to}"
+                )
                 os.remove(local_path_to_download_to)
 
-        self.logger.info(f"Downloading {url_to_download} to {local_path_to_download_to}")
+        self.logger.info(
+            f"Downloading {url_to_download} to {local_path_to_download_to}"
+        )
 
         # Download with retry logic; get response headers back
-        response_headers = self._download_with_retry(url_to_download, local_path_to_download_to, chunk_size)
+        response_headers = self._download_with_retry(
+            url_to_download, local_path_to_download_to, chunk_size
+        )
 
         # Save sidecar metadata
         if response_headers is not None:
             self._save_meta(local_path_to_download_to, response_headers)
 
         bytes_downloaded = os.path.getsize(local_path_to_download_to)
-        self.logger.info(f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes")
+        self.logger.info(
+            f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes"
+        )
         return local_path_to_download_to
 
     @functools.lru_cache(maxsize=None)

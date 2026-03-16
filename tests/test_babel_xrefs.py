@@ -28,7 +28,9 @@ VALID_CURIES = load_curies()
 
 class TestCrossReference:
     def test_creation(self):
-        xr = CrossReference(filename="f.txt", subj="A:1", pred="skos:exactMatch", obj="B:2")
+        xr = CrossReference(
+            filename="f.txt", subj="A:1", pred="skos:exactMatch", obj="B:2"
+        )
         assert xr.filename == "f.txt"
         assert xr.subj == "A:1"
         assert xr.pred == "skos:exactMatch"
@@ -85,9 +87,14 @@ class TestCrossReference:
 class TestLabeledCrossReference:
     def test_creation(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="Alpha", subj_biolink_type="biolink:Disease",
-            obj_label="Beta", obj_biolink_type="biolink:Gene",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="Alpha",
+            subj_biolink_type="biolink:Disease",
+            obj_label="Beta",
+            obj_biolink_type="biolink:Gene",
         )
         assert lxr.subj == "A:1"
         assert lxr.subj_label == "Alpha"
@@ -95,23 +102,40 @@ class TestLabeledCrossReference:
 
     def test_inherits_from_cross_reference(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="", subj_biolink_type="", obj_label="", obj_biolink_type="",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="",
+            subj_biolink_type="",
+            obj_label="",
+            obj_biolink_type="",
         )
         assert isinstance(lxr, CrossReference)
 
     def test_curies_property(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="", subj_biolink_type="", obj_label="", obj_biolink_type="",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="",
+            subj_biolink_type="",
+            obj_label="",
+            obj_biolink_type="",
         )
         assert lxr.curies == frozenset({"A:1", "B:2"})
 
     def test_str(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="Alpha", subj_biolink_type="biolink:Disease",
-            obj_label="Beta", obj_biolink_type="biolink:Gene",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="Alpha",
+            subj_biolink_type="biolink:Disease",
+            obj_label="Beta",
+            obj_biolink_type="biolink:Gene",
         )
         s = str(lxr)
         assert "A:1" in s
@@ -188,9 +212,16 @@ class TestBabelXRefsMocked:
         mock_db.read_parquet.return_value = "table"
         mock_db.execute.return_value = mock_result
 
-        with patch.object(bx.downloader, 'get_downloaded_file', return_value="/fake/path") as mock_dl:
-            with patch.object(bx.downloader, 'get_output_file', return_value="/fake/db"):
-                with patch("babel_explorer.core.babel_xrefs.duckdb.connect", return_value=mock_db):
+        with patch.object(
+            bx.downloader, "get_downloaded_file", return_value="/fake/path"
+        ) as mock_dl:
+            with patch.object(
+                bx.downloader, "get_output_file", return_value="/fake/db"
+            ):
+                with patch(
+                    "babel_explorer.core.babel_xrefs.duckdb.connect",
+                    return_value=mock_db,
+                ):
                     bx.get_curie_xref.cache_clear()
                     result = bx.get_curie_xref("A:1")
                     # Downloader should be called for Concord only (Metadata unused here)
@@ -202,7 +233,7 @@ class TestBabelXRefsMocked:
     def test_get_curie_xrefs_no_expand(self, tmp_path):
         bx = self._make_bx(tmp_path)
         xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
-        with patch.object(bx, 'get_curie_xref', return_value=[xr]):
+        with patch.object(bx, "get_curie_xref", return_value=[xr]):
             bx.get_curie_xref.cache_clear()
             result = bx.get_curie_xrefs(["A:1"], recurse=False)
             assert len(result) == 1
@@ -213,7 +244,9 @@ class TestBabelXRefsMocked:
         xr1 = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
         xr2 = CrossReference(filename="f", subj="B:2", pred="p", obj="C:3")
 
-        with patch.object(bx, '_get_curie_xrefs_recursive', return_value=[xr1, xr2]) as mock_rec:
+        with patch.object(
+            bx, "_get_curie_xrefs_recursive", return_value=[xr1, xr2]
+        ) as mock_rec:
             result = bx.get_curie_xrefs(["A:1"], recurse=True)
             mock_rec.assert_called_once_with(["A:1"], False)
             assert xr1 in result
@@ -239,7 +272,9 @@ class TestBabelXRefsMocked:
         """)
         setup_db.close()
 
-        with patch.object(bx.downloader, 'get_downloaded_file', return_value=parquet_path):
+        with patch.object(
+            bx.downloader, "get_downloaded_file", return_value=parquet_path
+        ):
             # Starting from A:1 should reach B:2 and C:3 but not the D-E component
             result = bx._get_curie_xrefs_recursive(["A:1"])
             pairs = {(xr.subj, xr.obj) for xr in result}
@@ -262,7 +297,7 @@ class TestBabelXRefsMocked:
         xr_b = CrossReference(filename="b", subj="B:1", pred="p", obj="C:1")
         xr_a = CrossReference(filename="a", subj="A:1", pred="p", obj="B:1")
 
-        with patch.object(bx, 'get_curie_xref', return_value=[xr_b, xr_a]):
+        with patch.object(bx, "get_curie_xref", return_value=[xr_b, xr_a]):
             result = bx.get_curie_xrefs(["X:1"], recurse=False)
             assert result == [xr_a, xr_b]
 

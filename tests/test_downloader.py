@@ -39,7 +39,9 @@ class TestBabelDownloaderInit:
         assert dl.local_path == new_dir
 
     def test_custom_retries(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), retries=3)
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
         assert dl.retries == 3
 
     def test_default_retries(self, tmp_path):
@@ -51,7 +53,11 @@ class TestBabelDownloaderInit:
         assert dl.freshness_seconds == 3 * 3600
 
     def test_custom_freshness_seconds(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), freshness_seconds=0)
+        dl = BabelDownloader(
+            url_base="https://example.com/",
+            local_path=str(tmp_path),
+            freshness_seconds=0,
+        )
         assert dl.freshness_seconds == 0
 
     def test_invalid_path_raises_value_error(self):
@@ -90,13 +96,15 @@ class TestSaveMeta:
     """Tests for _save_meta."""
 
     def _make_dl(self, tmp_path):
-        return BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        return BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path)
+        )
 
     def test_writes_all_fields(self, tmp_path):
         dl = self._make_dl(tmp_path)
         file_path = str(tmp_path / "test.parquet")
         # Create the file so the path is valid
-        open(file_path, 'wb').close()
+        open(file_path, "wb").close()
 
         headers = {
             "ETag": '"abc123"',
@@ -118,7 +126,7 @@ class TestSaveMeta:
     def test_last_checked_is_recent_utc(self, tmp_path):
         dl = self._make_dl(tmp_path)
         file_path = str(tmp_path / "f.parquet")
-        open(file_path, 'wb').close()
+        open(file_path, "wb").close()
 
         dl._save_meta(file_path, {"ETag": '"x"'})
 
@@ -133,7 +141,7 @@ class TestSaveMeta:
         """Headers not present in the response should not appear in .meta."""
         dl = self._make_dl(tmp_path)
         file_path = str(tmp_path / "sparse.parquet")
-        open(file_path, 'wb').close()
+        open(file_path, "wb").close()
 
         dl._save_meta(file_path, {})
 
@@ -150,7 +158,9 @@ class TestLoadMeta:
     """Tests for _load_meta."""
 
     def _make_dl(self, tmp_path):
-        return BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        return BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path)
+        )
 
     def test_returns_none_if_no_meta_file(self, tmp_path):
         dl = self._make_dl(tmp_path)
@@ -159,7 +169,7 @@ class TestLoadMeta:
     def test_returns_dict_for_valid_meta(self, tmp_path):
         dl = self._make_dl(tmp_path)
         file_path = str(tmp_path / "f.parquet")
-        open(file_path, 'wb').close()
+        open(file_path, "wb").close()
         meta_data = {"etag": '"abc"', "last_checked": "2026-01-01T00:00:00+00:00"}
         with open(file_path + ".meta", "w") as f:
             json.dump(meta_data, f)
@@ -170,7 +180,7 @@ class TestLoadMeta:
     def test_returns_none_for_corrupt_meta(self, tmp_path):
         dl = self._make_dl(tmp_path)
         file_path = str(tmp_path / "corrupt.parquet")
-        open(file_path, 'wb').close()
+        open(file_path, "wb").close()
         with open(file_path + ".meta", "w") as f:
             f.write("not valid json {{{")
 
@@ -181,7 +191,9 @@ class TestIsWithinFreshness:
     """Tests for _is_within_freshness."""
 
     def _make_dl(self, tmp_path):
-        return BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        return BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path)
+        )
 
     def test_returns_true_when_recent(self, tmp_path):
         dl = self._make_dl(tmp_path)
@@ -217,7 +229,9 @@ class TestEtagMatches:
     """Tests for _etag_matches."""
 
     def _make_dl(self, tmp_path):
-        return BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        return BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path)
+        )
 
     def test_returns_true_on_matching_etag(self, tmp_path):
         dl = self._make_dl(tmp_path)
@@ -225,7 +239,9 @@ class TestEtagMatches:
         mock_resp = Mock()
         mock_resp.headers = {"ETag": '"abc123"'}
         mock_resp.raise_for_status = Mock()
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_resp):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_resp
+        ):
             assert dl._etag_matches("https://example.com/f.parquet", meta) is True
 
     def test_returns_false_on_different_etag(self, tmp_path):
@@ -234,7 +250,9 @@ class TestEtagMatches:
         mock_resp = Mock()
         mock_resp.headers = {"ETag": '"new"'}
         mock_resp.raise_for_status = Mock()
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_resp):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_resp
+        ):
             assert dl._etag_matches("https://example.com/f.parquet", meta) is False
 
     def test_fallback_last_modified_match(self, tmp_path):
@@ -244,14 +262,18 @@ class TestEtagMatches:
         mock_resp = Mock()
         mock_resp.headers = {"Last-Modified": lm, "Content-Length": "100"}
         mock_resp.raise_for_status = Mock()
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_resp):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_resp
+        ):
             assert dl._etag_matches("https://example.com/f.parquet", meta) is True
 
     def test_returns_false_on_request_error(self, tmp_path):
         dl = self._make_dl(tmp_path)
         meta = {"etag": '"abc"'}
-        with patch("babel_explorer.core.downloader.requests.head",
-                   side_effect=requests.ConnectionError("fail")):
+        with patch(
+            "babel_explorer.core.downloader.requests.head",
+            side_effect=requests.ConnectionError("fail"),
+        ):
             assert dl._etag_matches("https://example.com/f.parquet", meta) is False
 
 
@@ -259,8 +281,11 @@ class TestGetDownloadedFileTiers:
     """Tests for the three-tier logic in get_downloaded_file."""
 
     def _make_dl(self, tmp_path, freshness=3600):
-        return BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path),
-                               freshness_seconds=freshness)
+        return BabelDownloader(
+            url_base="https://example.com/",
+            local_path=str(tmp_path),
+            freshness_seconds=freshness,
+        )
 
     # --- Tier 1: within freshness window ---
 
@@ -303,7 +328,9 @@ class TestGetDownloadedFileTiers:
         mock_head_resp.headers = {"ETag": '"abc"'}
         mock_head_resp.raise_for_status = Mock()
 
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_head_resp):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
+        ):
             with patch("babel_explorer.core.downloader.requests.get") as mock_get:
                 dl.get_downloaded_file.cache_clear()
                 result = dl.get_downloaded_file(test_file)
@@ -327,7 +354,9 @@ class TestGetDownloadedFileTiers:
         mock_head_resp.headers = {"ETag": '"abc"'}
         mock_head_resp.raise_for_status = Mock()
 
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_head_resp):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
+        ):
             dl.get_downloaded_file.cache_clear()
             dl.get_downloaded_file(test_file)
 
@@ -358,16 +387,18 @@ class TestGetDownloadedFileTiers:
         new_content = b"new data"
 
         def fake_download(url, path, chunk_size):
-            with open(path, 'wb') as f:
+            with open(path, "wb") as f:
                 f.write(new_content)
             return {"ETag": '"new"', "Content-Length": str(len(new_content))}
 
-        with patch("babel_explorer.core.downloader.requests.head", return_value=mock_head_resp):
-            with patch.object(dl, '_download_with_retry', side_effect=fake_download):
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
+        ):
+            with patch.object(dl, "_download_with_retry", side_effect=fake_download):
                 dl.get_downloaded_file.cache_clear()
                 result = dl.get_downloaded_file(test_file)
 
-        assert open(result, 'rb').read() == new_content
+        assert open(result, "rb").read() == new_content
 
     # --- No .meta: fresh download ---
 
@@ -375,22 +406,23 @@ class TestGetDownloadedFileTiers:
         """No file and no .meta → download happens, .meta is saved."""
         dl = self._make_dl(tmp_path)
         test_file = "duckdb/new.parquet"
-        local_path = str(tmp_path / "duckdb" / "new.parquet")
         content = b"fresh download"
 
         def fake_download(url, path, chunk_size):
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, 'wb') as f:
+            with open(path, "wb") as f:
                 f.write(content)
             return {"ETag": '"fresh"', "Content-Length": str(len(content))}
 
-        with patch.object(dl, '_download_with_retry', side_effect=fake_download) as mock_dl:
+        with patch.object(
+            dl, "_download_with_retry", side_effect=fake_download
+        ) as mock_dl:
             dl.get_downloaded_file.cache_clear()
             result = dl.get_downloaded_file(test_file)
             mock_dl.assert_called_once()
 
         assert os.path.exists(result)
-        assert open(result, 'rb').read() == content
+        assert open(result, "rb").read() == content
         # .meta should be saved
         meta_path = result + ".meta"
         assert os.path.exists(meta_path)
@@ -410,16 +442,18 @@ class TestGetDownloadedFileTiers:
         new_content = b"refreshed"
 
         def fake_download(url, path, chunk_size):
-            with open(path, 'wb') as f:
+            with open(path, "wb") as f:
                 f.write(new_content)
             return {"ETag": '"new"'}
 
-        with patch.object(dl, '_download_with_retry', side_effect=fake_download) as mock_dl:
+        with patch.object(
+            dl, "_download_with_retry", side_effect=fake_download
+        ) as mock_dl:
             dl.get_downloaded_file.cache_clear()
             result = dl.get_downloaded_file(test_file)
             mock_dl.assert_called_once()
 
-        assert open(result, 'rb').read() == new_content
+        assert open(result, "rb").read() == new_content
 
 
 class TestGetDownloadedFileCaching:
@@ -430,11 +464,13 @@ class TestGetDownloadedFileCaching:
         content = b"cached content"
 
         def fake_download(url, path, chunk_size):
-            with open(path, 'wb') as f:
+            with open(path, "wb") as f:
                 f.write(content)
             return {}
 
-        with patch.object(dl, '_download_with_retry', side_effect=fake_download) as mock_dl:
+        with patch.object(
+            dl, "_download_with_retry", side_effect=fake_download
+        ) as mock_dl:
             dl.get_downloaded_file.cache_clear()
             r1 = dl.get_downloaded_file("cached.txt")
             r2 = dl.get_downloaded_file("cached.txt")
@@ -456,20 +492,31 @@ class TestDownloadWithRetry:
         return m
 
     def test_retries_exhausted_raises_runtime_error(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), retries=2)
-        with patch("babel_explorer.core.downloader.requests.get", side_effect=requests.ConnectionError("fail")):
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=2
+        )
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            side_effect=requests.ConnectionError("fail"),
+        ):
             with patch("babel_explorer.core.downloader.time.sleep"):  # skip waiting
                 with pytest.raises(RuntimeError, match="Failed to download"):
-                    dl._download_with_retry("https://example.com/file", str(tmp_path / "f"), 1024)
+                    dl._download_with_retry(
+                        "https://example.com/file", str(tmp_path / "f"), 1024
+                    )
 
     def test_succeeds_on_second_attempt(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), retries=3)
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
         out_path = str(tmp_path / "retry_success.bin")
 
-        mock_response = self._make_response(200, {'Content-Length': '5'}, [b"hello"])
+        mock_response = self._make_response(200, {"Content-Length": "5"}, [b"hello"])
         side_effects = [requests.ConnectionError("first fail"), mock_response]
 
-        with patch("babel_explorer.core.downloader.requests.get", side_effect=side_effects):
+        with patch(
+            "babel_explorer.core.downloader.requests.get", side_effect=side_effects
+        ):
             with patch("babel_explorer.core.downloader.time.sleep"):
                 dl._download_with_retry("https://example.com/file", out_path, 1024)
         assert os.path.exists(out_path)
@@ -479,11 +526,13 @@ class TestDownloadWithRetry:
         out_path = tmp_path / "partial.bin"
         out_path.write_bytes(b"partial")  # 7 bytes
 
-        mock_response = self._make_response(206, {'Content-Length': '3'}, [b"end"])
-        with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response) as mock_get:
+        mock_response = self._make_response(206, {"Content-Length": "3"}, [b"end"])
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=mock_response
+        ) as mock_get:
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
             _, kwargs = mock_get.call_args
-            assert kwargs['headers'] == {'Range': 'bytes=7-'}
+            assert kwargs["headers"] == {"Range": "bytes=7-"}
 
     def test_http_416_file_already_complete(self, tmp_path):
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
@@ -491,7 +540,9 @@ class TestDownloadWithRetry:
         out_path.write_bytes(b"full file")
 
         mock_response = self._make_response(416)
-        with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=mock_response
+        ):
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
         # Should return without error
         assert out_path.read_bytes() == b"full file"
@@ -502,8 +553,12 @@ class TestDownloadWithRetry:
         out_path = tmp_path / "no_resume.bin"
         out_path.write_bytes(b"partial")
 
-        mock_response = self._make_response(200, {'Content-Length': '12'}, [b"full content"])
-        with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
+        mock_response = self._make_response(
+            200, {"Content-Length": "12"}, [b"full content"]
+        )
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=mock_response
+        ):
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
         assert out_path.read_bytes() == b"full content"
 
@@ -512,10 +567,16 @@ class TestDownloadWithRetry:
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
         out_path = str(tmp_path / "headers.bin")
 
-        mock_response = self._make_response(200, {'Content-Length': '5', 'ETag': '"abc"'}, [b"hello"])
-        with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
-            headers = dl._download_with_retry("https://example.com/file", out_path, 1024)
-        assert headers['ETag'] == '"abc"'
+        mock_response = self._make_response(
+            200, {"Content-Length": "5", "ETag": '"abc"'}, [b"hello"]
+        )
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=mock_response
+        ):
+            headers = dl._download_with_retry(
+                "https://example.com/file", out_path, 1024
+            )
+        assert headers["ETag"] == '"abc"'
 
 
 class TestStreamDownload:
@@ -526,11 +587,11 @@ class TestStreamDownload:
         out_path = str(tmp_path / "stream.bin")
 
         mock_response = Mock()
-        mock_response.headers = {'Content-Length': '10'}
+        mock_response.headers = {"Content-Length": "10"}
         mock_response.iter_content = Mock(return_value=[b"hello", b"world"])
 
         dl._stream_download(mock_response, out_path, resume_byte_pos=0, chunk_size=1024)
-        with open(out_path, 'rb') as f:
+        with open(out_path, "rb") as f:
             assert f.read() == b"helloworld"
 
     def test_append_mode_on_resume(self, tmp_path):
@@ -539,10 +600,12 @@ class TestStreamDownload:
         out_path.write_bytes(b"start")
 
         mock_response = Mock()
-        mock_response.headers = {'Content-Length': '3'}
+        mock_response.headers = {"Content-Length": "3"}
         mock_response.iter_content = Mock(return_value=[b"end"])
 
-        dl._stream_download(mock_response, str(out_path), resume_byte_pos=5, chunk_size=1024)
+        dl._stream_download(
+            mock_response, str(out_path), resume_byte_pos=5, chunk_size=1024
+        )
         assert out_path.read_bytes() == b"startend"
 
 
