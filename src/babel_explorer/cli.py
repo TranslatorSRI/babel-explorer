@@ -9,12 +9,33 @@ from babel_explorer.core.nodenorm import NodeNorm
 def parse_duration(value: str) -> float:
     """Parse a duration string like '3h', '30m', '1d', '7200', or 'never' → seconds."""
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-    lower = value.lower()
+    lower = (value or "").strip().lower()
+    if not lower:
+        raise click.BadParameter(
+            "Invalid duration: value cannot be empty. "
+            "Use an integer number of seconds, optionally followed by 's', 'm', 'h', or 'd', "
+            "or 'never'."
+        )
     if lower == "never":
         return float("inf")
+    # Value with unit suffix (e.g. '3h', '30m')
     if lower[-1] in units:
-        return int(lower[:-1]) * units[lower[-1]]
-    return int(lower)  # bare seconds
+        try:
+            amount = int(lower[:-1])
+        except ValueError:
+            raise click.BadParameter(
+                f"Invalid duration {value!r}: expected an integer followed by an optional unit "
+                "('s', 'm', 'h', or 'd'), or 'never'."
+            )
+        return amount * units[lower[-1]]
+    # Bare integer seconds
+    try:
+        return int(lower)
+    except ValueError:
+        raise click.BadParameter(
+            f"Invalid duration {value!r}: expected an integer number of seconds, optionally "
+            "followed by 's', 'm', 'h', or 'd', or 'never'."
+        )
 
 
 @click.group()
