@@ -28,8 +28,9 @@ class Identifier:
         return identifier
 
 class NodeNorm:
-    def __init__(self, nodenorm_url: str=""):
+    def __init__(self, nodenorm_url: str = "", timeout: int = 30):
         self.nodenorm_url = nodenorm_url
+        self.timeout = timeout
         if self.nodenorm_url and not self.nodenorm_url.endswith("/"):
             self.nodenorm_url += "/"
 
@@ -55,7 +56,7 @@ class NodeNorm:
             "description": description,
             "individual_types": individual_types,
             "include_taxa": include_taxa,
-        })
+        }, timeout=self.timeout)
         response.raise_for_status()
         result = response.json()
 
