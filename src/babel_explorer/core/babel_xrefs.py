@@ -86,6 +86,9 @@ class BabelXRefs:
 
     @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):
+        if label_curies and self.nodenorm is None:
+            raise ValueError("label_curies=True requires a configured NodeNorm instance (nodenorm was None).")
+
         concord_parquet = self.downloader.get_downloaded_file('duckdb/Concord.parquet')
 
         db = duckdb.connect()
@@ -113,6 +116,8 @@ class BabelXRefs:
 
     def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
         """Traverse the cross-reference graph in one DuckDB WITH RECURSIVE query."""
+        if label_curies and self.nodenorm is None:
+            raise ValueError("label_curies=True requires a configured NodeNorm instance (nodenorm was None).")
         if not curies:
             return []
 
