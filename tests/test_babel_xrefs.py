@@ -184,6 +184,7 @@ class TestBabelXRefsMocked:
             ("concord.tsv", "A:1", "skos:exactMatch", "B:2"),
         ]
         mock_db = MagicMock()
+        mock_db.__enter__.return_value = mock_db
         mock_db.read_parquet.return_value = "table"
         mock_db.execute.return_value = mock_result
 

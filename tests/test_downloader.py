@@ -445,6 +445,16 @@ class TestGetDownloadedFileCaching:
 class TestDownloadWithRetry:
     """Tests for _download_with_retry."""
 
+    @staticmethod
+    def _make_response(status_code, headers=None, content=None):
+        m = MagicMock()
+        m.__enter__.return_value = m
+        m.status_code = status_code
+        m.headers = headers or {}
+        if content is not None:
+            m.iter_content = Mock(return_value=content)
+        return m
+
     def test_retries_exhausted_raises_runtime_error(self, tmp_path):
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), retries=2)
         with patch("babel_explorer.core.downloader.requests.get", side_effect=requests.ConnectionError("fail")):
@@ -456,11 +466,7 @@ class TestDownloadWithRetry:
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path), retries=3)
         out_path = str(tmp_path / "retry_success.bin")
 
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {'Content-Length': '5'}
-        mock_response.iter_content = Mock(return_value=[b"hello"])
-
+        mock_response = self._make_response(200, {'Content-Length': '5'}, [b"hello"])
         side_effects = [requests.ConnectionError("first fail"), mock_response]
 
         with patch("babel_explorer.core.downloader.requests.get", side_effect=side_effects):
@@ -473,11 +479,7 @@ class TestDownloadWithRetry:
         out_path = tmp_path / "partial.bin"
         out_path.write_bytes(b"partial")  # 7 bytes
 
-        mock_response = Mock()
-        mock_response.status_code = 206
-        mock_response.headers = {'Content-Length': '3'}
-        mock_response.iter_content = Mock(return_value=[b"end"])
-
+        mock_response = self._make_response(206, {'Content-Length': '3'}, [b"end"])
         with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response) as mock_get:
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
             _, kwargs = mock_get.call_args
@@ -488,10 +490,7 @@ class TestDownloadWithRetry:
         out_path = tmp_path / "complete.bin"
         out_path.write_bytes(b"full file")
 
-        mock_response = Mock()
-        mock_response.status_code = 416
-        mock_response.headers = {}
-
+        mock_response = self._make_response(416)
         with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
         # Should return without error
@@ -503,11 +502,7 @@ class TestDownloadWithRetry:
         out_path = tmp_path / "no_resume.bin"
         out_path.write_bytes(b"partial")
 
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {'Content-Length': '12'}
-        mock_response.iter_content = Mock(return_value=[b"full content"])
-
+        mock_response = self._make_response(200, {'Content-Length': '12'}, [b"full content"])
         with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
         assert out_path.read_bytes() == b"full content"
@@ -517,11 +512,7 @@ class TestDownloadWithRetry:
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
         out_path = str(tmp_path / "headers.bin")
 
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.headers = {'Content-Length': '5', 'ETag': '"abc"'}
-        mock_response.iter_content = Mock(return_value=[b"hello"])
-
+        mock_response = self._make_response(200, {'Content-Length': '5', 'ETag': '"abc"'}, [b"hello"])
         with patch("babel_explorer.core.downloader.requests.get", return_value=mock_response):
             headers = dl._download_with_retry("https://example.com/file", out_path, 1024)
         assert headers['ETag'] == '"abc"'
