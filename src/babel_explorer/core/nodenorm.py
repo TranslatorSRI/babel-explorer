@@ -57,11 +57,17 @@ class NodeNorm:
         response.raise_for_status()
         result = response.json()
 
-        return result[curie]
+        try:
+            return result[curie]
+        except KeyError:
+            logging.debug(f"NodeNorm response did not contain CURIE {curie!r}; returning None")
+            return None
 
     @functools.lru_cache(maxsize=None)
     def get_clique_identifiers(self, curie, **kwargs):
         result = self.normalize_curie(curie, **kwargs)
+        if not result:
+            return None
         if 'equivalent_identifiers' not in result:
             return None
         return list(map(lambda x: Identifier.from_dict(x), result['equivalent_identifiers']))
