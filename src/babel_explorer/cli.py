@@ -30,7 +30,7 @@ def cli():
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
 @click.option("--check-download", type=str, default="3h", show_default=True,
               help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-                   "'never' always checks via HTTP HEAD; '0' same as 'never'.")
+                   "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.")
 def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, recurse: bool, labels: bool,
           check_download: str):
     """
@@ -62,7 +62,7 @@ def xrefs(curies: list[str], babel_url: str, nodenorm_url, local_dir: str, recur
 @click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel/2025nov19/", help="Base URL of the Babel server")
 @click.option("--check-download", type=str, default="3h", show_default=True,
               help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-                   "'never' always checks via HTTP HEAD; '0' same as 'never'.")
+                   "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.")
 def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
