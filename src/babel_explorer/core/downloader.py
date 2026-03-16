@@ -15,11 +15,12 @@ class BabelDownloader:
     Class for downloading Babel cross-reference files to a local directory as needed.
     """
 
-    def __init__(self, url_base, local_path=None, retries=10, freshness_seconds=3 * 3600):
+    def __init__(self, url_base, local_path=None, retries=10, freshness_seconds=3 * 3600, timeout: int = 30):
         # We assume the URL base is correct (if not, we can fix it later).
         self.url_base = url_base
         self.retries = retries
         self.freshness_seconds = freshness_seconds
+        self.timeout = timeout
         self.logger = logging.getLogger(BabelDownloader.__name__)
 
         if local_path is None:
@@ -114,7 +115,7 @@ class BabelDownloader:
             bool: True if remote matches local meta (file is still current)
         """
         try:
-            response = requests.head(url, timeout=30)
+            response = requests.head(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             self.logger.warning(f"HEAD request failed for {url}: {e}")
@@ -213,7 +214,7 @@ class BabelDownloader:
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
                 # Make streaming request with timeout for connection (not total time)
-                with requests.get(url, headers=headers, stream=True, timeout=30) as response:
+                with requests.get(url, headers=headers, stream=True, timeout=self.timeout) as response:
 
                     # Handle different response codes
                     if response.status_code == 416:
