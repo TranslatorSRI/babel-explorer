@@ -3,6 +3,7 @@ import functools
 import requests
 import logging
 
+
 @dataclasses.dataclass
 class Identifier:
     curie: str
@@ -16,16 +17,17 @@ class Identifier:
 
     @staticmethod
     def from_dict(d: dict):
-        identifier = Identifier(curie=d['identifier'])
-        if 'label' in d:
-            identifier.label = d['label']
-        if 'taxa' in d:
-            identifier.taxa = d['taxa']
-        if 'description' in d:
-            identifier.description = d['description']
-        if 'type' in d:
-            identifier.biolink_type = d['type']
+        identifier = Identifier(curie=d["identifier"])
+        if "label" in d:
+            identifier.label = d["label"]
+        if "taxa" in d:
+            identifier.taxa = d["taxa"]
+        if "description" in d:
+            identifier.description = d["description"]
+        if "type" in d:
+            identifier.biolink_type = d["type"]
         return identifier
+
 
 class NodeNorm:
     # A list of NodeNorm instances to choose from.
@@ -37,40 +39,65 @@ class NodeNorm:
         "Translator NodeNorm CI": "https://nodenorm.ci.transltr.io/",
     }
 
-    def __init__(self, nodenorm_url: str=""):
+    def __init__(self, nodenorm_url: str = "", timeout: int = 30):
         self.nodenorm_url = nodenorm_url
+        self.timeout = timeout
+        if self.nodenorm_url and not self.nodenorm_url.endswith("/"):
+            self.nodenorm_url += "/"
 
     @functools.lru_cache(maxsize=None)
-    def get_identifier(self, curie):
+    def get_identifier(self, curie: str):
         result = self.normalize_curie(curie)
         logging.debug(f"Normalizing {curie} with NodeNorm to result: {result}")
         if not result:
             return Identifier(curie=curie)
-        for identifier in result.get('equivalent_identifiers', []):
-            if identifier['identifier'] == curie:
+        for identifier in result.get("equivalent_identifiers", []):
+            if identifier["identifier"] == curie:
                 logging.debug(f"Found exact match for {curie}: {identifier}")
                 return Identifier.from_dict(identifier)
 
         return Identifier(curie=curie)
 
     @functools.lru_cache(maxsize=None)
-    def normalize_curie(self, curie: str, conflate=True, drug_chemical_conflate=True, description=True, individual_types=True, include_taxa=True):
-        response = requests.get(f"{self.nodenorm_url}get_normalized_nodes", params={
-            "curie": curie,
-            "conflate": conflate,
-            "drug_chemical_conflate": drug_chemical_conflate,
-            "description": description,
-            "individual_types": individual_types,
-            "include_taxa": include_taxa,
-        })
+    def normalize_curie(
+        self,
+        curie: str,
+        conflate=True,
+        drug_chemical_conflate=True,
+        description=True,
+        individual_types=True,
+        include_taxa=True,
+    ):
+        response = requests.get(
+            f"{self.nodenorm_url}get_normalized_nodes",
+            params={
+                "curie": curie,
+                "conflate": conflate,
+                "drug_chemical_conflate": drug_chemical_conflate,
+                "description": description,
+                "individual_types": individual_types,
+                "include_taxa": include_taxa,
+            },
+            timeout=self.timeout,
+        )
         response.raise_for_status()
         result = response.json()
 
-        return result[curie]
+        try:
+            return result[curie]
+        except KeyError:
+            logging.debug(
+                f"NodeNorm response did not contain CURIE {curie!r}; returning None"
+            )
+            return None
 
     @functools.lru_cache(maxsize=None)
     def get_clique_identifiers(self, curie, **kwargs):
         result = self.normalize_curie(curie, **kwargs)
-        if 'equivalent_identifiers' not in result:
+        if not result:
             return None
-        return list(map(lambda x: Identifier.from_dict(x), result['equivalent_identifiers']))
+        if "equivalent_identifiers" not in result:
+            return None
+        return list(
+            map(lambda x: Identifier.from_dict(x), result["equivalent_identifiers"])
+        )

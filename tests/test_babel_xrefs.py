@@ -28,7 +28,9 @@ VALID_CURIES = load_curies()
 
 class TestCrossReference:
     def test_creation(self):
-        xr = CrossReference(filename="f.txt", subj="A:1", pred="skos:exactMatch", obj="B:2")
+        xr = CrossReference(
+            filename="f.txt", subj="A:1", pred="skos:exactMatch", obj="B:2"
+        )
         assert xr.filename == "f.txt"
         assert xr.subj == "A:1"
         assert xr.pred == "skos:exactMatch"
@@ -85,9 +87,14 @@ class TestCrossReference:
 class TestLabeledCrossReference:
     def test_creation(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="Alpha", subj_biolink_type="biolink:Disease",
-            obj_label="Beta", obj_biolink_type="biolink:Gene",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="Alpha",
+            subj_biolink_type="biolink:Disease",
+            obj_label="Beta",
+            obj_biolink_type="biolink:Gene",
         )
         assert lxr.subj == "A:1"
         assert lxr.subj_label == "Alpha"
@@ -95,23 +102,40 @@ class TestLabeledCrossReference:
 
     def test_inherits_from_cross_reference(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="", subj_biolink_type="", obj_label="", obj_biolink_type="",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="",
+            subj_biolink_type="",
+            obj_label="",
+            obj_biolink_type="",
         )
         assert isinstance(lxr, CrossReference)
 
     def test_curies_property(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="", subj_biolink_type="", obj_label="", obj_biolink_type="",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="",
+            subj_biolink_type="",
+            obj_label="",
+            obj_biolink_type="",
         )
         assert lxr.curies == frozenset({"A:1", "B:2"})
 
     def test_str(self):
         lxr = LabeledCrossReference(
-            subj="A:1", pred="p", obj="B:2", filename="f",
-            subj_label="Alpha", subj_biolink_type="biolink:Disease",
-            obj_label="Beta", obj_biolink_type="biolink:Gene",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            filename="f",
+            subj_label="Alpha",
+            subj_biolink_type="biolink:Disease",
+            obj_label="Beta",
+            obj_biolink_type="biolink:Gene",
         )
         s = str(lxr)
         assert "A:1" in s
@@ -184,16 +208,24 @@ class TestBabelXRefsMocked:
             ("concord.tsv", "A:1", "skos:exactMatch", "B:2"),
         ]
         mock_db = MagicMock()
+        mock_db.__enter__.return_value = mock_db
         mock_db.read_parquet.return_value = "table"
         mock_db.execute.return_value = mock_result
 
-        with patch.object(bx.downloader, 'get_downloaded_file', return_value="/fake/path") as mock_dl:
-            with patch.object(bx.downloader, 'get_output_file', return_value="/fake/db"):
-                with patch("babel_explorer.core.babel_xrefs.duckdb.connect", return_value=mock_db):
+        with patch.object(
+            bx.downloader, "get_downloaded_file", return_value="/fake/path"
+        ) as mock_dl:
+            with patch.object(
+                bx.downloader, "get_output_file", return_value="/fake/db"
+            ):
+                with patch(
+                    "babel_explorer.core.babel_xrefs.duckdb.connect",
+                    return_value=mock_db,
+                ):
                     bx.get_curie_xref.cache_clear()
                     result = bx.get_curie_xref("A:1")
-                    # Downloader should be called for Concord and Metadata
-                    assert mock_dl.call_count == 2
+                    # Downloader should be called for Concord only (Metadata unused here)
+                    assert mock_dl.call_count == 1
                     result_list = list(result)
                     assert len(result_list) == 1
                     assert isinstance(result_list[0], CrossReference)
@@ -201,9 +233,9 @@ class TestBabelXRefsMocked:
     def test_get_curie_xrefs_no_expand(self, tmp_path):
         bx = self._make_bx(tmp_path)
         xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
-        with patch.object(bx, 'get_curie_xref', return_value=[xr]):
+        with patch.object(bx, "get_curie_xref", return_value=[xr]):
             bx.get_curie_xref.cache_clear()
-            result = bx.get_curie_xrefs(["A:1"], expand=False)
+            result = bx.get_curie_xrefs(["A:1"], recurse=False)
             assert len(result) == 1
             assert result[0] == xr
 
@@ -212,25 +244,61 @@ class TestBabelXRefsMocked:
         xr1 = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
         xr2 = CrossReference(filename="f", subj="B:2", pred="p", obj="C:3")
 
-        def mock_get_curie_xref(curie, label_curies=False):
-            if curie == "A:1":
-                return [xr1]
-            elif curie == "B:2":
-                return [xr2]
-            return []
-
-        with patch.object(bx, 'get_curie_xref', side_effect=mock_get_curie_xref):
-            result = bx.get_curie_xrefs(["A:1"], expand=True)
+        with patch.object(
+            bx, "_get_curie_xrefs_recursive", return_value=[xr1, xr2]
+        ) as mock_rec:
+            result = bx.get_curie_xrefs(["A:1"], recurse=True)
+            mock_rec.assert_called_once_with(["A:1"], False)
             assert xr1 in result
             assert xr2 in result
+
+    def test_get_curie_xrefs_recursive_sql_traversal(self, tmp_path):
+        """_get_curie_xrefs_recursive uses SQL graph traversal, not Python recursion."""
+        import duckdb as real_duckdb
+
+        bx = self._make_bx(tmp_path)
+
+        # Write a tiny Parquet file: graph A-B, B-C, D-E (disconnected from A-B-C)
+        parquet_path = str(tmp_path / "test_concord.parquet")
+        setup_db = real_duckdb.connect()
+        setup_db.execute(f"""
+            COPY (
+                SELECT * FROM (VALUES
+                    ('f1.tsv', 'A:1', 'skos:exactMatch', 'B:2'),
+                    ('f1.tsv', 'B:2', 'skos:exactMatch', 'C:3'),
+                    ('f2.tsv', 'D:4', 'skos:exactMatch', 'E:5')
+                ) AS t(filename, subj, pred, obj)
+            ) TO '{parquet_path}' (FORMAT PARQUET)
+        """)
+        setup_db.close()
+
+        with patch.object(
+            bx.downloader, "get_downloaded_file", return_value=parquet_path
+        ):
+            # Starting from A:1 should reach B:2 and C:3 but not the D-E component
+            result = bx._get_curie_xrefs_recursive(["A:1"])
+            pairs = {(xr.subj, xr.obj) for xr in result}
+            assert ("A:1", "B:2") in pairs
+            assert ("B:2", "C:3") in pairs
+            assert ("D:4", "E:5") not in pairs
+
+            # Starting from D:4 should only reach E:5
+            result = bx._get_curie_xrefs_recursive(["D:4"])
+            pairs = {(xr.subj, xr.obj) for xr in result}
+            assert ("D:4", "E:5") in pairs
+            assert ("A:1", "B:2") not in pairs
+
+            # Empty input returns empty list
+            result = bx._get_curie_xrefs_recursive([])
+            assert result == []
 
     def test_results_are_sorted(self, tmp_path):
         bx = self._make_bx(tmp_path)
         xr_b = CrossReference(filename="b", subj="B:1", pred="p", obj="C:1")
         xr_a = CrossReference(filename="a", subj="A:1", pred="p", obj="B:1")
 
-        with patch.object(bx, 'get_curie_xref', return_value=[xr_b, xr_a]):
-            result = bx.get_curie_xrefs(["X:1"], expand=False)
+        with patch.object(bx, "get_curie_xref", return_value=[xr_b, xr_a]):
+            result = bx.get_curie_xrefs(["X:1"], recurse=False)
             assert result == [xr_a, xr_b]
 
 
@@ -265,7 +333,7 @@ def test_get_curie_xref_returns_known_xrefs(babel_xrefs, curie):
 def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
     """get_curie_xrefs without expansion returns sorted, non-empty results."""
     babel_xrefs.get_curie_xref.cache_clear()
-    results = babel_xrefs.get_curie_xrefs([curie], expand=False)
+    results = babel_xrefs.get_curie_xrefs([curie], recurse=False)
     assert len(results) > 0
     assert results == sorted(results)
 
@@ -275,9 +343,9 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
     """Expanded results are at least as many as non-expanded."""
     babel_xrefs.get_curie_xref.cache_clear()
-    non_expanded = babel_xrefs.get_curie_xrefs([curie], expand=False)
+    non_expanded = babel_xrefs.get_curie_xrefs([curie], recurse=False)
     babel_xrefs.get_curie_xref.cache_clear()
-    expanded = babel_xrefs.get_curie_xrefs([curie], expand=True)
+    expanded = babel_xrefs.get_curie_xrefs([curie], recurse=True)
     assert len(expanded) >= len(non_expanded)
 
 
@@ -286,9 +354,9 @@ def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
 def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
     """Non-expanded results are a subset of expanded results."""
     babel_xrefs.get_curie_xref.cache_clear()
-    non_expanded = set(babel_xrefs.get_curie_xrefs([curie], expand=False))
+    non_expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=False))
     babel_xrefs.get_curie_xref.cache_clear()
-    expanded = set(babel_xrefs.get_curie_xrefs([curie], expand=True))
+    expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=True))
     assert non_expanded.issubset(expanded)
 
 

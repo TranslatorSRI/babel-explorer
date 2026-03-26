@@ -1,4 +1,4 @@
-# babel-explorer
+# Babel Explorer
 Software for querying and exploring Babel intermediate files.
 
 babel-explorer allows you to discover why two biological/chemical identifiers are considered identical by the [Babel](https://github.com/TranslatorSRI/Babel) system, which handles cross-references between different ontology and database identifiers (e.g., MONDO, HP, UMLS, HGNC).
@@ -18,7 +18,7 @@ uv sync --group dev
 uv run babel-explorer xrefs MONDO:0004979
 
 # Get cross-references with expansion (recursive lookup)
-uv run babel-explorer xrefs MONDO:0004979 --expand
+uv run babel-explorer xrefs MONDO:0004979 --recurse
 
 # Get cross-references with labels from NodeNorm
 uv run babel-explorer xrefs MONDO:0004979 --labels
