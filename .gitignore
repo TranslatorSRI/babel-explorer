@@ -191,6 +191,10 @@ cython_debug/
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
+# Node.js (web/ frontend)
+node_modules/
+web/dist/
+
 # Ruff stuff:
 .ruff_cache/
 
