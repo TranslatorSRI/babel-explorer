@@ -8,17 +8,15 @@ babel-explorer is a tool for querying and exploring Babel intermediate files. It
 
 ## Development Setup
 
-This project uses **uv** for package management:
+This project has two package managers — **uv** for Python and **npm** for the Astro/Vue frontend:
 
 ```bash
-# Install dependencies
-uv sync
-
-# Install with dev dependencies
+# Python (CLI + server frontend)
 uv sync --group dev
-
-# Run the CLI
 uv run babel-explorer --help
+
+# Astro/Vue frontend (GitHub Pages)
+cd web && npm install && npm run dev
 ```
 
 ## Commands
@@ -71,6 +69,10 @@ uv run ruff check
 
 # Format code
 uv run ruff format
+
+# Astro/Vue frontend (from web/ directory)
+cd web && npm run dev        # Dev server at localhost:4321
+cd web && npm run build      # Build to web/dist/
 ```
 
 ## Architecture
@@ -93,29 +95,76 @@ uv run ruff format
    - Integration with NodeNormalization API (https://nodenormalization-sri.renci.org/)
    - Fetches labels, biolink types, and equivalent identifiers for CURIEs
    - Uses `@functools.lru_cache` for performance
+   - `NodeNorm.URLs` loaded from `config/translator-endpoints.json` (shared with the Astro frontend)
    - Optional component for label enrichment
 
 4. **CLI** (`src/babel_explorer/cli.py`):
    - Click-based command-line interface
    - Four main commands: `xrefs`, `ids`, `test-concord`, `web`
 
-5. **Web Frontend** (`src/babel_explorer/web/`):
+5. **Python Web Frontend** (`src/babel_explorer/web/`):
    - FastAPI + Jinja2 + htmx + Bootstrap 5 (CDN) web interface
    - App factory in `web/__init__.py` — `create_app(local_dir, babel_url, nodenorm_url)`
    - All routes in `web/routes.py` — HTML pages, htmx partials, JSON API, CSV downloads
    - Templates in `web/templates/` with `_partials/` for htmx fragments
    - Sync route handlers (core code is synchronous; FastAPI runs them in a threadpool)
    - Four tools exposed: NodeNorm, XRefs, IDs, Test Concordance
+   - Deployed to Kubernetes (hosts DB-dependent tools)
+
+6. **Astro/Vue Web Frontend** (`web/`):
+   - Astro + Vue 3 static site for browser-only tools (no backend required)
+   - Deployed to GitHub Pages
+   - Currently hosts: NodeNorm lookup with single-instance and multi-instance comparison modes
+   - Calls NodeNorm API directly from the browser via `fetch()` (CORS-enabled)
+   - Uses Bootstrap 5 (CDN) with the same dark-navbar styling as the Python frontend
+   - CURIE link-outs via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7, fetched at runtime)
+   - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
+
+7. **Shared Configuration** (`config/`):
+   - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments (dev, exp, ci, test, prod)
+   - Consumed by Python CLI/frontend (`nodenorm.py`) and Astro frontend (`NodeNormApp.vue`)
 
 ### Data Flow
 
-1. User provides CURIEs via CLI or web UI
-2. BabelDownloader ensures required Parquet files are downloaded
-3. BabelXRefs queries files using DuckDB
+1. User provides CURIEs via CLI, Python web UI, or Astro web UI
+2. For DB-dependent tools (XRefs, IDs): BabelDownloader ensures required Parquet files are downloaded, BabelXRefs queries files using DuckDB
+3. For API-only tools (NodeNorm): the Astro frontend calls the NodeNorm API directly from the browser; the Python frontend proxies through the server
 4. If `--labels` or `--expand` flags are set, NodeNorm is queried for additional metadata
-5. Results are printed to stdout (CLI) or rendered as HTML tables / JSON / CSV (web)
+5. Results are printed to stdout (CLI), rendered as HTML tables / JSON / CSV (Python web), or rendered as Vue components (Astro web)
 
-### Web Route Structure
+### Astro/Vue Frontend Structure (`web/`)
+
+```
+web/src/
+  layouts/BaseLayout.astro          # Bootstrap 5 CDN + dark navbar
+  components/
+    Navbar.astro                    # Dark navbar matching Python frontend
+    nodenorm/
+      NodeNormApp.vue               # Root Vue island (client:only="vue")
+      NodeNormForm.vue              # Form: textarea, instance dropdown, API toggles, mode toggle
+      NodeNormResults.vue           # Accordion container + column visibility + summary
+      CurieResultCard.vue           # Per-CURIE accordion card (adaptive detail ≤10 / >10 equiv IDs)
+      EquivalentIdTable.vue         # Striped table with togglable columns
+      ColumnVisibility.vue          # Page-wide column show/hide controls
+      SummaryCard.vue               # Aggregate biolink type stats across all CURIEs
+      ComparisonView.vue            # Side-by-side multi-instance comparison table
+    shared/
+      CurieLink.vue                 # CURIE → external URL link using biolink prefix map
+  lib/
+    nodenorm-api.ts                 # fetch() wrapper for NodeNorm get_normalized_nodes
+    curie-links.ts                  # Biolink prefix map loader + URL builder
+    types.ts                        # TypeScript interfaces for API responses
+  pages/
+    index.astro                     # Landing page with tool cards
+    nodenorm.astro                  # NodeNorm tool page
+```
+
+Key patterns:
+- Each tool page hosts one Vue island via `client:only="vue"` (no SSR — all client-side)
+- Shared config imported from `config/translator-endpoints.json` at build time
+- Bootstrap via CDN (not npm) to match the Python frontend exactly
+
+### Python Web Route Structure
 
 | Route | Method | Returns | Purpose |
 |-------|--------|---------|---------|
@@ -134,6 +183,8 @@ The NodeNorm and Test Concordance pages include a dropdown to select from predef
 - **LRU caching**: Heavy use of `@functools.lru_cache` to avoid redundant downloads and API calls
 - **Recursive expansion**: The `--expand` flag recursively follows all cross-references to build complete graphs
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
+- **Dual frontend**: DB-dependent tools on a server (FastAPI + htmx), API-only tools in the browser (Astro + Vue). Split follows data dependencies.
+- **Shared config**: `config/translator-endpoints.json` is the single source of truth for deployment URLs, consumed by both frontends and the CLI
 
 ## Testing
 
@@ -170,11 +221,15 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 
 ## File Locations
 
-- Source code: `src/babel_explorer/`
+- Python source code: `src/babel_explorer/`
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `data/<version>/duckdb/*.parquet`
 - Generated DuckDB databases: `data/<version>/output/duckdbs/`
-- Web frontend: `src/babel_explorer/web/`
-- Web templates: `src/babel_explorer/web/templates/`
+- Python web frontend: `src/babel_explorer/web/`
+- Python web templates: `src/babel_explorer/web/templates/`
+- Astro/Vue web frontend: `web/`
+- Astro/Vue components: `web/src/components/`
+- Astro/Vue pages: `web/src/pages/`
+- Shared config: `config/translator-endpoints.json`
 - Entry point: `src/babel_explorer/cli.py`
