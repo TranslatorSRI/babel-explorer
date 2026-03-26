@@ -62,9 +62,11 @@ class TestCliCommands:
         mock_xref = MagicMock()
         mock_xref.__str__ = lambda self: "A:1 skos:exactMatch B:2"
 
-        with patch("babel_explorer.cli.BabelDownloader"), \
-             patch("babel_explorer.cli.BabelXRefs") as mock_bx, \
-             patch("babel_explorer.cli.NodeNorm"):
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
             mock_bx.return_value.get_curie_xrefs.return_value = [mock_xref]
             result = runner.invoke(cli, ["xrefs", "MONDO:0004979"])
 
@@ -78,11 +80,15 @@ class TestCliCommands:
         mock_xref = MagicMock()
         mock_xref.__str__ = lambda self: "A:1 skos:exactMatch B:2"
 
-        with patch("babel_explorer.cli.BabelDownloader"), \
-             patch("babel_explorer.cli.BabelXRefs") as mock_bx, \
-             patch("babel_explorer.cli.NodeNorm"):
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
             mock_bx.return_value.get_curie_xrefs.return_value = [mock_xref]
-            result = runner.invoke(cli, ["xrefs", "MONDO:0004979", "--recurse", "--labels"])
+            result = runner.invoke(
+                cli, ["xrefs", "MONDO:0004979", "--recurse", "--labels"]
+            )
 
         assert result.exit_code == 0
         mock_bx.return_value.get_curie_xrefs.assert_called_once_with(
@@ -92,11 +98,15 @@ class TestCliCommands:
     def test_xrefs_check_download_option(self):
         runner = CliRunner()
 
-        with patch("babel_explorer.cli.BabelDownloader") as mock_dl, \
-             patch("babel_explorer.cli.BabelXRefs") as mock_bx, \
-             patch("babel_explorer.cli.NodeNorm"):
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
             mock_bx.return_value.get_curie_xrefs.return_value = []
-            result = runner.invoke(cli, ["xrefs", "MONDO:0004979", "--check-download", "1h"])
+            result = runner.invoke(
+                cli, ["xrefs", "MONDO:0004979", "--check-download", "1h"]
+            )
 
         assert result.exit_code == 0
         _, kwargs = mock_dl.call_args
@@ -107,8 +117,10 @@ class TestCliCommands:
         mock_id = MagicMock()
         mock_id.__str__ = lambda self: "MONDO:0004979 record"
 
-        with patch("babel_explorer.cli.BabelDownloader"), \
-             patch("babel_explorer.cli.BabelXRefs") as mock_bx:
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+        ):
             mock_bx.return_value.get_curie_ids.return_value = [mock_id]
             result = runner.invoke(cli, ["ids", "MONDO:0004979"])
 
@@ -128,7 +140,9 @@ class TestCliCommands:
 
         assert result.exit_code == 0
         assert "asthma" in result.output
-        mock_nn.return_value.get_clique_identifiers.assert_called_once_with("MONDO:0004979")
+        mock_nn.return_value.get_clique_identifiers.assert_called_once_with(
+            "MONDO:0004979"
+        )
 
     def test_test_concord_no_label(self):
         runner = CliRunner()
