@@ -6,10 +6,12 @@ import { DEFAULT_API_OPTIONS } from '../../lib/types';
 const props = defineProps<{
   instances: NodeNormInstance[];
   loading: boolean;
+  mode: 'single' | 'compare';
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { curies: string; instanceUrl: string; options: ApiOptions }];
+  submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
+  'update:mode': [mode: 'single' | 'compare'];
 }>();
 
 const curies = ref('');
@@ -18,10 +20,31 @@ const customUrl = ref('');
 const showCustom = computed(() => selectedInstance.value === '__custom__');
 const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS });
 
+// For compare mode: track which instances are selected
+const compareSelected = ref<Set<string>>(new Set([props.instances[0]?.url ?? '']));
+
+function toggleCompareInstance(url: string) {
+  if (compareSelected.value.has(url)) {
+    compareSelected.value.delete(url);
+  } else {
+    compareSelected.value.add(url);
+  }
+}
+
 function onSubmit() {
-  const url = showCustom.value ? customUrl.value : selectedInstance.value;
-  if (!curies.value.trim() || !url.trim()) return;
-  emit('submit', { curies: curies.value, instanceUrl: url, options: { ...options.value } });
+  if (!curies.value.trim()) return;
+
+  let urls: string[];
+  if (props.mode === 'compare') {
+    urls = [...compareSelected.value];
+    if (urls.length === 0) return;
+  } else {
+    const url = showCustom.value ? customUrl.value : selectedInstance.value;
+    if (!url.trim()) return;
+    urls = [url];
+  }
+
+  emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
 }
 </script>
 
@@ -38,22 +61,60 @@ function onSubmit() {
       ></textarea>
     </div>
 
+    <!-- Mode toggle -->
+    <div class="mb-3">
+      <div class="btn-group btn-group-sm" role="group">
+        <button
+          type="button"
+          :class="['btn', mode === 'single' ? 'btn-primary' : 'btn-outline-primary']"
+          @click="emit('update:mode', 'single')"
+        >
+          Single Instance
+        </button>
+        <button
+          type="button"
+          :class="['btn', mode === 'compare' ? 'btn-primary' : 'btn-outline-primary']"
+          @click="emit('update:mode', 'compare')"
+        >
+          Compare Instances
+        </button>
+      </div>
+    </div>
+
     <div class="row mb-3">
       <div class="col-md-6">
-        <label for="instance" class="form-label">NodeNorm Instance</label>
-        <select id="instance" v-model="selectedInstance" class="form-select">
-          <option v-for="inst in instances" :key="inst.url" :value="inst.url">
-            {{ inst.name }}
-          </option>
-          <option value="__custom__">Custom URL...</option>
-        </select>
-        <input
-          v-if="showCustom"
-          v-model="customUrl"
-          type="url"
-          class="form-control mt-2"
-          placeholder="https://nodenormalization-sri.renci.org/"
-        />
+        <!-- Single mode: dropdown -->
+        <template v-if="mode === 'single'">
+          <label for="instance" class="form-label">NodeNorm Instance</label>
+          <select id="instance" v-model="selectedInstance" class="form-select">
+            <option v-for="inst in instances" :key="inst.url" :value="inst.url">
+              {{ inst.name }}
+            </option>
+            <option value="__custom__">Custom URL...</option>
+          </select>
+          <input
+            v-if="showCustom"
+            v-model="customUrl"
+            type="url"
+            class="form-control mt-2"
+            placeholder="https://nodenormalization-sri.renci.org/"
+          />
+        </template>
+
+        <!-- Compare mode: checkboxes -->
+        <template v-else>
+          <label class="form-label">Select Instances to Compare</label>
+          <div v-for="inst in instances" :key="inst.url" class="form-check">
+            <input
+              :id="`cmp-${inst.env}`"
+              type="checkbox"
+              class="form-check-input"
+              :checked="compareSelected.has(inst.url)"
+              @change="toggleCompareInstance(inst.url)"
+            />
+            <label :for="`cmp-${inst.env}`" class="form-check-label">{{ inst.name }}</label>
+          </div>
+        </template>
       </div>
     </div>
 
