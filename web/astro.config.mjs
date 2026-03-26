@@ -7,5 +7,5 @@ export default defineConfig({
   integrations: [vue()],
   // GitHub Pages deployment settings — update these for your repo
   site: 'https://TranslatorSRI.github.io',
-  base: '/babel-explorer',
+  base: '/babel-explorer/',
 });
