@@ -1,7 +1,26 @@
 import dataclasses
 import functools
+import json
+import pathlib
 import requests
 import logging
+
+
+def _load_nodenorm_urls() -> dict[str, str]:
+    """Load NodeNorm deployment URLs from shared config file."""
+    config_path = pathlib.Path(__file__).parents[3] / "config" / "translator-endpoints.json"
+    try:
+        endpoints = json.loads(config_path.read_text())
+        env_labels = {"dev": "Dev", "exp": "Exp", "ci": "CI", "test": "Test", "prod": "Production"}
+        return {
+            f"NodeNorm {env_labels.get(env, env)}": url
+            for env, url in endpoints["nodenorm"].items()
+        }
+    except (FileNotFoundError, KeyError, json.JSONDecodeError) as exc:
+        logging.warning(f"Could not load config/translator-endpoints.json: {exc}")
+        return {
+            "NodeNorm Dev": "https://nodenormalization-sri.renci.org/",
+        }
 
 
 @dataclasses.dataclass
@@ -30,14 +49,8 @@ class Identifier:
 
 
 class NodeNorm:
-    # A list of NodeNorm instances to choose from.
-    URLs = {
-        "NodeNorm Dev": "https://nodenormalization-sri.renci.org/",
-        "NodeNorm Exp": "https://nodenormalization-exp.apps.renci.org/",
-        "Translator NodeNorm Production": "https://nodenorm.transltr.io/",
-        "Translator NodeNorm Test": "https://nodenorm.test.transltr.io/",
-        "Translator NodeNorm CI": "https://nodenorm.ci.transltr.io/",
-    }
+    # A list of NodeNorm instances to choose from, loaded from config/translator-endpoints.json.
+    URLs = _load_nodenorm_urls()
 
     def __init__(self, nodenorm_url: str = "", timeout: int = 30):
         self.nodenorm_url = nodenorm_url

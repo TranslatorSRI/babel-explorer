@@ -1,0 +1,16 @@
+{
+  "nodenorm": {
+    "dev": "https://nodenormalization-sri.renci.org/",
+    "exp": "https://nodenormalization-exp.apps.renci.org/",
+    "ci": "https://nodenorm.ci.transltr.io/",
+    "test": "https://nodenorm.test.transltr.io/",
+    "prod": "https://nodenorm.transltr.io/"
+  },
+  "nameres": {
+    "dev": "https://name-resolution-sri.renci.org/",
+    "exp": "https://name-resolution-exp.apps.renci.org/",
+    "ci": "https://name-lookup.ci.transltr.io/",
+    "test": "https://name-lookup.test.transltr.io/",
+    "prod": "https://name-lookup.transltr.io/"
+  }
+}
