@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NodeNormResponse } from '../../lib/types';
+import SummaryCard from './SummaryCard.vue';
 import CurieResultCard from './CurieResultCard.vue';
 import ColumnVisibility from './ColumnVisibility.vue';
 
@@ -17,6 +18,7 @@ const emit = defineEmits<{
 
 <template>
   <div>
+    <SummaryCard :results="results" :curies="curies" />
     <ColumnVisibility :visible-columns="visibleColumns" @toggle="emit('toggleColumn', $event)" />
 
     <div class="accordion" id="results-accordion">
