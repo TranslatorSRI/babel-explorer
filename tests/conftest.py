@@ -9,6 +9,7 @@ import os
 import shutil
 
 import pytest
+from filelock import FileLock
 
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
@@ -39,20 +40,28 @@ def valid_curies() -> list[str]:
 
 
 @pytest.fixture(scope="session")
-def test_data_dir():
+def test_data_dir(request):
     """
-    Provide a clean test data directory for the entire session.
+    Provide a test data directory for the entire session.
 
     Creates the directory before tests, removes it after all tests complete.
+    When running under pytest-xdist, cleanup is skipped: worker sessions end at
+    unpredictable times and deleting the shared directory from one worker while
+    others are still reading the same files causes flaky IO errors.  The files
+    are re-used (or re-validated) on the next run via the freshness-window logic
+    in BabelDownloader.get_downloaded_file.
     """
-    if os.path.exists(TEST_DATA_DIR):
-        shutil.rmtree(TEST_DATA_DIR)
+    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
     os.makedirs(TEST_DATA_DIR, exist_ok=True)
 
     yield TEST_DATA_DIR
 
-    if os.path.exists(TEST_DATA_DIR):
-        shutil.rmtree(TEST_DATA_DIR)
+    # Only clean up when running without xdist (sequential run).  In a parallel
+    # run each worker session may finish at a different time; gw0 cleaning up
+    # while gw5 is still reading Concord.parquet causes spurious failures.
+    if worker_id == "master":
+        if os.path.exists(TEST_DATA_DIR):
+            shutil.rmtree(TEST_DATA_DIR)
 
 
 @pytest.fixture(scope="session")
@@ -62,15 +71,19 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
 
 
 @pytest.fixture(scope="session")
-def downloaded_concord(shared_downloader) -> str:
+def downloaded_concord(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Concord.parquet (~626 MB). Returns the local path."""
-    return shared_downloader.get_downloaded_file(CONCORD_FILE)
+    lock_path = os.path.join(test_data_dir, "concord.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(CONCORD_FILE)
 
 
 @pytest.fixture(scope="session")
-def downloaded_metadata(shared_downloader) -> str:
+def downloaded_metadata(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Metadata.parquet (small). Returns the local path."""
-    return shared_downloader.get_downloaded_file(METADATA_FILE)
+    lock_path = os.path.join(test_data_dir, "metadata.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(METADATA_FILE)
 
 
 @pytest.fixture(scope="session")
@@ -83,9 +96,11 @@ def downloaded_parquet_files(downloaded_concord, downloaded_metadata) -> dict[st
 
 
 @pytest.fixture(scope="session")
-def downloaded_identifiers(shared_downloader) -> str:
+def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Identifiers.parquet (2 GB+). Returns the local path."""
-    return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
+    lock_path = os.path.join(test_data_dir, "identifiers.lock")
+    with FileLock(lock_path):
+        return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
 
 
 @pytest.fixture(scope="session")
@@ -101,6 +116,8 @@ def babel_xrefs(shared_downloader, downloaded_parquet_files) -> BabelXRefs:
 
 
 @pytest.fixture(scope="session")
-def babel_xrefs_with_nodenorm(shared_downloader, nodenorm, downloaded_parquet_files) -> BabelXRefs:
+def babel_xrefs_with_nodenorm(
+    shared_downloader, nodenorm, downloaded_parquet_files
+) -> BabelXRefs:
     """A BabelXRefs instance with NodeNorm, Concord + Metadata already downloaded."""
     return BabelXRefs(shared_downloader, nodenorm)
