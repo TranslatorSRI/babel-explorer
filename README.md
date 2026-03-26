@@ -30,9 +30,26 @@ uv run babel-explorer ids MONDO:0004979
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 ```
 
-## Web Frontend
+## Web Frontends
 
-babel-explorer includes a web interface built with FastAPI, htmx, and Bootstrap 5. The server hosts the database-dependent tools (XRefs, IDs) through a browser UI, a JSON REST API, and CSV downloads. The API-only tools (NodeNorm, Test Concordance) are served as static pages via GitHub Pages — see [Architecture: Frontend Deployment](#architecture-frontend-deployment) for details.
+babel-explorer has **two** web frontends that share the same Bootstrap 5 dark-navbar styling. See [Architecture: Frontend Deployment](#architecture-frontend-deployment) for the rationale behind the split.
+
+### Astro/Vue Frontend (GitHub Pages)
+
+Static site built with Astro + Vue 3. Hosts API-only tools that run entirely in the browser.
+
+```bash
+cd web
+npm install
+npm run dev    # Dev server at http://localhost:4321
+npm run build  # Build to web/dist/
+```
+
+**Currently available:** NodeNorm lookup (single-instance and multi-instance comparison).
+
+### Python Frontend (Kubernetes)
+
+FastAPI + htmx server. Hosts database-dependent tools that need DuckDB and multi-GB Parquet files.
 
 ```bash
 # Start the web server (default: http://127.0.0.1:8000)
@@ -82,15 +99,15 @@ XRefs and IDs query multi-GB Parquet files via DuckDB — they genuinely need a 
 
 The frontend is therefore split along this natural dependency boundary:
 
-### Server (Kubernetes)
+### Server (Kubernetes) — `src/babel_explorer/web/`
 
 The FastAPI + htmx server hosts **XRefs** and **IDs**. It downloads and caches Parquet files, runs DuckDB queries, and renders HTML server-side. It also exposes the JSON REST API (`/api/xrefs`, `/api/ids`) and CSV downloads for programmatic access.
 
-### GitHub Pages (static)
+### GitHub Pages (static) — `web/`
 
-**NodeNorm** and **Test Concordance** are served as static HTML + vanilla JS from the `docs/` directory on the `main` branch, deployed via GitHub Pages. These pages call the NodeNorm API directly from the browser using `fetch()` — no server required.
+**NodeNorm** (and eventually **Test Concordance**) are built as an Astro + Vue 3 static site in the `web/` directory. These pages call the NodeNorm API directly from the browser using `fetch()` — no server required.
 
-A `config.js` file in `docs/` holds the Kubernetes server URL so that the static pages can cross-link to the server-hosted tools (and vice versa). Both sites share Bootstrap 5 styling for a consistent look.
+Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json`, shared by both frontends and the CLI. CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model) (fetched at runtime). Both sites share Bootstrap 5 dark-navbar styling for a consistent look.
 
 ### Why this split?
 
