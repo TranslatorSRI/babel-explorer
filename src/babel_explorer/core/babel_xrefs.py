@@ -122,15 +122,17 @@ class BabelXRefs:
 
     def _to_labeled_xref(self, xref: CrossReference) -> LabeledCrossReference:
         """Convert a CrossReference to a LabeledCrossReference using NodeNorm."""
+        subj_ident = self.nodenorm.get_identifier(xref.subj)
+        obj_ident = self.nodenorm.get_identifier(xref.obj)
         return LabeledCrossReference(
             subj=xref.subj,
             obj=xref.obj,
             filename=xref.filename,
             pred=xref.pred,
-            subj_label=self.nodenorm.get_identifier(xref.subj).label,
-            subj_biolink_type=self.nodenorm.get_identifier(xref.subj).biolink_type,
-            obj_label=self.nodenorm.get_identifier(xref.obj).label,
-            obj_biolink_type=self.nodenorm.get_identifier(xref.obj).biolink_type,
+            subj_label=subj_ident.label,
+            subj_biolink_type=subj_ident.biolink_type,
+            obj_label=obj_ident.label,
+            obj_biolink_type=obj_ident.biolink_type,
         )
 
     def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
