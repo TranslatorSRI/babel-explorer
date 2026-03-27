@@ -41,6 +41,21 @@ def _render(request: Request, template: str, context: dict | None = None):
     return request.app.state.templates.TemplateResponse(request, template, ctx)
 
 
+def _get_nodenorm(request: Request, nodenorm_url: str) -> NodeNorm:
+    return NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+
+
+def _extract_extra_field_names(records) -> list[str]:
+    names = []
+    seen = set()
+    for rec in records:
+        for name, _ in rec.extra_fields:
+            if name not in seen:
+                names.append(name)
+                seen.add(name)
+    return names
+
+
 # ---------------------------------------------------------------------------
 # HTML pages
 # ---------------------------------------------------------------------------
@@ -86,7 +101,7 @@ def htmx_nodenorm(request: Request, curies: str = Form(""), nodenorm_url: str = 
     if not parsed:
         return _render(request, "_partials/error.html", {"message": "No CURIEs provided."})
     try:
-        nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+        nn = _get_nodenorm(request, nodenorm_url)
         rows = []
         for curie in parsed:
             ident = nn.get_identifier(curie)
@@ -116,7 +131,7 @@ def htmx_xrefs(
         return _render(request, "_partials/error.html", {"message": "No CURIEs provided."})
     try:
         bxref = request.app.state.bxref
-        xrefs = bxref.get_curie_xrefs(parsed, expand=expand, label_curies=labels)
+        xrefs = bxref.get_curie_xrefs(parsed, recurse=expand, label_curies=labels)
         has_labels = labels and len(xrefs) > 0 and hasattr(xrefs[0], "subj_label")
         return _render(request, "_partials/xrefs_results.html", {"xrefs": xrefs, "has_labels": has_labels})
     except Exception as exc:
@@ -132,13 +147,7 @@ def htmx_ids(request: Request, curies: str = Form("")):
     try:
         bxref = request.app.state.bxref
         records = bxref.get_curie_ids(parsed)
-        extra_names = []
-        seen = set()
-        for rec in records:
-            for name, _ in rec.extra_fields:
-                if name not in seen:
-                    extra_names.append(name)
-                    seen.add(name)
+        extra_names = _extract_extra_field_names(records)
         return _render(request, "_partials/ids_results.html", {"records": records, "extra_names": extra_names})
     except Exception as exc:
         logger.exception("IDs lookup failed")
@@ -151,7 +160,7 @@ def htmx_test_concord(request: Request, curies: str = Form(""), nodenorm_url: st
     if not parsed:
         return _render(request, "_partials/error.html", {"message": "No CURIEs provided."})
     try:
-        nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+        nn = _get_nodenorm(request, nodenorm_url)
         rows = []
         for curie in parsed:
             identifiers = nn.get_clique_identifiers(curie)
@@ -175,7 +184,7 @@ def htmx_test_concord(request: Request, curies: str = Form(""), nodenorm_url: st
 
 @router.get("/api/nodenorm")
 def api_nodenorm(request: Request, curie: list[str] = Query(...), nodenorm_url: str = Query("")):
-    nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+    nn = _get_nodenorm(request, nodenorm_url)
     results = []
     for c in curie:
         ident = nn.get_identifier(c)
@@ -198,7 +207,7 @@ def api_xrefs(
     labels: bool = Query(False),
 ):
     bxref = request.app.state.bxref
-    xrefs = bxref.get_curie_xrefs(list(curie), expand=expand, label_curies=labels)
+    xrefs = bxref.get_curie_xrefs(list(curie), recurse=expand, label_curies=labels)
     results = []
     for xref in xrefs:
         row = {"filename": xref.filename, "subj": xref.subj, "pred": xref.pred, "obj": xref.obj}
@@ -228,7 +237,7 @@ def api_ids(request: Request, curie: list[str] = Query(...)):
 
 @router.get("/api/test-concord")
 def api_test_concord(request: Request, curie: list[str] = Query(...), nodenorm_url: str = Query("")):
-    nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+    nn = _get_nodenorm(request, nodenorm_url)
     results = []
     for c in curie:
         identifiers = nn.get_clique_identifiers(c)
@@ -249,7 +258,7 @@ def api_test_concord(request: Request, curie: list[str] = Query(...), nodenorm_u
 
 @router.get("/api/nodenorm/csv")
 def api_nodenorm_csv(request: Request, curie: list[str] = Query(...), nodenorm_url: str = Query("")):
-    nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+    nn = _get_nodenorm(request, nodenorm_url)
     headers = ["Input CURIE", "Normalized CURIE", "Label", "Biolink Type", "Taxa", "Description"]
     rows = []
     for c in curie:
@@ -270,7 +279,7 @@ def api_xrefs_csv(
     labels: bool = Query(False),
 ):
     bxref = request.app.state.bxref
-    xrefs = bxref.get_curie_xrefs(list(curie), expand=expand, label_curies=labels)
+    xrefs = bxref.get_curie_xrefs(list(curie), recurse=expand, label_curies=labels)
     if labels and xrefs and hasattr(xrefs[0], "subj_label"):
         headers = ["Filename", "Subject", "Subject Label", "Subject Type", "Predicate", "Object", "Object Label", "Object Type"]
         rows = [[x.filename, x.subj, x.subj_label, x.subj_biolink_type, x.pred, x.obj, x.obj_label, x.obj_biolink_type] for x in xrefs]
@@ -284,13 +293,7 @@ def api_xrefs_csv(
 def api_ids_csv(request: Request, curie: list[str] = Query(...)):
     bxref = request.app.state.bxref
     records = bxref.get_curie_ids(list(curie))
-    extra_names = []
-    seen = set()
-    for rec in records:
-        for name, _ in rec.extra_fields:
-            if name not in seen:
-                extra_names.append(name)
-                seen.add(name)
+    extra_names = _extract_extra_field_names(records)
     headers = ["CURIE"] + extra_names
     rows = []
     for rec in records:
@@ -301,7 +304,7 @@ def api_ids_csv(request: Request, curie: list[str] = Query(...)):
 
 @router.get("/api/test-concord/csv")
 def api_test_concord_csv(request: Request, curie: list[str] = Query(...), nodenorm_url: str = Query("")):
-    nn = NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+    nn = _get_nodenorm(request, nodenorm_url)
     headers = ["Source CURIE", "Identifier", "Label", "Biolink Type"]
     rows = []
     for c in curie:
