@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import type { NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 
@@ -8,7 +8,6 @@ const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
 const props = defineProps<{
   instances: NodeNormInstance[];
   loading: boolean;
-  mode: 'single' | 'compare';
   hasResults: boolean;
   /** Pre-fill CURIEs from URL params (overrides built-in defaults). */
   initialCuries?: string;
@@ -20,7 +19,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
-  'update:mode': [mode: 'single' | 'compare'];
   stop: [];
   share: [];
 }>();
@@ -30,51 +28,60 @@ function resolveTarget(target: string): string {
   return props.instances.find((i) => i.env === target || i.url === target)?.url ?? target;
 }
 
-// Form state — initialised from props (URL params) or built-in defaults
+// Form state
 const curies = ref(props.initialCuries ?? DEFAULT_CURIES);
-
-const initialUrl = props.initialTargets?.length === 1
-  ? resolveTarget(props.initialTargets[0])
-  : (props.instances[0]?.url ?? '');
-const isCustom = props.initialTargets?.length === 1 &&
-  !props.instances.find((i) => i.env === props.initialTargets![0] || i.url === props.initialTargets![0]);
-
-const selectedInstance = ref(isCustom ? '__custom__' : initialUrl);
-const customUrl = ref(isCustom ? (props.initialTargets?.[0] ?? '') : '');
-const showCustom = computed(() => selectedInstance.value === '__custom__');
 const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOptions });
 
-// For compare mode: track which instances are selected
-const compareSelected = ref<Set<string>>(new Set(
+// Unified instance selection — always checkboxes
+const selectedUrls = ref(new Set<string>(
   props.initialTargets?.length
     ? props.initialTargets.map(resolveTarget)
     : [props.instances[0]?.url ?? ''],
 ));
 
+// Custom URL state
+const customUrlInput = ref('');
+const customUrlAdded = ref<string | null>(null);
+
+// Detect custom URL in initialTargets (a target that isn't a known env key or instance URL)
+if (props.initialTargets?.length) {
+  const customTarget = props.initialTargets.find(
+    (t) => !props.instances.find((i) => i.env === t || i.url === t),
+  );
+  if (customTarget) {
+    customUrlAdded.value = customTarget;
+    selectedUrls.value.add(customTarget);
+  }
+}
+
 // Share button "Copied!" flash
 const copied = ref(false);
 
-function toggleCompareInstance(url: string) {
-  if (compareSelected.value.has(url)) {
-    compareSelected.value.delete(url);
+function toggleUrl(url: string) {
+  if (selectedUrls.value.has(url)) {
+    selectedUrls.value.delete(url);
   } else {
-    compareSelected.value.add(url);
+    selectedUrls.value.add(url);
   }
+}
+
+function addCustomUrl() {
+  const url = customUrlInput.value.trim();
+  if (!url) return;
+  customUrlAdded.value = url;
+  selectedUrls.value.add(url);
+  customUrlInput.value = '';
+}
+
+function removeCustomUrl() {
+  if (customUrlAdded.value) selectedUrls.value.delete(customUrlAdded.value);
+  customUrlAdded.value = null;
 }
 
 function onSubmit() {
   if (!curies.value.trim()) return;
-
-  let urls: string[];
-  if (props.mode === 'compare') {
-    urls = [...compareSelected.value];
-    if (urls.length === 0) return;
-  } else {
-    const url = showCustom.value ? customUrl.value : selectedInstance.value;
-    if (!url.trim()) return;
-    urls = [url];
-  }
-
+  const urls = [...selectedUrls.value];
+  if (urls.length === 0) return;
   emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
 }
 
@@ -97,60 +104,61 @@ function onShare() {
       ></textarea>
     </div>
 
-    <!-- Mode toggle -->
-    <div class="mb-3">
-      <div class="btn-group btn-group-sm" role="group">
-        <button
-          type="button"
-          :class="['btn', mode === 'single' ? 'btn-primary' : 'btn-outline-primary']"
-          @click="emit('update:mode', 'single')"
-        >
-          Single Instance
-        </button>
-        <button
-          type="button"
-          :class="['btn', mode === 'compare' ? 'btn-primary' : 'btn-outline-primary']"
-          @click="emit('update:mode', 'compare')"
-        >
-          Compare Instances
-        </button>
-      </div>
-    </div>
-
+    <!-- Instance selection — always checkboxes -->
     <div class="row mb-3">
       <div class="col-md-6">
-        <!-- Single mode: dropdown -->
-        <template v-if="mode === 'single'">
-          <label for="instance" class="form-label">NodeNorm Instance</label>
-          <select id="instance" v-model="selectedInstance" class="form-select">
-            <option v-for="inst in instances" :key="inst.url" :value="inst.url">
-              {{ inst.name }}
-            </option>
-            <option value="__custom__">Custom URL...</option>
-          </select>
+        <label class="form-label">NodeNorm Instances</label>
+        <div v-for="inst in instances" :key="inst.url" class="form-check">
           <input
-            v-if="showCustom"
-            v-model="customUrl"
-            type="url"
-            class="form-control mt-2"
-            placeholder="https://nodenormalization-sri.renci.org/"
+            :id="`inst-${inst.env}`"
+            type="checkbox"
+            class="form-check-input"
+            :checked="selectedUrls.has(inst.url)"
+            @change="toggleUrl(inst.url)"
           />
-        </template>
+          <label :for="`inst-${inst.env}`" class="form-check-label">{{ inst.name }}</label>
+        </div>
 
-        <!-- Compare mode: checkboxes -->
-        <template v-else>
-          <label class="form-label">Select Instances to Compare</label>
-          <div v-for="inst in instances" :key="inst.url" class="form-check">
-            <input
-              :id="`cmp-${inst.env}`"
-              type="checkbox"
-              class="form-check-input"
-              :checked="compareSelected.has(inst.url)"
-              @change="toggleCompareInstance(inst.url)"
-            />
-            <label :for="`cmp-${inst.env}`" class="form-check-label">{{ inst.name }}</label>
-          </div>
-        </template>
+        <!-- Custom URL row (shown once one has been added) -->
+        <div v-if="customUrlAdded !== null" class="form-check mt-1">
+          <input
+            id="inst-custom"
+            type="checkbox"
+            class="form-check-input"
+            :checked="selectedUrls.has(customUrlAdded!)"
+            @change="toggleUrl(customUrlAdded!)"
+          />
+          <label for="inst-custom" class="form-check-label d-flex align-items-center gap-1">
+            <span>Custom:</span>
+            <span class="text-muted small text-truncate" style="max-width: 240px">{{ customUrlAdded }}</span>
+            <button
+              type="button"
+              class="btn-close"
+              style="font-size: 0.65rem"
+              aria-label="Remove custom URL"
+              @click.stop="removeCustomUrl()"
+            ></button>
+          </label>
+        </div>
+
+        <!-- Add custom URL control -->
+        <div class="mt-2 d-flex gap-2 align-items-center">
+          <input
+            v-model="customUrlInput"
+            type="url"
+            class="form-control form-control-sm"
+            placeholder="Add custom URL…"
+            style="max-width: 280px"
+          />
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-secondary"
+            :disabled="!customUrlInput.trim()"
+            @click="addCustomUrl()"
+          >
+            Add
+          </button>
+        </div>
       </div>
     </div>
 
