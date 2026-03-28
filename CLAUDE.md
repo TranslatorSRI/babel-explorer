@@ -121,7 +121,7 @@ cd web && npm run test:watch # Watch mode
    - Calls NodeNorm API directly from the browser via `fetch()` (CORS-enabled)
    - Uses Bootstrap 5 (CDN) with the same dark-navbar styling as the Python frontend
    - CURIE link-outs via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7, fetched at runtime)
-   - Tested with Vitest + @vue/test-utils + happy-dom (60 tests); see `web/tests/README.md`
+   - Tested with Vitest + @vue/test-utils + happy-dom (77 tests); see `web/tests/README.md`
    - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
 
 7. **Shared Configuration** (`config/`):
@@ -155,8 +155,9 @@ web/src/
     shared/
       CurieLink.vue                 # CURIE → external URL link using biolink prefix map
   lib/
-    nodenorm-api.ts                 # fetch() wrapper for NodeNorm get_normalized_nodes
+    nodenorm-api.ts                 # fetch() wrapper for NodeNorm get_normalized_nodes (supports AbortSignal)
     curie-links.ts                  # Biolink prefix map loader + URL builder
+    url-state.ts                    # Encode/decode query state in URL params (readQueryState, buildQueryUrl)
     types.ts                        # TypeScript interfaces for API responses
   pages/
     index.astro                     # Landing page with tool cards
