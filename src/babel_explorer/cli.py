@@ -181,9 +181,24 @@ def test_concord(curies, nodenorm_url):
 @cli.command("web")
 @click.option("--host", type=str, default="127.0.0.1", help="Host to bind to")
 @click.option("--port", type=int, default=8000, help="Port to bind to")
-@click.option("--local-dir", type=str, default="data/2025nov19", help="Local location to save Babel download files to")
-@click.option("--babel-url", type=str, default="https://stars.renci.org:443/var/babel/2025nov19/", help="Base URL of the Babel server")
-@click.option("--nodenorm-url", type=str, default="https://nodenormalization-sri.renci.org/", help="NodeNorm URL")
+@click.option(
+    "--local-dir",
+    type=str,
+    default="data/2025nov19",
+    help="Local location to save Babel download files to",
+)
+@click.option(
+    "--babel-url",
+    type=str,
+    default="https://stars.renci.org:443/var/babel/2025nov19/",
+    help="Base URL of the Babel server",
+)
+@click.option(
+    "--nodenorm-url",
+    type=str,
+    default="https://nodenormalization-sri.renci.org/",
+    help="NodeNorm URL",
+)
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 def web(host, port, local_dir, babel_url, nodenorm_url, reload):
     """Start the web server."""
@@ -195,9 +210,16 @@ def web(host, port, local_dir, babel_url, nodenorm_url, reload):
     os.environ["BABEL_NODENORM_URL"] = nodenorm_url
 
     if reload:
-        uvicorn.run("babel_explorer.web:create_app", host=host, port=port, reload=True, factory=True)
+        uvicorn.run(
+            "babel_explorer.web:create_app",
+            host=host,
+            port=port,
+            reload=True,
+            factory=True,
+        )
     else:
         from babel_explorer.web import create_app
+
         uvicorn.run(create_app(), host=host, port=port)
 
 

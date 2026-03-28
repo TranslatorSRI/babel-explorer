@@ -1,4 +1,5 @@
 """Unit tests for the web frontend. All core objects are mocked — no network or Parquet files needed."""
+
 import pytest
 from unittest.mock import MagicMock
 
@@ -20,7 +21,9 @@ def mock_nodenorm():
         description=["A chronic respiratory disease"],
     )
     nn.get_clique_identifiers.return_value = [
-        Identifier(curie="MONDO:0004979", label="asthma", biolink_type="biolink:Disease"),
+        Identifier(
+            curie="MONDO:0004979", label="asthma", biolink_type="biolink:Disease"
+        ),
         Identifier(curie="DOID:2841", label="asthma", biolink_type="biolink:Disease"),
     ]
     return nn
@@ -30,10 +33,18 @@ def mock_nodenorm():
 def mock_bxref():
     bx = MagicMock()
     bx.get_curie_xrefs.return_value = [
-        CrossReference(filename="compendia/diseases.txt", subj="MONDO:0004979", pred="skos:exactMatch", obj="DOID:2841"),
+        CrossReference(
+            filename="compendia/diseases.txt",
+            subj="MONDO:0004979",
+            pred="skos:exactMatch",
+            obj="DOID:2841",
+        ),
     ]
     bx.get_curie_ids.return_value = [
-        IdentifierRecord(curie="MONDO:0004979", extra_fields=(("label", "asthma"), ("type", "biolink:Disease"))),
+        IdentifierRecord(
+            curie="MONDO:0004979",
+            extra_fields=(("label", "asthma"), ("type", "biolink:Disease")),
+        ),
     ]
     return bx
 
@@ -50,6 +61,7 @@ def client(mock_nodenorm, mock_bxref):
 # ---------------------------------------------------------------------------
 # HTML pages load
 # ---------------------------------------------------------------------------
+
 
 class TestHTMLPages:
     def test_index(self, client):
@@ -82,9 +94,12 @@ class TestHTMLPages:
 # htmx partials
 # ---------------------------------------------------------------------------
 
+
 class TestHtmxPartials:
     def test_nodenorm(self, client, mock_nodenorm):
-        r = client.post("/htmx/nodenorm", data={"curies": "MONDO:0004979", "nodenorm_url": ""})
+        r = client.post(
+            "/htmx/nodenorm", data={"curies": "MONDO:0004979", "nodenorm_url": ""}
+        )
         assert r.status_code == 200
         assert "asthma" in r.text
         mock_nodenorm.get_identifier.assert_called_once_with("MONDO:0004979")
@@ -117,7 +132,9 @@ class TestHtmxPartials:
         assert "No CURIEs provided" in r.text
 
     def test_test_concord(self, client, mock_nodenorm):
-        r = client.post("/htmx/test-concord", data={"curies": "MONDO:0004979", "nodenorm_url": ""})
+        r = client.post(
+            "/htmx/test-concord", data={"curies": "MONDO:0004979", "nodenorm_url": ""}
+        )
         assert r.status_code == 200
         assert "DOID:2841" in r.text
         mock_nodenorm.get_clique_identifiers.assert_called_once_with("MONDO:0004979")
@@ -131,6 +148,7 @@ class TestHtmxPartials:
 # ---------------------------------------------------------------------------
 # JSON API
 # ---------------------------------------------------------------------------
+
 
 class TestAPI:
     def test_nodenorm(self, client, mock_nodenorm):
@@ -165,6 +183,7 @@ class TestAPI:
 # CSV downloads
 # ---------------------------------------------------------------------------
 
+
 class TestCSV:
     def test_nodenorm_csv(self, client):
         r = client.get("/api/nodenorm/csv", params={"curie": "MONDO:0004979"})
@@ -195,19 +214,24 @@ class TestCSV:
 # _parse_curies helper
 # ---------------------------------------------------------------------------
 
+
 class TestParseCuries:
     def test_basic(self):
         from babel_explorer.web.routes import _parse_curies
+
         assert _parse_curies("A\nB\nC") == ["A", "B", "C"]
 
     def test_dedup(self):
         from babel_explorer.web.routes import _parse_curies
+
         assert _parse_curies("A\nA\nB") == ["A", "B"]
 
     def test_comments_and_blanks(self):
         from babel_explorer.web.routes import _parse_curies
+
         assert _parse_curies("# comment\n\nA\n  \nB") == ["A", "B"]
 
     def test_strips_whitespace(self):
         from babel_explorer.web.routes import _parse_curies
+
         assert _parse_curies("  A  \n  B  ") == ["A", "B"]
