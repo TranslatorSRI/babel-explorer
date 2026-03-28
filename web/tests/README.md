@@ -28,7 +28,8 @@ Tests are **co-located** with source using `__tests__/` directories:
 web/src/
   lib/
     __tests__/
-      nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes
+      nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
+      url-state.test.ts       # readQueryState + buildQueryUrl + round-trip
       curie-links.test.ts     # parseCurie + getCurieUrl + loadPrefixMap
       types.test.ts           # DEFAULT_API_OPTIONS smoke test
   components/
@@ -45,7 +46,8 @@ web/src/
 ### Library tests (highest priority)
 
 Pure function tests with mocked `fetch()`. These cover:
-- **`nodenorm-api.ts`**: CURIE parsing (blank lines, comments, deduplication) and API request construction
+- **`nodenorm-api.ts`**: CURIE parsing (blank lines, comments, deduplication), API request construction, AbortSignal pass-through, and NodeNorm response shape assertions (executed as documentation of the API contract)
+- **`url-state.ts`**: `readQueryState` (no params, curie/target/option parsing), `buildQueryUrl` (default option omission, multi-target), and round-trip fidelity
 - **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map, cache behavior
 - **`types.ts`**: Default options constant
 
@@ -158,5 +160,5 @@ it('test case', async () => {
 - **Coverage thresholds** — enforce minimum coverage via `vitest --coverage`
 - **CI integration** — run `npm test` in GitHub Actions alongside Python tests
 - **Snapshot tests** — if component markup stabilizes, add snapshots for regression detection
-- **NodeNormForm tests** — test form validation, mode toggle, emit payloads
-- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch in compare mode)
+- **NodeNormForm tests** — test form validation, mode toggle, emit payloads, initial-value prop wiring
+- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch in compare mode, URL auto-submit on mount)

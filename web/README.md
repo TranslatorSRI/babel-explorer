@@ -24,6 +24,7 @@ Both frontends share the same Bootstrap 5 dark-navbar styling for visual consist
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Summary card**: Aggregate stats — normalization success rate, shared biolink types, type breakdown
 - **Multi-instance comparison**: Side-by-side comparison across NodeNorm deployments (Dev, Exp, CI, Test, Prod) with difference highlighting
+- **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
 ## Development
@@ -39,7 +40,7 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ## Testing
 
 ```bash
-npm test            # Run all 60 Vitest unit + component tests
+npm test            # Run all 77 Vitest unit + component tests
 npm run test:watch  # Watch mode
 ```
 
@@ -90,8 +91,9 @@ src/
     shared/
       CurieLink.vue                 # CURIE → external URL link
   lib/
-    nodenorm-api.ts                 # NodeNorm API fetch wrapper
+    nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
     curie-links.ts                  # Biolink prefix map loader
+    url-state.ts                    # Encode/decode query state in URL params
     types.ts                        # TypeScript interfaces
 ```
 
