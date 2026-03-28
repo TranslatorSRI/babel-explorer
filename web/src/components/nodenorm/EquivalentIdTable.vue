@@ -8,8 +8,10 @@ defineProps<{
   prefixMap: Record<string, string>;
 }>();
 
-function formatList(items: string[] | undefined): string {
-  if (!items || items.length === 0) return '';
+function formatList(items: string | string[] | undefined): string {
+  if (!items) return '';
+  if (typeof items === 'string') return items;
+  if (items.length === 0) return '';
   return items.join(', ');
 }
 </script>
@@ -34,7 +36,7 @@ function formatList(items: string[] | undefined): string {
           <td v-if="visibleColumns.has('taxa')">{{ formatList(id.taxa) }}</td>
           <td v-if="visibleColumns.has('description')">
             <span :title="formatList(id.description)">
-              {{ id.description?.[0] ? (id.description[0].length > 80 ? id.description[0].slice(0, 80) + '...' : id.description[0]) : '' }}
+              {{ formatList(id.description).length > 80 ? formatList(id.description).slice(0, 80) + '...' : formatList(id.description) }}
             </span>
           </td>
         </tr>

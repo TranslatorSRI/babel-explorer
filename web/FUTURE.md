@@ -39,8 +39,12 @@ For very large CURIE lists (100+), consider:
 If multiple tool pages need shared state (e.g. a shared CURIE list across tools), migrate from component-local `ref()`/`reactive()` to a Pinia store.
 
 ### Testing
-- **Vitest** for unit tests (API client, CURIE parsing, prefix map logic)
-- **Playwright** for E2E tests (form submission, result rendering, comparison mode)
+Vitest unit and component tests are implemented (see `web/tests/README.md`). Future testing work:
+- **Playwright E2E tests** for full-page interaction (form submission, accordion, Bootstrap JS)
+- **Integration tests** calling live NodeNorm API to verify response parsing end-to-end
+- **Coverage thresholds** via `vitest --coverage`
+- **CI integration** — run `npm test` in GitHub Actions alongside Python tests
+- **NodeNormForm / NodeNormApp tests** — form validation, orchestration logic, error states
 
 ### GitHub Actions Deployment
 CI workflow that builds the Astro site and deploys to the `gh-pages` branch on push to `main` or on new releases.
