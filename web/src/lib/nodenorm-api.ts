@@ -12,6 +12,7 @@ export async function fetchNormalizedNodes(
   baseUrl: string,
   curies: string[],
   options: ApiOptions,
+  signal?: AbortSignal,
 ): Promise<NodeNormResponse> {
   const url = new URL('get_normalized_nodes', baseUrl);
 
@@ -24,7 +25,7 @@ export async function fetchNormalizedNodes(
   url.searchParams.set('individual_types', String(options.individual_types));
   url.searchParams.set('include_taxa', String(options.include_taxa));
 
-  const resp = await fetch(url.toString());
+  const resp = await fetch(url.toString(), { signal });
   if (!resp.ok) {
     throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
   }

@@ -175,6 +175,21 @@ describe('fetchNormalizedNodes', () => {
       fetchNormalizedNodes('https://example.com/', ['X:1'], DEFAULT_API_OPTIONS),
     ).rejects.toThrow('NodeNorm returned HTTP 500');
   });
+
+  it('throws AbortError when called with an already-aborted signal', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(
+      Object.assign(new Error('The operation was aborted.'), { name: 'AbortError' }),
+    ));
+
+    const err = await fetchNormalizedNodes(
+      'https://example.com/', ['X:1'], DEFAULT_API_OPTIONS, controller.signal,
+    ).catch((e) => e);
+
+    expect(err.name).toBe('AbortError');
+  });
 });
 
 // ---------------------------------------------------------------------------

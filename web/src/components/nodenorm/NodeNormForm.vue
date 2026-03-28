@@ -3,25 +3,56 @@ import { ref, computed } from 'vue';
 import type { NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 
+const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
+
 const props = defineProps<{
   instances: NodeNormInstance[];
   loading: boolean;
   mode: 'single' | 'compare';
+  hasResults: boolean;
+  /** Pre-fill CURIEs from URL params (overrides built-in defaults). */
+  initialCuries?: string;
+  /** Pre-select targets from URL params (env keys or full URLs). */
+  initialTargets?: string[];
+  /** Pre-set API options from URL params (merged with defaults). */
+  initialOptions?: Partial<ApiOptions>;
 }>();
 
 const emit = defineEmits<{
   submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
   'update:mode': [mode: 'single' | 'compare'];
+  stop: [];
+  share: [];
 }>();
 
-const curies = ref('');
-const selectedInstance = ref(props.instances[0]?.url ?? '');
-const customUrl = ref('');
+/** Resolve a target (env key or full URL) to an instance URL. */
+function resolveTarget(target: string): string {
+  return props.instances.find((i) => i.env === target || i.url === target)?.url ?? target;
+}
+
+// Form state — initialised from props (URL params) or built-in defaults
+const curies = ref(props.initialCuries ?? DEFAULT_CURIES);
+
+const initialUrl = props.initialTargets?.length === 1
+  ? resolveTarget(props.initialTargets[0])
+  : (props.instances[0]?.url ?? '');
+const isCustom = props.initialTargets?.length === 1 &&
+  !props.instances.find((i) => i.env === props.initialTargets![0] || i.url === props.initialTargets![0]);
+
+const selectedInstance = ref(isCustom ? '__custom__' : initialUrl);
+const customUrl = ref(isCustom ? (props.initialTargets?.[0] ?? '') : '');
 const showCustom = computed(() => selectedInstance.value === '__custom__');
-const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS });
+const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOptions });
 
 // For compare mode: track which instances are selected
-const compareSelected = ref<Set<string>>(new Set([props.instances[0]?.url ?? '']));
+const compareSelected = ref<Set<string>>(new Set(
+  props.initialTargets?.length
+    ? props.initialTargets.map(resolveTarget)
+    : [props.instances[0]?.url ?? ''],
+));
+
+// Share button "Copied!" flash
+const copied = ref(false);
 
 function toggleCompareInstance(url: string) {
   if (compareSelected.value.has(url)) {
@@ -46,6 +77,12 @@ function onSubmit() {
 
   emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
 }
+
+function onShare() {
+  copied.value = true;
+  setTimeout(() => { copied.value = false; }, 2000);
+  emit('share');
+}
 </script>
 
 <template>
@@ -57,7 +94,6 @@ function onSubmit() {
         v-model="curies"
         class="form-control"
         rows="5"
-        placeholder="MONDO:0004979&#10;CHEBI:48947&#10;HP:0000001"
       ></textarea>
     </div>
 
@@ -142,9 +178,30 @@ function onSubmit() {
       </div>
     </div>
 
-    <button type="submit" class="btn btn-primary" :disabled="loading">
-      <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status"></span>
-      {{ loading ? 'Normalizing...' : 'Normalize' }}
-    </button>
+    <!-- Action buttons -->
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <button type="submit" class="btn btn-primary" :disabled="loading">
+        <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status"></span>
+        {{ loading ? 'Normalizing…' : 'Normalize' }}
+      </button>
+
+      <button
+        v-if="loading"
+        type="button"
+        class="btn btn-outline-secondary"
+        @click="emit('stop')"
+      >
+        Stop
+      </button>
+
+      <button
+        v-if="hasResults && !loading"
+        type="button"
+        class="btn btn-outline-secondary"
+        @click="onShare"
+      >
+        {{ copied ? '✓ Copied!' : 'Share' }}
+      </button>
+    </div>
   </form>
 </template>
