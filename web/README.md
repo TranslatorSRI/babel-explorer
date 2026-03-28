@@ -36,6 +36,15 @@ npm run dev
 
 This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 
+## Testing
+
+```bash
+npm test            # Run all 60 Vitest unit + component tests
+npm run test:watch  # Watch mode
+```
+
+Tests are co-located with source in `__tests__/` directories. See [`web/tests/README.md`](tests/README.md) for the full test plan, fixture catalogue, and future improvements.
+
 ## Building
 
 ```bash

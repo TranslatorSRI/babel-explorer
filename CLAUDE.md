@@ -115,11 +115,13 @@ cd web && npm run test:watch # Watch mode
 
 6. **Astro/Vue Web Frontend** (`web/`):
    - Astro + Vue 3 static site for browser-only tools (no backend required)
+   - npm package name: `babel-explorer` (directory stays `web/`)
    - Deployed to GitHub Pages
    - Currently hosts: NodeNorm lookup with single-instance and multi-instance comparison modes
    - Calls NodeNorm API directly from the browser via `fetch()` (CORS-enabled)
    - Uses Bootstrap 5 (CDN) with the same dark-navbar styling as the Python frontend
    - CURIE link-outs via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7, fetched at runtime)
+   - Tested with Vitest + @vue/test-utils + happy-dom (60 tests); see `web/tests/README.md`
    - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
 
 7. **Shared Configuration** (`config/`):
@@ -209,6 +211,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. Teardown removes the `data/test/` directory so the next run starts fresh.
 - **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
 - **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
+- **`tests/fixtures/`** — JSON snapshots of real NodeNorm API responses, shared by both Python and TypeScript test suites. Includes single-CURIE responses, batch (multi-CURIE) responses, conflated vs. non-conflated variants, and a biolink prefix map subset. See `web/tests/README.md` for the full fixture list and how to regenerate them.
 
 ### Key Dataclasses
 
@@ -233,5 +236,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - Astro/Vue web frontend: `web/`
 - Astro/Vue components: `web/src/components/`
 - Astro/Vue pages: `web/src/pages/`
+- Astro/Vue tests: `web/src/**/__tests__/` (co-located) + `web/tests/README.md`
 - Shared config: `config/translator-endpoints.json`
+- Shared test fixtures (Python + TS): `tests/fixtures/`
 - Entry point: `src/babel_explorer/cli.py`
