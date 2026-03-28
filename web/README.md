@@ -20,10 +20,11 @@ Both frontends share the same Bootstrap 5 dark-navbar styling for visual consist
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, individual types, taxa)
-- **Adaptive result display**: Accordion cards per CURIE; full equiv ID table for ≤10 identifiers, prefix summary + expand for larger cliques
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
+- **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
+- **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
-- **Summary card**: Aggregate stats — normalization success rate, shared biolink types, type breakdown
-- **Multi-instance comparison**: Side-by-side comparison across NodeNorm deployments (Dev, Exp, CI, Test, Prod) with difference highlighting
+- **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
 - **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
@@ -40,7 +41,7 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ## Testing
 
 ```bash
-npm test            # Run all 77 Vitest unit + component tests
+npm test            # Run all 99 Vitest unit + component tests
 npm run test:watch  # Watch mode
 ```
 
@@ -81,13 +82,13 @@ src/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
       NodeNormApp.vue               # Root island: orchestrates form + results
-      NodeNormForm.vue              # CURIE input, instance selection, API options
-      NodeNormResults.vue           # Summary + accordion of result cards
-      CurieResultCard.vue           # Per-CURIE accordion card
+      NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
+      ComparisonView.vue            # Results table with expandable per-CURIE rows
+      CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
+      CurieResultCard.vue           # Accordion card wrapping CurieDetailPanel
+      ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
-      SummaryCard.vue               # Aggregate stats
-      ComparisonView.vue            # Side-by-side multi-instance table
     shared/
       CurieLink.vue                 # CURIE → external URL link
   lib/

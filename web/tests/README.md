@@ -35,7 +35,8 @@ web/src/
   components/
     nodenorm/
       __tests__/
-        SummaryCard.test.ts
+        ResultsSummary.test.ts
+        CurieDetailPanel.test.ts
         CurieResultCard.test.ts
         ComparisonView.test.ts
     shared/
@@ -54,10 +55,11 @@ Pure function tests with mocked `fetch()`. These cover:
 ### Component tests
 
 Mount Vue components with `@vue/test-utils` and assert on rendered output and computed logic:
-- **SummaryCard**: normalized/not-found counts, type breakdown, shared types
-- **CurieResultCard**: adaptive display threshold (≤10 vs >10 equiv IDs), prefix summary
-- **ComparisonView**: agreement detection, row highlighting, helper functions
-- **CurieLink**: conditional `<a>` vs `<span>` rendering
+- **`ResultsSummary`**: normalized/partial/not-found counts, disagreement detection across instances, type badge aggregation; disagreements tile hidden for single instance
+- **`CurieDetailPanel`**: description, types, IC score display; adaptive threshold (≤10 full table vs >10 prefix summary + expand); "Show all" / "Collapse" toggle
+- **`CurieResultCard`**: accordion header (preferred ID, label, type badges, equiv count); delegates body to CurieDetailPanel
+- **`ComparisonView`**: agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
+- **`CurieLink`**: conditional `<a>` vs `<span>` rendering
 
 ## Shared Fixtures
 
@@ -160,5 +162,5 @@ it('test case', async () => {
 - **Coverage thresholds** — enforce minimum coverage via `vitest --coverage`
 - **CI integration** — run `npm test` in GitHub Actions alongside Python tests
 - **Snapshot tests** — if component markup stabilizes, add snapshots for regression detection
-- **NodeNormForm tests** — test form validation, mode toggle, emit payloads, initial-value prop wiring
-- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch in compare mode, URL auto-submit on mount)
+- **NodeNormForm tests** — test checkbox selection, custom URL add/remove, submit payload, initial-value prop wiring from URL params
+- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch across instances, URL auto-submit on mount)
