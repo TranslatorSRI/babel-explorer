@@ -5,17 +5,25 @@ export interface NormalizedIdentifier {
   /** Individual biolink type (only present when individual_types=true). */
   type?: string;
   taxa?: string[];
-  description?: string | string[];
+  /** Plain string description for this identifier (only present when description=true). */
+  description?: string;
 }
 
 /** A normalized node returned by the NodeNorm API for one input CURIE. */
 export interface NormalizedNode {
-  id: { identifier: string; label?: string };
+  /**
+   * The preferred (canonical) identifier for this clique.
+   * description is the single best description string (longest, when description=true).
+   */
+  id: { identifier: string; label?: string; description?: string };
   equivalent_identifiers: NormalizedIdentifier[];
   /** Top-level biolink type hierarchy. */
   type: string[];
   information_content?: number;
-  /** Top-level descriptions (only present when description=true). */
+  /**
+   * All descriptions collected across the clique, sorted longest-to-shortest.
+   * Only present when description=true. Each entry is a plain string.
+   */
   descriptions?: string[];
 }
 
