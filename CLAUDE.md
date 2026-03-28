@@ -73,6 +73,8 @@ uv run ruff format
 # Astro/Vue frontend (from web/ directory)
 cd web && npm run dev        # Dev server at localhost:4321
 cd web && npm run build      # Build to web/dist/
+cd web && npm test           # Run Vitest unit + component tests
+cd web && npm run test:watch # Watch mode
 ```
 
 ## Architecture

@@ -5,7 +5,7 @@ export interface NormalizedIdentifier {
   /** Individual biolink type (only present when individual_types=true). */
   type?: string;
   taxa?: string[];
-  description?: string[];
+  description?: string | string[];
 }
 
 /** A normalized node returned by the NodeNorm API for one input CURIE. */

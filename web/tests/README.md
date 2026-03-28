@@ -1,0 +1,128 @@
+# Web Frontend Tests
+
+Tests for the Astro + Vue 3 static frontend (`web/`).
+
+## Test Stack
+
+| Tool | Purpose |
+|------|---------|
+| [Vitest](https://vitest.dev/) | Test runner — native ESM, fast, Vite-compatible |
+| [@vue/test-utils](https://test-utils.vuejs.org/) | Vue component mounting and assertions |
+| [happy-dom](https://github.com/nicedayjs/happy-dom) | Lightweight DOM environment (no browser needed) |
+
+Vitest's built-in `vi.fn()`, `vi.spyOn()`, and `vi.stubGlobal()` handle all mocking — no additional libraries needed.
+
+## Running Tests
+
+```bash
+cd web
+npm test          # Run all tests once
+npm run test:watch  # Watch mode (re-runs on file changes)
+```
+
+## Test Organization
+
+Tests are **co-located** with source using `__tests__/` directories:
+
+```
+web/src/
+  lib/
+    __tests__/
+      nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes
+      curie-links.test.ts     # parseCurie + getCurieUrl + loadPrefixMap
+      types.test.ts           # DEFAULT_API_OPTIONS smoke test
+  components/
+    nodenorm/
+      __tests__/
+        SummaryCard.test.ts
+        CurieResultCard.test.ts
+        ComparisonView.test.ts
+    shared/
+      __tests__/
+        CurieLink.test.ts
+```
+
+### Library tests (highest priority)
+
+Pure function tests with mocked `fetch()`. These cover:
+- **`nodenorm-api.ts`**: CURIE parsing (blank lines, comments, deduplication) and API request construction
+- **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map, cache behavior
+- **`types.ts`**: Default options constant
+
+### Component tests
+
+Mount Vue components with `@vue/test-utils` and assert on rendered output and computed logic:
+- **SummaryCard**: normalized/not-found counts, type breakdown, shared types
+- **CurieResultCard**: adaptive display threshold (≤10 vs >10 equiv IDs), prefix summary
+- **ComparisonView**: agreement detection, row highlighting, helper functions
+- **CurieLink**: conditional `<a>` vs `<span>` rendering
+
+## Shared Fixtures
+
+Test fixtures live at the repo root so both Python and TypeScript tests can use them:
+
+```
+tests/fixtures/
+  nodenorm_responses/
+    mondo_0004979.json    # Asthma — 28 equiv IDs (large clique)
+    chebi_48947.json      # Metformin — 82 equiv IDs (very large clique)
+    ncit_c55060.json      # Hypertension CTCAE — 2 equiv IDs (small clique)
+    not_found.json        # FAKE:9999999 → null
+  prefix_map_subset.json  # 10 entries from biolink-model prefix map
+```
+
+### Regenerating fixtures
+
+Fixtures are snapshots of real NodeNorm Dev responses. To regenerate:
+
+```bash
+curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' | python3 -m json.tool > tests/fixtures/nodenorm_responses/mondo_0004979.json
+```
+
+Repeat for each CURIE. For the prefix map subset:
+
+```bash
+curl -s 'https://raw.githubusercontent.com/biolink/biolink-model/v4.3.7/src/biolink_model/prefixmaps/biolink-model-prefix-map.json' | python3 -c "
+import json, sys
+full = json.load(sys.stdin)
+keep = ['MONDO', 'CHEBI', 'HP', 'HGNC', 'NCIT', 'UMLS', 'DOID', 'MESH', 'GO', 'NCBITaxon']
+print(json.dumps({k: full[k] for k in keep if k in full}, indent=2))
+" > tests/fixtures/prefix_map_subset.json
+```
+
+## Key Testing Patterns
+
+### Mocking `fetch()`
+
+```typescript
+vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+  ok: true,
+  json: () => Promise.resolve(fixtureData),
+}));
+```
+
+### Module cache isolation (`curie-links.ts`)
+
+`curie-links.ts` caches the prefix map in a module-level variable. Tests that exercise `loadPrefixMap()` must reset the module between tests:
+
+```typescript
+beforeEach(() => {
+  vi.resetModules();
+  vi.restoreAllMocks();
+});
+
+it('test case', async () => {
+  const { loadPrefixMap } = await import('../curie-links');
+  // ...
+});
+```
+
+## Future Improvements
+
+- **Playwright e2e tests** — test the full page in a real browser (form submission, accordion interaction, Bootstrap JS)
+- **Integration tests** — call live NodeNorm API and verify response parsing end-to-end
+- **Coverage thresholds** — enforce minimum coverage via `vitest --coverage`
+- **CI integration** — run `npm test` in GitHub Actions alongside Python tests
+- **Snapshot tests** — if component markup stabilizes, add snapshots for regression detection
+- **NodeNormForm tests** — test form validation, mode toggle, emit payloads
+- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch in compare mode)

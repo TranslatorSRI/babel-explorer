@@ -1,0 +1,33 @@
+{
+    "NCIT:C55060": {
+        "id": {
+            "identifier": "NCIT:C55060",
+            "label": "Hypertension, CTCAE",
+            "description": "A disorder characterized by a pathological increase in blood pressure."
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "NCIT:C55060",
+                "label": "Hypertension, CTCAE",
+                "description": "A disorder characterized by a pathological increase in blood pressure.",
+                "type": "biolink:PhenotypicFeature"
+            },
+            {
+                "identifier": "UMLS:C1963138",
+                "label": "Hypertension, CTCAE",
+                "type": "biolink:PhenotypicFeature"
+            }
+        ],
+        "descriptions": [
+            "A disorder characterized by a pathological increase in blood pressure."
+        ],
+        "type": [
+            "biolink:PhenotypicFeature",
+            "biolink:DiseaseOrPhenotypicFeature",
+            "biolink:BiologicalEntity",
+            "biolink:ThingWithTaxon",
+            "biolink:NamedThing"
+        ],
+        "information_content": 88.2
+    }
+}

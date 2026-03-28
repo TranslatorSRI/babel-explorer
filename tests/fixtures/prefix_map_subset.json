@@ -1,0 +1,12 @@
+{
+  "MONDO": "http://purl.obolibrary.org/obo/MONDO_",
+  "CHEBI": "http://purl.obolibrary.org/obo/CHEBI_",
+  "HP": "http://purl.obolibrary.org/obo/HP_",
+  "HGNC": "http://identifiers.org/hgnc/",
+  "NCIT": "http://purl.obolibrary.org/obo/NCIT_",
+  "UMLS": "http://identifiers.org/umls/",
+  "DOID": "http://purl.obolibrary.org/obo/DOID_",
+  "MESH": "http://id.nlm.nih.gov/mesh/",
+  "GO": "http://purl.obolibrary.org/obo/GO_",
+  "NCBITaxon": "http://purl.obolibrary.org/obo/NCBITaxon_"
+}
