@@ -8,10 +8,18 @@ import logging
 
 def _load_nodenorm_urls() -> dict[str, str]:
     """Load NodeNorm deployment URLs from shared config file."""
-    config_path = pathlib.Path(__file__).parents[3] / "config" / "translator-endpoints.json"
+    config_path = (
+        pathlib.Path(__file__).parents[3] / "config" / "translator-endpoints.json"
+    )
     try:
         endpoints = json.loads(config_path.read_text())
-        env_labels = {"dev": "Dev", "exp": "Exp", "ci": "CI", "test": "Test", "prod": "Production"}
+        env_labels = {
+            "dev": "Dev",
+            "exp": "Exp",
+            "ci": "CI",
+            "test": "Test",
+            "prod": "Production",
+        }
         return {
             f"NodeNorm {env_labels.get(env, env)}": url
             for env, url in endpoints["nodenorm"].items()
