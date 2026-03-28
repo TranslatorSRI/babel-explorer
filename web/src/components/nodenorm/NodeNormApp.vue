@@ -6,8 +6,9 @@ import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
 import { loadPrefixMap } from '../../lib/curie-links';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
-import NodeNormResults from './NodeNormResults.vue';
 import ComparisonView from './ComparisonView.vue';
+import SummaryCard from './SummaryCard.vue';
+import ColumnVisibility from './ColumnVisibility.vue';
 import endpoints from '../../../../config/translator-endpoints.json';
 
 // Build instance list from shared config
@@ -38,7 +39,6 @@ function urlsToTargets(urls: string[]): string[] {
 }
 
 // State
-const mode = ref<'single' | 'compare'>('single');
 const loading = ref(false);
 const error = ref<string | null>(null);
 const queriedCuries = ref<string[]>([]);
@@ -51,12 +51,9 @@ const initialCuries = ref<string | undefined>(undefined);
 const initialTargets = ref<string[] | undefined>(undefined);
 const initialOptions = ref<Partial<ApiOptions> | undefined>(undefined);
 
-// Single-instance results
-const singleResults = ref<NodeNormResponse | null>(null);
-
-// Multi-instance comparison results
-const comparisonResults = ref<Map<string, NodeNormResponse>>(new Map());
-const comparisonInstances = ref<NodeNormInstance[]>([]);
+// Results keyed by instance URL
+const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
+const queriedInstances = ref<NodeNormInstance[]>([]);
 
 // Abort controller for in-flight requests
 let abortController: AbortController | null = null;
@@ -69,9 +66,6 @@ onMounted(async () => {
     initialCuries.value = state.curies.join('\n');
     initialTargets.value = state.targets;
     initialOptions.value = state.options;
-
-    // Infer mode from target count
-    if (state.targets.length > 1) mode.value = 'compare';
 
     // Auto-submit the query encoded in the URL
     const instanceUrls = state.targets.length > 0
@@ -113,48 +107,40 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
 
   loading.value = true;
   error.value = null;
-  singleResults.value = null;
-  comparisonResults.value = new Map();
+  resultsByInstance.value = new Map();
   queriedCuries.value = curies;
 
   try {
-    if (mode.value === 'single') {
-      singleResults.value = await fetchNormalizedNodes(
-        payload.instanceUrls[0], curies, payload.options, signal,
-      );
-    } else {
-      // Compare mode: fetch from all selected instances in parallel
-      const settled = await Promise.allSettled(
-        payload.instanceUrls.map((url) =>
-          fetchNormalizedNodes(url, curies, payload.options, signal),
-        ),
-      );
+    // Fetch from all selected instances in parallel (handles single instance too)
+    const settled = await Promise.allSettled(
+      payload.instanceUrls.map((url) =>
+        fetchNormalizedNodes(url, curies, payload.options, signal),
+      ),
+    );
 
-      const resultMap = new Map<string, NodeNormResponse>();
-      const errors: string[] = [];
+    const resultMap = new Map<string, NodeNormResponse>();
+    const errors: string[] = [];
 
-      for (let i = 0; i < payload.instanceUrls.length; i++) {
-        const result = settled[i];
-        const url = payload.instanceUrls[i];
-        if (result.status === 'fulfilled') {
-          resultMap.set(url, result.value);
-        } else {
-          // Don't report abort errors — user clicked Stop intentionally
-          if ((result.reason as Error)?.name !== 'AbortError') {
-            const inst = instances.find((inst) => inst.url === url);
-            errors.push(`${inst?.name ?? url}: ${result.reason}`);
-          }
+    for (let i = 0; i < payload.instanceUrls.length; i++) {
+      const result = settled[i];
+      const url = payload.instanceUrls[i];
+      if (result.status === 'fulfilled') {
+        resultMap.set(url, result.value);
+      } else {
+        if ((result.reason as Error)?.name !== 'AbortError') {
+          const inst = instances.find((inst) => inst.url === url);
+          errors.push(`${inst?.name ?? url}: ${result.reason}`);
         }
       }
+    }
 
-      comparisonResults.value = resultMap;
-      comparisonInstances.value = payload.instanceUrls
-        .map((url) => instances.find((inst) => inst.url === url))
-        .filter((inst): inst is NodeNormInstance => inst != null);
+    resultsByInstance.value = resultMap;
+    queriedInstances.value = payload.instanceUrls
+      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
+      .filter((inst): inst is NodeNormInstance => inst != null);
 
-      if (errors.length > 0) {
-        error.value = `Some instances failed: ${errors.join('; ')}`;
-      }
+    if (errors.length > 0) {
+      error.value = `Some instances failed: ${errors.join('; ')}`;
     }
 
     // Update URL to reflect the submitted query (only if not aborted)
@@ -179,43 +165,50 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
   <NodeNormForm
     :instances="instances"
     :loading="loading"
-    :mode="mode"
     :has-results="hasResults"
     :initial-curies="initialCuries"
     :initial-targets="initialTargets"
     :initial-options="initialOptions"
     @submit="handleSubmit"
-    @update:mode="mode = $event"
     @stop="stopQuery"
     @share="handleShare"
   />
 
   <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
 
-  <!-- Single instance results -->
-  <div v-if="singleResults && mode === 'single'" class="mt-4">
-    <h5 class="mb-3">
-      Results ({{ queriedCuries.length }} CURIE{{ queriedCuries.length !== 1 ? 's' : '' }})
-    </h5>
-    <NodeNormResults
-      :results="singleResults"
+  <div v-if="resultsByInstance.size > 0" class="mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
+      <h5 class="mb-0">
+        Results — {{ queriedCuries.length }} CURIE{{ queriedCuries.length !== 1 ? 's' : '' }},
+        {{ queriedInstances.length }} instance{{ queriedInstances.length !== 1 ? 's' : '' }}
+      </h5>
+      <ColumnVisibility :visible-columns="visibleColumns" @toggle="toggleColumn" />
+    </div>
+
+    <!-- Single instance: one summary card -->
+    <template v-if="queriedInstances.length === 1">
+      <SummaryCard
+        :results="resultsByInstance.get(queriedInstances[0].url)!"
+        :curies="queriedCuries"
+        class="mb-3"
+      />
+    </template>
+
+    <!-- Multiple instances: per-instance summary cards in a row -->
+    <template v-else>
+      <div class="d-flex flex-wrap gap-2 mb-3">
+        <div v-for="inst in queriedInstances" :key="inst.url" class="flex-fill" style="min-width: 200px">
+          <div class="text-muted small fw-semibold mb-1">{{ inst.name }}</div>
+          <SummaryCard :results="resultsByInstance.get(inst.url)!" :curies="queriedCuries" />
+        </div>
+      </div>
+    </template>
+
+    <ComparisonView
+      :results-by-instance="resultsByInstance"
+      :queried-instances="queriedInstances"
       :curies="queriedCuries"
       :visible-columns="visibleColumns"
-      :prefix-map="prefixMap"
-      @toggle-column="toggleColumn"
-    />
-  </div>
-
-  <!-- Comparison results -->
-  <div v-if="comparisonResults.size > 0 && mode === 'compare'" class="mt-4">
-    <h5 class="mb-3">
-      Comparison ({{ queriedCuries.length }} CURIE{{ queriedCuries.length !== 1 ? 's' : '' }}
-      across {{ comparisonInstances.length }} instance{{ comparisonInstances.length !== 1 ? 's' : '' }})
-    </h5>
-    <ComparisonView
-      :results-by-instance="comparisonResults"
-      :queried-instances="comparisonInstances"
-      :curies="queriedCuries"
       :prefix-map="prefixMap"
     />
   </div>

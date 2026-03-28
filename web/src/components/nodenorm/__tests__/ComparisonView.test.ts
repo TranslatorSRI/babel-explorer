@@ -24,6 +24,7 @@ const defaultProps = {
   curies: ['MONDO:0004979'],
   queriedInstances: [devInstance, prodInstance],
   prefixMap: prefixMapSubset,
+  visibleColumns: new Set(['type']),
 };
 
 describe('ComparisonView', () => {
@@ -39,7 +40,6 @@ describe('ComparisonView', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },
     });
-    // Both cells should show MONDO:0004979 and "asthma"
     const text = wrapper.text();
     expect(text).toContain('MONDO:0004979');
     expect(text).toContain('asthma');
@@ -49,18 +49,17 @@ describe('ComparisonView', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },
     });
-    const rows = wrapper.findAll('tbody tr');
-    expect(rows.length).toBe(1);
-    expect(rows[0].classes()).not.toContain('table-warning');
+    // Summary row is the first tr in the first tbody
+    const summaryRow = wrapper.findAll('tbody')[0].find('tr');
+    expect(summaryRow.classes()).not.toContain('table-warning');
   });
 
   it('highlights row with table-warning when instances disagree', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: disagreeResults },
     });
-    const rows = wrapper.findAll('tbody tr');
-    expect(rows.length).toBe(1);
-    expect(rows[0].classes()).toContain('table-warning');
+    const summaryRow = wrapper.findAll('tbody')[0].find('tr');
+    expect(summaryRow.classes()).toContain('table-warning');
   });
 
   it('shows "Not found" for instances that return null', () => {
@@ -89,7 +88,52 @@ describe('ComparisonView', () => {
         resultsByInstance: singleInstance,
       },
     });
-    const rows = wrapper.findAll('tbody tr');
-    expect(rows[0].classes()).not.toContain('table-warning');
+    const summaryRow = wrapper.findAll('tbody')[0].find('tr');
+    expect(summaryRow.classes()).not.toContain('table-warning');
+  });
+
+  it('summary row has cursor:pointer style', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const summaryRow = wrapper.findAll('tbody')[0].find('tr');
+    expect(summaryRow.attributes('style')).toContain('cursor: pointer');
+  });
+
+  it('detail row is not rendered before clicking the summary row', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const rows = wrapper.findAll('tbody')[0].findAll('tr');
+    expect(rows.length).toBe(1);
+  });
+
+  it('renders detail row after clicking the summary row', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const tbody = wrapper.findAll('tbody')[0];
+    await tbody.find('tr').trigger('click');
+    expect(tbody.findAll('tr').length).toBe(2);
+  });
+
+  it('detail row contains instance name in expanded panel', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    await wrapper.findAll('tbody')[0].find('tr').trigger('click');
+    expect(wrapper.text()).toContain('Dev');
+    expect(wrapper.text()).toContain('Prod');
+  });
+
+  it('collapses detail row on second click', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const tbody = wrapper.findAll('tbody')[0];
+    const summaryRow = tbody.find('tr');
+    await summaryRow.trigger('click');
+    await summaryRow.trigger('click');
+    expect(tbody.findAll('tr').length).toBe(1);
   });
 });
