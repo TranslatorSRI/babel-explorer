@@ -64,22 +64,56 @@ Test fixtures live at the repo root so both Python and TypeScript tests can use 
 ```
 tests/fixtures/
   nodenorm_responses/
-    mondo_0004979.json    # Asthma — 28 equiv IDs (large clique)
-    chebi_48947.json      # Metformin — 82 equiv IDs (very large clique)
-    ncit_c55060.json      # Hypertension CTCAE — 2 equiv IDs (small clique)
-    not_found.json        # FAKE:9999999 → null
-  prefix_map_subset.json  # 10 entries from biolink-model prefix map
+    mondo_0004979.json             # Asthma — 28 equiv IDs (large clique), 3 descriptions
+    chebi_48947.json               # Metformin — 82 equiv IDs (very large clique)
+    ncit_c55060.json               # Hypertension CTCAE — 2 equiv IDs (small clique)
+    ncit_c34373.json               # ALS — multiple descriptions
+    ncbigene_1756.json             # DMD gene — has taxa on equiv IDs
+    mesh_d014867_conflated.json    # Water — 206 equiv IDs (conflate=true)
+    mesh_d014867_no_conflate.json  # Water — 30 equiv IDs (conflate=false, drug_chemical_conflate=false)
+    batch_mixed.json               # Multi-CURIE GET: MONDO:0004979 + NCIT:C55060 + FAKE:9999999
+    not_found.json                 # FAKE:9999999 → null (key present, value null)
+  prefix_map_subset.json           # 10 entries from biolink-model prefix map (MONDO, CHEBI, …)
 ```
+
+### NodeNorm API response shape (key facts for test authors)
+
+These facts are verified by tests in `nodenorm-api.test.ts` and should be kept in sync if the API changes:
+
+- **`id.description`** — plain `string` (the best/longest description). Same as `descriptions[0]`. Only present when `description=true`.
+- **`descriptions`** — `string[]` collecting all descriptions found across the clique. `descriptions[0]` is the best description. Only present when `description=true`.
+- **`equivalent_identifiers[i].description`** — plain `string` when present (not an array). Not every identifier has one.
+- **Not-found CURIEs** — the key is present in the response with a `null` value (not a missing key).
+- **Conflation** — `conflate=true` merges Chemical/SmallMolecule/Drug cliques, significantly expanding the equivalent identifier set. MESH:D014867 (water): 206 equiv IDs conflated vs. 30 without.
+- **Multi-CURIE requests** — send repeated `curie=` params in GET, or send a JSON body `{"curies": [...]}` via POST to the same endpoint. All options (`conflate`, `description`, etc.) apply to the whole batch.
 
 ### Regenerating fixtures
 
-Fixtures are snapshots of real NodeNorm Dev responses. To regenerate:
+Fixtures are snapshots of real NodeNorm Dev responses. To regenerate a single CURIE:
 
 ```bash
-curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' | python3 -m json.tool > tests/fixtures/nodenorm_responses/mondo_0004979.json
+curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' \
+  | python3 -m json.tool > tests/fixtures/nodenorm_responses/mondo_0004979.json
 ```
 
-Repeat for each CURIE. For the prefix map subset:
+For a multi-CURIE batch (GET with repeated params):
+
+```bash
+curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&curie=NCIT:C55060&curie=FAKE:9999999&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' \
+  | python3 -m json.tool > tests/fixtures/nodenorm_responses/batch_mixed.json
+```
+
+Or equivalently via POST:
+
+```bash
+curl -s -X POST \
+  'https://nodenormalization-sri.renci.org/get_normalized_nodes?conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' \
+  -H 'Content-Type: application/json' \
+  -d '{"curies": ["MONDO:0004979", "NCIT:C55060", "FAKE:9999999"]}' \
+  | python3 -m json.tool > tests/fixtures/nodenorm_responses/batch_mixed.json
+```
+
+For the prefix map subset:
 
 ```bash
 curl -s 'https://raw.githubusercontent.com/biolink/biolink-model/v4.3.7/src/biolink_model/prefixmaps/biolink-model-prefix-map.json' | python3 -c "
