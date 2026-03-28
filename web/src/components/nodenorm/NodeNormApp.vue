@@ -7,7 +7,7 @@ import { loadPrefixMap } from '../../lib/curie-links';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
 import ComparisonView from './ComparisonView.vue';
-import SummaryCard from './SummaryCard.vue';
+import ResultsSummary from './ResultsSummary.vue';
 import ColumnVisibility from './ColumnVisibility.vue';
 import endpoints from '../../../../config/translator-endpoints.json';
 
@@ -185,24 +185,11 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
       <ColumnVisibility :visible-columns="visibleColumns" @toggle="toggleColumn" />
     </div>
 
-    <!-- Single instance: one summary card -->
-    <template v-if="queriedInstances.length === 1">
-      <SummaryCard
-        :results="resultsByInstance.get(queriedInstances[0].url)!"
-        :curies="queriedCuries"
-        class="mb-3"
-      />
-    </template>
-
-    <!-- Multiple instances: per-instance summary cards in a row -->
-    <template v-else>
-      <div class="d-flex flex-wrap gap-2 mb-3">
-        <div v-for="inst in queriedInstances" :key="inst.url" class="flex-fill" style="min-width: 200px">
-          <div class="text-muted small fw-semibold mb-1">{{ inst.name }}</div>
-          <SummaryCard :results="resultsByInstance.get(inst.url)!" :curies="queriedCuries" />
-        </div>
-      </div>
-    </template>
+    <ResultsSummary
+      :results-by-instance="resultsByInstance"
+      :queried-instances="queriedInstances"
+      :curies="queriedCuries"
+    />
 
     <ComparisonView
       :results-by-instance="resultsByInstance"
