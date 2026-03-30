@@ -40,6 +40,7 @@ def parse_duration(value: str) -> int | float:
 
 @click.group()
 def cli():
+    """babel-explorer: query and explore Babel intermediate files."""
     pass
 
 
@@ -163,6 +164,11 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     help="NodeNorm URL to check for concord changes",
 )
 def test_concord(curies, nodenorm_url):
+    """For each CURIE, print the current NodeNorm clique (all equivalent identifiers, labels, and Biolink types).
+
+    Useful for inspecting how a potential Babel concordance change would affect NodeNorm:
+    run before and after a Babel rebuild to see how cliques would shift.
+    """
     # We're trying to answer a simple question here: if the CURIEs we mention were combined, how would the cliques change in NodeNorm?
     # By definition, this can only combine all the cliques mentioned in the CURIEs.
 

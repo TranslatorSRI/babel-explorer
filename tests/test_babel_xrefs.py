@@ -27,6 +27,8 @@ VALID_CURIES = load_curies()
 
 
 class TestCrossReference:
+    """Tests for the CrossReference frozen dataclass."""
+
     def test_creation(self):
         xr = CrossReference(
             filename="f.txt", subj="A:1", pred="skos:exactMatch", obj="B:2"
@@ -85,6 +87,8 @@ class TestCrossReference:
 
 
 class TestLabeledCrossReference:
+    """Tests for the LabeledCrossReference frozen dataclass."""
+
     def test_creation(self):
         lxr = LabeledCrossReference(
             subj="A:1",
@@ -149,6 +153,8 @@ class TestLabeledCrossReference:
 
 
 class TestIdentifierRecord:
+    """Tests for the IdentifierRecord frozen dataclass."""
+
     def test_creation(self):
         rec = IdentifierRecord(curie="MONDO:0004979")
         assert rec.curie == "MONDO:0004979"
@@ -181,6 +187,8 @@ class TestIdentifierRecord:
 
 
 class TestBabelXRefsInit:
+    """Tests for BabelXRefs constructor."""
+
     def test_init_without_nodenorm(self, tmp_path):
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
         bx = BabelXRefs(dl)
