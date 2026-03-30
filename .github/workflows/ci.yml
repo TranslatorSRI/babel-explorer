@@ -2,6 +2,10 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 17 * * 2"  # Tuesdays at 12pm EST (17:00 UTC); 1pm during EDT
   workflow_dispatch:
 
 jobs:
@@ -24,7 +28,7 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
