@@ -61,7 +61,7 @@ def cli():
     "--nodenorm-url",
     type=str,
     default="https://nodenormalization-sri.renci.org/",
-    help="NodeNorm URL to check for concord changes",
+    help="NodeNorm base URL used for node normalization and label enrichment",
 )
 @click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
