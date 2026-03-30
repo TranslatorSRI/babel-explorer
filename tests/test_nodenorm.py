@@ -26,7 +26,7 @@ class TestIdentifier:
         ident = Identifier(curie="MONDO:0004979")
         assert ident.curie == "MONDO:0004979"
         assert ident.label == ""
-        assert ident.biolink_type == ""
+        assert ident.biolink_type == []
         assert ident.taxa == []
         assert ident.description == []
 
@@ -34,12 +34,12 @@ class TestIdentifier:
         ident = Identifier(
             curie="MONDO:0004979",
             label="asthma",
-            biolink_type="biolink:Disease",
+            biolink_type=["biolink:Disease"],
             taxa=["NCBITaxon:9606"],
             description=["A chronic respiratory disease"],
         )
         assert ident.label == "asthma"
-        assert ident.biolink_type == "biolink:Disease"
+        assert ident.biolink_type == ["biolink:Disease"]
         assert ident.taxa == ["NCBITaxon:9606"]
 
     def test_from_dict_minimal(self):
@@ -67,7 +67,7 @@ class TestIdentifier:
         ident = Identifier.from_dict(d)
         assert ident.curie == "X:1"
         assert ident.label == "Beta"
-        assert ident.biolink_type == ""
+        assert ident.biolink_type == []
 
     def test_lt_ordering(self):
         a = Identifier(curie="A:1")
@@ -232,7 +232,7 @@ class TestGetCliqueIdentifiersMocked:
         api_result = {"id": {"identifier": "X:1"}}  # no equivalent_identifiers
         with patch.object(nn, "normalize_curie", return_value=api_result):
             result = nn.get_clique_identifiers("X:1")
-            assert result is None
+            assert result == []
 
     def test_caching(self):
         nn = self._make_nn()

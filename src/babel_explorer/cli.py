@@ -6,7 +6,7 @@ from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
 
 
-def parse_duration(value: str) -> float:
+def parse_duration(value: str) -> int | float:
     """Parse a duration string like '3h', '30m', '1d', '7200', or 'never' → seconds."""
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     lower = (value or "").strip().lower()
@@ -169,13 +169,12 @@ def test_concord(curies, nodenorm_url):
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)
-        for identifier in identifiers or []:
+        for identifier in identifiers:
+            biolink = ", ".join(identifier.biolink_type)
             if identifier.label:
-                print(
-                    f"{curie}\t{identifier.curie}\t{identifier.label}\t{identifier.biolink_type}"
-                )
+                print(f"{curie}\t{identifier.curie}\t{identifier.label}\t{biolink}")
             else:
-                print(f"{curie}\t{identifier.curie}\t\t{identifier.biolink_type}")
+                print(f"{curie}\t{identifier.curie}\t\t{biolink}")
 
 
 if __name__ == "__main__":
