@@ -8,7 +8,7 @@ import logging
 class Identifier:
     curie: str
     label: str = ""
-    biolink_type: str = ""
+    biolink_type: list[str] = dataclasses.field(default_factory=list)
     taxa: list[str] = dataclasses.field(default_factory=list)
     description: list[str] = dataclasses.field(default_factory=list)
 
@@ -47,6 +47,9 @@ class NodeNorm:
                 logging.debug(f"Found exact match for {curie}: {identifier}")
                 return Identifier.from_dict(identifier)
 
+        logging.debug(
+            f"No exact match for {curie!r} in equivalent_identifiers; returning bare Identifier"
+        )
         return Identifier(curie=curie)
 
     @functools.lru_cache(maxsize=None)
@@ -83,12 +86,12 @@ class NodeNorm:
             return None
 
     @functools.lru_cache(maxsize=None)
-    def get_clique_identifiers(self, curie, **kwargs):
+    def get_clique_identifiers(self, curie, **kwargs) -> list[Identifier]:
         result = self.normalize_curie(curie, **kwargs)
         if not result:
-            return None
+            return []
         if "equivalent_identifiers" not in result:
-            return None
+            return []
         return list(
             map(lambda x: Identifier.from_dict(x), result["equivalent_identifiers"])
         )
