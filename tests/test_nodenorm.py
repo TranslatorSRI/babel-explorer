@@ -22,6 +22,8 @@ VALID_CURIES = load_curies()
 
 
 class TestIdentifier:
+    """Tests for the Identifier dataclass."""
+
     def test_creation_with_defaults(self):
         ident = Identifier(curie="MONDO:0004979")
         assert ident.curie == "MONDO:0004979"
@@ -90,6 +92,8 @@ class TestIdentifier:
 
 
 class TestNodeNormInit:
+    """Tests for NodeNorm constructor and URL normalisation."""
+
     def test_default_url(self):
         nn = NodeNorm()
         assert nn.nodenorm_url == ""
@@ -100,6 +104,8 @@ class TestNodeNormInit:
 
 
 class TestNormalizeCurieMocked:
+    """Unit tests for NodeNorm.normalize_curie() with mocked HTTP responses."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
@@ -156,6 +162,8 @@ class TestNormalizeCurieMocked:
 
 
 class TestGetIdentifierMocked:
+    """Unit tests for NodeNorm.get_identifier() with mocked normalize_curie."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
@@ -208,6 +216,8 @@ class TestGetIdentifierMocked:
 
 
 class TestGetCliqueIdentifiersMocked:
+    """Unit tests for NodeNorm.get_clique_identifiers() with mocked normalize_curie."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
