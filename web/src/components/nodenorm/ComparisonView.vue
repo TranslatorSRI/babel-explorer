@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance } from '../../lib/types';
 import CurieLink from '../shared/CurieLink.vue';
 import CurieDetailPanel from './CurieDetailPanel.vue';
@@ -12,9 +12,21 @@ const props = defineProps<{
   curies: string[];
   prefixMap: Record<string, string>;
   visibleColumns: Set<string>;
+  /** Active type filters — only CURIEs whose most-specific type is in this set are shown. */
+  typeFilter: Set<string>;
 }>();
 
 const expandedCuries = ref(new Set<string>());
+
+const visibleCuries = computed(() => {
+  if (props.typeFilter.size === 0) return props.curies;
+  return props.curies.filter((curie) =>
+    props.queriedInstances.some((inst) => {
+      const t = props.resultsByInstance.get(inst.url)?.[curie]?.type?.[0];
+      return t ? props.typeFilter.has(t.replace('biolink:', '')) : false;
+    }),
+  );
+});
 
 function toggleRow(curie: string) {
   if (expandedCuries.value.has(curie)) {
@@ -79,7 +91,14 @@ function getEquivCount(curie: string, instanceUrl: string): number {
           </th>
         </tr>
       </thead>
-      <tbody v-for="curie in curies" :key="curie">
+      <tbody v-if="visibleCuries.length === 0 && curies.length > 0">
+        <tr>
+          <td :colspan="queriedInstances.length + 2" class="text-center text-muted py-3">
+            No CURIEs match the selected type filter.
+          </td>
+        </tr>
+      </tbody>
+      <tbody v-for="curie in visibleCuries" :key="curie">
         <!-- Summary row — click to expand/collapse -->
         <tr
           :class="['align-middle', allAgree(curie) ? '' : 'table-warning']"

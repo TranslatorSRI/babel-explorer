@@ -54,6 +54,7 @@ const initialOptions = ref<Partial<ApiOptions> | undefined>(undefined);
 const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
 const queriedInstances = ref<NodeNormInstance[]>([]);
 const hasResults = computed(() => resultsByInstance.value.size > 0);
+const typeFilter = ref(new Set<string>());
 
 // Abort controller for in-flight requests
 let abortController: AbortController | null = null;
@@ -90,6 +91,14 @@ function toggleColumn(col: string) {
     visibleColumns.add(col);
   }
 }
+
+function toggleTypeFilter(type: string) {
+  const next = new Set(typeFilter.value);
+  if (next.has(type)) next.delete(type); else next.add(type);
+  typeFilter.value = next;
+}
+
+function clearTypeFilter() { typeFilter.value = new Set(); }
 
 async function handleShare() {
   await navigator.clipboard.writeText(window.location.href);
@@ -131,6 +140,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
   error.value = null;
   resultsByInstance.value = new Map();
   queriedCuries.value = curies;
+  typeFilter.value = new Set();
 
   try {
     // Fetch from all selected instances in parallel (handles single instance too)
@@ -215,6 +225,9 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :results-by-instance="resultsByInstance"
         :queried-instances="queriedInstances"
         :curies="queriedCuries"
+        :selected-types="typeFilter"
+        @toggle-type-filter="toggleTypeFilter"
+        @clear-type-filter="clearTypeFilter"
       />
       <ComparisonView
         :results-by-instance="resultsByInstance"
@@ -222,6 +235,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :curies="queriedCuries"
         :visible-columns="visibleColumns"
         :prefix-map="prefixMap"
+        :type-filter="typeFilter"
       />
     </div>
     <div class="card-footer">

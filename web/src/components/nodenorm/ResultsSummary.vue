@@ -6,6 +6,12 @@ const props = defineProps<{
   resultsByInstance: Map<string, NodeNormResponse>;
   queriedInstances: NodeNormInstance[];
   curies: string[];
+  selectedTypes: Set<string>;
+}>();
+
+const emit = defineEmits<{
+  'toggle-type-filter': [type: string];
+  'clear-type-filter': [];
 }>();
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,24 +60,25 @@ const disagreements = computed(() => {
 });
 
 /**
- * Biolink types seen across all results, sorted by frequency.
- * Returns array of [displayName, count] pairs.
+ * Biolink types seen across all results, using the most-specific type (type[0])
+ * per CURIE. Counts distinct CURIEs per type (not occurrences).
+ * Returns array of [displayName, count] pairs sorted by count descending.
  */
 const typeCounts = computed((): [string, number][] => {
-  const counts: Record<string, number> = {};
-  for (const inst of props.queriedInstances) {
-    const resp = props.resultsByInstance.get(inst.url);
-    if (!resp) continue;
-    for (const curie of props.curies) {
-      const node = resp[curie];
-      if (!node) continue;
-      for (const t of node.type) {
-        const display = t.replace('biolink:', '');
-        counts[display] = (counts[display] || 0) + 1;
-      }
+  const curiesByType = new Map<string, Set<string>>();
+  for (const curie of props.curies) {
+    for (const inst of props.queriedInstances) {
+      const t = props.resultsByInstance.get(inst.url)?.[curie]?.type?.[0];
+      if (!t) continue;
+      const label = t.replace('biolink:', '');
+      if (!curiesByType.has(label)) curiesByType.set(label, new Set());
+      curiesByType.get(label)!.add(curie);
+      break; // one type per CURIE — take the first instance that finds it
     }
   }
-  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return [...curiesByType.entries()]
+    .map(([type, set]) => [type, set.size] as [string, number])
+    .sort((a, b) => b[1] - a[1]);
 });
 
 // ── Display helpers ───────────────────────────────────────────────────────────
@@ -126,13 +133,24 @@ function formatCurieList(curies: string[]): string {
     <!-- Types tile -->
     <div v-if="typeCounts.length > 0" class="card flex-fill" style="min-width: 200px">
       <div class="card-body py-2 px-3">
-        <div class="text-muted small mb-1">Types</div>
+        <div class="d-flex align-items-center gap-2 mb-1">
+          <span class="text-muted small">Types</span>
+          <button
+            v-if="selectedTypes.size > 0"
+            type="button"
+            class="btn btn-link btn-sm p-0 text-muted small"
+            @click="emit('clear-type-filter')"
+          >clear</button>
+        </div>
         <div class="d-flex flex-wrap gap-1 mt-1">
-          <span
+          <button
             v-for="[type, count] in typeCounts"
             :key="type"
-            class="badge bg-info text-dark"
-          >{{ type }} ×{{ count }}</span>
+            type="button"
+            :class="['btn', 'btn-sm', selectedTypes.has(type) ? 'btn-secondary' : 'btn-outline-secondary']"
+            :title="`Filter results to ${type}`"
+            @click="emit('toggle-type-filter', type)"
+          >{{ type }} <span class="badge bg-light text-dark">{{ count }}</span></button>
         </div>
       </div>
     </div>

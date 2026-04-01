@@ -17,6 +17,7 @@ function singleInstanceResults(resp: NodeNormResponse) {
   return {
     resultsByInstance: new Map([[devInstance.url, resp]]),
     queriedInstances: [devInstance],
+    selectedTypes: new Set<string>(),
   };
 }
 
@@ -27,6 +28,7 @@ function twoInstanceResults(devResp: NodeNormResponse, prodResp: NodeNormRespons
       [prodInstance.url, prodResp],
     ]),
     queriedInstances: [devInstance, prodInstance],
+    selectedTypes: new Set<string>(),
   };
 }
 
@@ -155,17 +157,18 @@ describe('ResultsSummary — disagreements tile', () => {
 // ── Types tile ────────────────────────────────────────────────────────────────
 
 describe('ResultsSummary — types tile', () => {
-  it('shows types from results as badges', () => {
+  it('shows most-specific type as a button', () => {
     const wrapper = mount(ResultsSummary, {
       props: {
         ...singleInstanceResults({ 'NCIT:C55060': ncitNode }),
         curies: ['NCIT:C55060'],
       },
     });
-    expect(wrapper.text()).toContain('PhenotypicFeature');
+    const buttons = wrapper.findAll('button');
+    expect(buttons.some((b) => b.text().includes('PhenotypicFeature'))).toBe(true);
   });
 
-  it('aggregates type counts across multiple CURIEs', () => {
+  it('uses only the most-specific type per CURIE — no ancestor types', () => {
     const wrapper = mount(ResultsSummary, {
       props: {
         ...singleInstanceResults({
@@ -175,11 +178,12 @@ describe('ResultsSummary — types tile', () => {
         curies: ['MONDO:0004979', 'NCIT:C55060'],
       },
     });
-    // Both share NamedThing — it should appear with ×2
-    expect(wrapper.text()).toContain('NamedThing ×2');
+    expect(wrapper.text()).toContain('Disease');
+    expect(wrapper.text()).toContain('PhenotypicFeature');
+    expect(wrapper.text()).not.toContain('NamedThing');
   });
 
-  it('aggregates type counts across multiple instances', () => {
+  it('counts each CURIE once even when queried on multiple instances', () => {
     const wrapper = mount(ResultsSummary, {
       props: {
         ...twoInstanceResults(
@@ -189,9 +193,9 @@ describe('ResultsSummary — types tile', () => {
         curies: ['MONDO:0004979'],
       },
     });
-    // The same types appear in both instances — counts should be doubled
-    const diseaseCount = mondoNode.type.filter((t) => t === 'biolink:Disease').length;
-    expect(wrapper.text()).toContain(`Disease ×${diseaseCount * 2}`);
+    // Same CURIE on 2 instances should still count as 1 distinct CURIE
+    expect(wrapper.text()).toContain('Disease');
+    expect(wrapper.text()).not.toContain('Disease 2');
   });
 
   it('does not render types tile when no results are found', () => {
@@ -202,5 +206,78 @@ describe('ResultsSummary — types tile', () => {
       },
     });
     expect(wrapper.text()).not.toContain('Types');
+  });
+
+  it('inactive type button has btn-outline-secondary class', () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+        selectedTypes: new Set<string>(),
+      },
+    });
+    const typeBtn = wrapper.findAll('button').find((b) => b.text().includes('Disease'))!;
+    expect(typeBtn.classes()).toContain('btn-outline-secondary');
+    expect(typeBtn.classes()).not.toContain('btn-secondary');
+  });
+
+  it('active type button has btn-secondary class', () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+        selectedTypes: new Set(['Disease']),
+      },
+    });
+    const typeBtn = wrapper.findAll('button').find((b) => b.text().includes('Disease'))!;
+    expect(typeBtn.classes()).toContain('btn-secondary');
+    expect(typeBtn.classes()).not.toContain('btn-outline-secondary');
+  });
+
+  it('emits toggle-type-filter with the type name when a button is clicked', async () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+      },
+    });
+    const typeBtn = wrapper.findAll('button').find((b) => b.text().includes('Disease'))!;
+    await typeBtn.trigger('click');
+    expect(wrapper.emitted('toggle-type-filter')).toEqual([['Disease']]);
+  });
+
+  it('"clear" button is absent when no types are selected', () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+        selectedTypes: new Set<string>(),
+      },
+    });
+    expect(wrapper.text()).not.toContain('clear');
+  });
+
+  it('"clear" button appears when selectedTypes is non-empty', () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+        selectedTypes: new Set(['Disease']),
+      },
+    });
+    expect(wrapper.text()).toContain('clear');
+  });
+
+  it('emits clear-type-filter when "clear" button is clicked', async () => {
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
+        curies: ['MONDO:0004979'],
+        selectedTypes: new Set(['Disease']),
+      },
+    });
+    const clearBtn = wrapper.findAll('button').find((b) => b.text() === 'clear')!;
+    await clearBtn.trigger('click');
+    expect(wrapper.emitted('clear-type-filter')).toBeTruthy();
   });
 });
