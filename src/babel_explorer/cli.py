@@ -77,7 +77,7 @@ def cli():
 def xrefs(
     curies: list[str],
     babel_url: str,
-    nodenorm_url,
+    nodenorm_url: str,
     local_dir: str,
     recurse: bool,
     labels: bool,
@@ -169,9 +169,6 @@ def test_concord(curies, nodenorm_url):
     Useful for inspecting how a potential Babel concordance change would affect NodeNorm:
     run before and after a Babel rebuild to see how cliques would shift.
     """
-    # We're trying to answer a simple question here: if the CURIEs we mention were combined, how would the cliques change in NodeNorm?
-    # By definition, this can only combine all the cliques mentioned in the CURIEs.
-
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)

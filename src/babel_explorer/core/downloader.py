@@ -144,8 +144,10 @@ class BabelDownloader:
             response = requests.head(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
-            self.logger.warning(f"HEAD request failed for {url}: {e}")
-            return False
+            self.logger.warning(
+                f"HEAD request failed for {url}: {e}; assuming file is current"
+            )
+            return True
 
         remote_headers = response.headers
 
@@ -335,20 +337,27 @@ class BabelDownloader:
                     )
                     return local_path_to_download_to
 
-                # Tier 3: ETag changed — delete and re-download
+                # Tier 3: ETag changed — re-download
                 self.logger.warning(
                     f"Remote file changed, re-downloading: {local_path_to_download_to}"
                 )
-                os.remove(local_path_to_download_to)
 
         self.logger.info(
             f"Downloading {url_to_download} to {local_path_to_download_to}"
         )
 
-        # Download with retry logic; get response headers back
-        response_headers = self._download_with_retry(
-            url_to_download, local_path_to_download_to, chunk_size
-        )
+        # Download to a sibling .tmp file, then atomically replace the final destination.
+        # This ensures the final file is never partially written.
+        tmp_path = local_path_to_download_to + ".tmp"
+        try:
+            response_headers = self._download_with_retry(
+                url_to_download, tmp_path, chunk_size
+            )
+            os.replace(tmp_path, local_path_to_download_to)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
 
         # Save sidecar metadata
         if response_headers is not None:

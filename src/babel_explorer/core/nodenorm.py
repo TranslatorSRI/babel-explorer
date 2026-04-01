@@ -6,7 +6,7 @@ import requests
 import logging
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Identifier:
     """Normalised identifier record returned by the NodeNorm API."""
 
@@ -20,18 +20,14 @@ class Identifier:
         return self.curie < other.curie
 
     @staticmethod
-    def from_dict(d: dict):
-        """Parse an identifier entry from a NodeNorm API response dict."""
-        identifier = Identifier(curie=d["identifier"])
-        if "label" in d:
-            identifier.label = d["label"]
-        if "taxa" in d:
-            identifier.taxa = d["taxa"]
-        if "description" in d:
-            identifier.description = d["description"]
-        if "type" in d:
-            identifier.biolink_type = d["type"]
-        return identifier
+    def from_dict(d: dict) -> "Identifier":
+        return Identifier(
+            curie=d["identifier"],
+            label=d.get("label", ""),
+            biolink_type=d.get("type", []),
+            taxa=d.get("taxa", []),
+            description=d.get("description", []),
+        )
 
 
 class NodeNorm:
@@ -112,17 +108,15 @@ class NodeNorm:
             return None
 
     @functools.lru_cache(maxsize=None)
-    def get_clique_identifiers(self, curie, **kwargs) -> list[Identifier]:
+    def get_clique_identifiers(self, curie: str) -> list[Identifier]:
         """Return all ``Identifier`` objects in the NodeNorm clique for *curie*.
 
         :return: A list of ``Identifier`` objects (one per entry in ``equivalent_identifiers``),
             or an empty list if the CURIE is unknown or has no equivalents.
         """
-        result = self.normalize_curie(curie, **kwargs)
+        result = self.normalize_curie(curie)
         if not result:
             return []
         if "equivalent_identifiers" not in result:
             return []
-        return list(
-            map(lambda x: Identifier.from_dict(x), result["equivalent_identifiers"])
-        )
+        return [Identifier.from_dict(x) for x in result["equivalent_identifiers"]]
