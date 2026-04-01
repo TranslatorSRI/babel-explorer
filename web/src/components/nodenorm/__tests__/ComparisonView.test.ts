@@ -126,6 +126,47 @@ describe('ComparisonView', () => {
     expect(wrapper.text()).toContain('Prod');
   });
 
+// ── Column visibility in main row ─────────────────────────────────────────────
+
+describe('ComparisonView — column visibility', () => {
+  const singleInstance = new Map<string, NodeNormResponse>([
+    [devInstance.url, { 'MONDO:0004979': mondoFixture['MONDO:0004979'] }],
+  ]);
+  const singleInstanceProps = {
+    curies: ['MONDO:0004979'],
+    queriedInstances: [devInstance],
+    prefixMap: prefixMapSubset,
+    resultsByInstance: singleInstance,
+  };
+
+  it('shows type badges in main row when "type" is visible', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...singleInstanceProps, visibleColumns: new Set(['type']) },
+    });
+    expect(wrapper.find('.badge').exists()).toBe(true);
+  });
+
+  it('hides type badges in main row when "type" is not visible', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...singleInstanceProps, visibleColumns: new Set<string>() },
+    });
+    expect(wrapper.find('.badge').exists()).toBe(false);
+  });
+
+  it('updates type badge visibility when visibleColumns prop changes', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...singleInstanceProps, visibleColumns: new Set(['type']) },
+    });
+    expect(wrapper.find('.badge').exists()).toBe(true);
+
+    await wrapper.setProps({ visibleColumns: new Set<string>() });
+    expect(wrapper.find('.badge').exists()).toBe(false);
+
+    await wrapper.setProps({ visibleColumns: new Set(['type']) });
+    expect(wrapper.find('.badge').exists()).toBe(true);
+  });
+});
+
   it('collapses detail row on second click', async () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },
