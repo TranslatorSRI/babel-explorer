@@ -79,9 +79,9 @@ uv run ruff format
 
 2. **BabelXRefs** (`src/babel_explorer/core/babel_xrefs.py`):
    - Main query engine for cross-references
-   - Uses DuckDB to query Parquet files (`Concord.parquet`, `Identifiers.parquet`, `Metadata.parquet`)
-   - Supports recursive expansion of cross-references
-   - Creates ephemeral DuckDB databases in `data/<version>/output/duckdbs/`
+   - Uses DuckDB to query Parquet files (`Concord.parquet`, `Identifiers.parquet`)
+   - Supports recursive expansion of cross-references via a single `WITH RECURSIVE` query
+   - Uses ephemeral in-memory DuckDB connections (nothing written to disk)
 
 3. **NodeNorm** (`src/babel_explorer/core/nodenorm.py`):
    - Integration with NodeNormalization API (https://nodenormalization-sri.renci.org/)
@@ -98,14 +98,14 @@ uv run ruff format
 1. User provides CURIEs via CLI
 2. BabelDownloader ensures required Parquet files are downloaded
 3. BabelXRefs queries files using DuckDB
-4. If `--labels` or `--expand` flags are set, NodeNorm is queried for additional metadata
+4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata
 5. Results are printed to stdout
 
 ### Key Design Patterns
 
 - **Lazy downloading**: Files are only downloaded when first accessed
 - **LRU caching**: Heavy use of `@functools.lru_cache` to avoid redundant downloads and API calls
-- **Recursive expansion**: The `--expand` flag recursively follows all cross-references to build complete graphs
+- **Recursive expansion**: The `--recurse` flag recursively follows all cross-references to build complete graphs
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
 
 ## Testing
@@ -119,9 +119,10 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 
 | File | Unit | Integration | Slow | Total |
 |------|------|-------------|------|-------|
-| `tests/test_downloader.py` | 22 | 3 | 1 | 26 |
-| `tests/test_babel_xrefs.py` | 22 | 8 | 1 | 31 |
-| `tests/test_nodenorm.py` | 18 | 5 | 0 | 23 |
+| `tests/test_downloader.py` | 41 | 4 | 1 | 46 |
+| `tests/test_babel_xrefs.py` | 23 | 20 | 3 | 46 |
+| `tests/test_nodenorm.py` | 20 | 13 | 0 | 33 |
+| `tests/test_cli.py` | 24 | 0 | 0 | 24 |
 
 ### Test Infrastructure
 
@@ -131,6 +132,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 
 ### Key Dataclasses
 
+- **`Identifier`** — Frozen dataclass for a normalized NodeNorm entry (curie, label, biolink_type, taxa, description). Returned by `NodeNorm.get_identifier()` and `get_clique_identifiers()`.
 - **`CrossReference`** — Frozen dataclass for Concord.parquet rows (filename, subj, pred, obj)
 - **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
 - **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields). Returned by `BabelXRefs.get_curie_ids()`.
@@ -146,5 +148,4 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `data/<version>/duckdb/*.parquet`
-- Generated DuckDB databases: `data/<version>/output/duckdbs/`
 - Entry point: `src/babel_explorer/cli.py`
