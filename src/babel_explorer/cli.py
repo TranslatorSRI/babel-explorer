@@ -27,15 +27,24 @@ def parse_duration(value: str) -> int | float:
                 f"Invalid duration {value!r}: expected an integer followed by an optional unit "
                 "('s', 'm', 'h', or 'd'), or 'never'."
             )
+        if amount < 0:
+            raise click.BadParameter(
+                f"Invalid duration {value!r}: duration must be non-negative."
+            )
         return amount * units[lower[-1]]
     # Bare integer seconds
     try:
-        return int(lower)
+        result = int(lower)
     except ValueError:
         raise click.BadParameter(
             f"Invalid duration {value!r}: expected an integer number of seconds, optionally "
             "followed by 's', 'm', 'h', or 'd', or 'never'."
         )
+    if result < 0:
+        raise click.BadParameter(
+            f"Invalid duration {value!r}: duration must be non-negative."
+        )
+    return result
 
 
 @click.group()

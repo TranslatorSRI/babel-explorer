@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [master]
+    branches: [main]
   schedule:
     - cron: "0 17 * * 2"  # Tuesdays at 12pm EST (17:00 UTC); 1pm during EDT
   workflow_dispatch:

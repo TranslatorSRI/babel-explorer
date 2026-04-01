@@ -36,7 +36,8 @@ class BabelDownloader:
             to always issue a HEAD request. Defaults to 3 hours.
         :param timeout: HTTP request timeout in seconds.
         """
-        # We assume the URL base is correct (if not, we can fix it later).
+        if not url_base.endswith("/"):
+            url_base += "/"
         self.url_base = url_base
         self.retries = retries
         self.freshness_seconds = freshness_seconds
@@ -368,19 +369,3 @@ class BabelDownloader:
             f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes"
         )
         return local_path_to_download_to
-
-    @functools.lru_cache(maxsize=None)
-    def get_downloaded_dir(self, dirpath: str):
-        """
-        Download a directory recursively.
-
-        NOTE: This method is not implemented in the Python-based downloader.
-        Use get_downloaded_file() for individual files instead.
-
-        Raises:
-            NotImplementedError: This method is not implemented
-        """
-        raise NotImplementedError(
-            "Recursive directory downloads are not supported. "
-            "Use get_downloaded_file() for individual files."
-        )

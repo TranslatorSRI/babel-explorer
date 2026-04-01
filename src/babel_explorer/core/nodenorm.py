@@ -12,9 +12,9 @@ class Identifier:
 
     curie: str
     label: str = ""
-    biolink_type: list[str] = dataclasses.field(default_factory=list)
-    taxa: list[str] = dataclasses.field(default_factory=list)
-    description: list[str] = dataclasses.field(default_factory=list)
+    biolink_type: tuple[str, ...] = ()
+    taxa: tuple[str, ...] = ()
+    description: tuple[str, ...] = ()
 
     def __lt__(self, other):
         return self.curie < other.curie
@@ -24,9 +24,9 @@ class Identifier:
         return Identifier(
             curie=d["identifier"],
             label=d.get("label", ""),
-            biolink_type=d.get("type", []),
-            taxa=d.get("taxa", []),
-            description=d.get("description", []),
+            biolink_type=tuple(d.get("type", [])),
+            taxa=tuple(d.get("taxa", [])),
+            description=tuple(d.get("description", [])),
         )
 
 
@@ -84,6 +84,8 @@ class NodeNorm:
             ``type``, etc.), or ``None`` if the CURIE is not recognised by NodeNorm.
         :raises requests.HTTPError: If the API returns a non-2xx status code.
         """
+        if not self.nodenorm_url:
+            return None
         response = requests.get(
             f"{self.nodenorm_url}get_normalized_nodes",
             params={
