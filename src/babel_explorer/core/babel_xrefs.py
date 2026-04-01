@@ -39,9 +39,9 @@ class CrossReference:
 @dataclasses.dataclass(frozen=True)
 class LabeledCrossReference(CrossReference):
     subj_label: str
-    subj_biolink_type: str
+    subj_biolink_type: list[str]
     obj_label: str
-    obj_biolink_type: str
+    obj_biolink_type: list[str]
 
     def __str__(self):
         return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", subj_biolink_type="{self.subj_biolink_type}", obj_label="{self.obj_label}", obj_biolink_type="{self.obj_biolink_type}")"""

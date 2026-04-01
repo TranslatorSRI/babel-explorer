@@ -92,6 +92,4 @@ class NodeNorm:
             return []
         if "equivalent_identifiers" not in result:
             return []
-        return list(
-            map(lambda x: Identifier.from_dict(x), result["equivalent_identifiers"])
-        )
+        return [Identifier.from_dict(x) for x in result["equivalent_identifiers"]]
