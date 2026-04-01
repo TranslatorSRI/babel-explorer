@@ -76,7 +76,7 @@ def cli():
 def xrefs(
     curies: list[str],
     babel_url: str,
-    nodenorm_url,
+    nodenorm_url: str,
     local_dir: str,
     recurse: bool,
     labels: bool,
@@ -162,10 +162,12 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     default="https://nodenormalization-sri.renci.org/",
     help="NodeNorm URL to check for concord changes",
 )
-def test_concord(curies, nodenorm_url):
-    # We're trying to answer a simple question here: if the CURIEs we mention were combined, how would the cliques change in NodeNorm?
-    # By definition, this can only combine all the cliques mentioned in the CURIEs.
+def test_concord(curies: tuple[str, ...], nodenorm_url: str):
+    """
+    For each input CURIE, show what clique NodeNorm currently maps it to.
 
+    Answers: if these CURIEs were merged in Babel, which NodeNorm cliques would combine?
+    """
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)
