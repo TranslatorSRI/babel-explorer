@@ -34,15 +34,17 @@ class BabelDownloader:
             local_path = tempfile.gettempdir()
 
         # Make sure the local path is an existing directory or that we can create it.
-        if not os.path.exists(local_path):
+        try:
             os.makedirs(local_path, exist_ok=True)
-            self.local_path = local_path
-        elif os.path.exists(local_path) and os.path.isdir(local_path):
-            self.local_path = local_path
-        else:
+        except (FileExistsError, NotADirectoryError) as exc:
+            raise ValueError(
+                f"Invalid local_path (must be an existing directory): '{local_path}'"
+            ) from exc
+        if not os.path.isdir(local_path):
             raise ValueError(
                 f"Invalid local_path (must be an existing directory): '{local_path}'"
             )
+        self.local_path = local_path
 
     @functools.lru_cache(maxsize=None)
     def get_output_file(self, filename):
@@ -249,9 +251,10 @@ class BabelDownloader:
                                 "Server doesn't support resume, restarting from beginning"
                             )
                             resume_byte_pos = 0
-                            # Remove partial file
-                            if os.path.exists(local_path):
+                            try:
                                 os.remove(local_path)
+                            except FileNotFoundError:
+                                pass
                     else:
                         response.raise_for_status()
 
@@ -341,8 +344,10 @@ class BabelDownloader:
             )
             os.replace(tmp_path, local_path_to_download_to)
         except Exception:
-            if os.path.exists(tmp_path):
+            try:
                 os.remove(tmp_path)
+            except FileNotFoundError:
+                pass
             raise
 
         # Save sidecar metadata

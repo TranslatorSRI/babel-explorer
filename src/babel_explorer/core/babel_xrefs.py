@@ -194,9 +194,14 @@ class BabelXRefs:
         if recurse:
             return self._get_curie_xrefs_recursive(curies, label_curies)
 
-        xrefs = set()
+        seen = set()
+        xrefs = []
         for curie in curies:
             logging.info(f"Searching for cross-references for {curie}")
-            xrefs.update(self.get_curie_xref(curie, label_curies))
+            for xref in self.get_curie_xref(curie, label_curies):
+                key = (xref.filename, xref.subj, xref.pred, xref.obj)
+                if key not in seen:
+                    seen.add(key)
+                    xrefs.append(xref)
 
         return sorted(xrefs)

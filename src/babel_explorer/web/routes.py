@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from babel_explorer.core.babel_xrefs import LabeledCrossReference
 from babel_explorer.core.nodenorm import NodeNorm
 
 router = APIRouter()
@@ -42,7 +43,12 @@ def _render(request: Request, template: str, context: dict | None = None):
 
 
 def _get_nodenorm(request: Request, nodenorm_url: str) -> NodeNorm:
-    return NodeNorm(nodenorm_url) if nodenorm_url else request.app.state.nodenorm
+    if not nodenorm_url:
+        return request.app.state.nodenorm
+    cache: dict = request.app.state.nodenorm_cache
+    if nodenorm_url not in cache:
+        cache[nodenorm_url] = NodeNorm(nodenorm_url)
+    return cache[nodenorm_url]
 
 
 def _extract_extra_field_names(records) -> list[str]:
@@ -150,7 +156,7 @@ def htmx_xrefs(
     try:
         bxref = request.app.state.bxref
         xrefs = bxref.get_curie_xrefs(parsed, recurse=expand, label_curies=labels)
-        has_labels = labels and len(xrefs) > 0 and hasattr(xrefs[0], "subj_label")
+        has_labels = labels and xrefs and isinstance(xrefs[0], LabeledCrossReference)
         return _render(
             request,
             "_partials/xrefs_results.html",
@@ -255,7 +261,7 @@ def api_xrefs(
             "pred": xref.pred,
             "obj": xref.obj,
         }
-        if hasattr(xref, "subj_label"):
+        if isinstance(xref, LabeledCrossReference):
             row.update(
                 {
                     "subj_label": xref.subj_label,
@@ -345,7 +351,7 @@ def api_xrefs_csv(
 ):
     bxref = request.app.state.bxref
     xrefs = bxref.get_curie_xrefs(list(curie), recurse=expand, label_curies=labels)
-    if labels and xrefs and hasattr(xrefs[0], "subj_label"):
+    if labels and xrefs and isinstance(xrefs[0], LabeledCrossReference):
         headers = [
             "Filename",
             "Subject",

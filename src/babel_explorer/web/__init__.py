@@ -28,6 +28,7 @@ def create_app(
 
     app.state.templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     app.state.nodenorm_url = nodenorm_url
+    app.state.nodenorm_cache = {}
     app.state.downloader = BabelDownloader(babel_url, local_path=local_dir)
     app.state.nodenorm = NodeNorm(nodenorm_url)
     app.state.bxref = BabelXRefs(app.state.downloader, app.state.nodenorm)
