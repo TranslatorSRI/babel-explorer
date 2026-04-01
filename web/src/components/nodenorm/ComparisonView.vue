@@ -102,13 +102,15 @@ function getEquivCount(curie: string, instanceUrl: string): number {
               <br />
               <small class="text-muted">{{ getLabel(curie, inst.url) }}</small>
               <br />
-              <span
-                v-for="t in getTypes(curie, inst.url).slice(0, 2)"
-                :key="t"
-                class="badge bg-info text-dark me-1"
-                style="font-size: 0.7em;"
-              >{{ t.replace('biolink:', '') }}</span>
-              <br />
+              <template v-if="visibleColumns.has('type')">
+                <span
+                  v-for="t in getTypes(curie, inst.url).slice(0, 2)"
+                  :key="t"
+                  class="badge bg-info text-dark me-1"
+                  style="font-size: 0.7em;"
+                >{{ t.replace('biolink:', '') }}</span>
+                <br />
+              </template>
               <small class="text-muted">{{ getEquivCount(curie, inst.url) }} equiv. IDs</small>
             </template>
             <span v-else class="text-muted">Not found</span>
