@@ -6,7 +6,7 @@ from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
 
 
-def parse_duration(value: str) -> float:
+def parse_duration(value: str) -> int | float:
     """Parse a duration string like '3h', '30m', '1d', '7200', or 'never' → seconds."""
     units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     lower = (value or "").strip().lower()
@@ -76,7 +76,7 @@ def cli():
 def xrefs(
     curies: list[str],
     babel_url: str,
-    nodenorm_url,
+    nodenorm_url: str,
     local_dir: str,
     recurse: bool,
     labels: bool,
@@ -162,20 +162,21 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     default="https://nodenormalization-sri.renci.org/",
     help="NodeNorm URL to check for concord changes",
 )
-def test_concord(curies, nodenorm_url):
-    # We're trying to answer a simple question here: if the CURIEs we mention were combined, how would the cliques change in NodeNorm?
-    # By definition, this can only combine all the cliques mentioned in the CURIEs.
+def test_concord(curies: tuple[str, ...], nodenorm_url: str):
+    """
+    For each input CURIE, show what clique NodeNorm currently maps it to.
 
+    Answers: if these CURIEs were merged in Babel, which NodeNorm cliques would combine?
+    """
     nodenorm = NodeNorm(nodenorm_url)
     for curie in curies:
         identifiers = nodenorm.get_clique_identifiers(curie)
-        for identifier in identifiers or []:
+        for identifier in identifiers:
+            biolink = ", ".join(identifier.biolink_type)
             if identifier.label:
-                print(
-                    f"{curie}\t{identifier.curie}\t{identifier.label}\t{identifier.biolink_type}"
-                )
+                print(f"{curie}\t{identifier.curie}\t{identifier.label}\t{biolink}")
             else:
-                print(f"{curie}\t{identifier.curie}\t\t{identifier.biolink_type}")
+                print(f"{curie}\t{identifier.curie}\t\t{biolink}")
 
 
 @cli.command("web")

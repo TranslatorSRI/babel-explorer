@@ -92,13 +92,13 @@ class TestLabeledCrossReference:
             obj="B:2",
             filename="f",
             subj_label="Alpha",
-            subj_biolink_type="biolink:Disease",
+            subj_biolink_type=["biolink:Disease"],
             obj_label="Beta",
-            obj_biolink_type="biolink:Gene",
+            obj_biolink_type=["biolink:Gene"],
         )
         assert lxr.subj == "A:1"
         assert lxr.subj_label == "Alpha"
-        assert lxr.obj_biolink_type == "biolink:Gene"
+        assert lxr.obj_biolink_type == ["biolink:Gene"]
 
     def test_inherits_from_cross_reference(self):
         lxr = LabeledCrossReference(
@@ -107,9 +107,9 @@ class TestLabeledCrossReference:
             obj="B:2",
             filename="f",
             subj_label="",
-            subj_biolink_type="",
+            subj_biolink_type=[],
             obj_label="",
-            obj_biolink_type="",
+            obj_biolink_type=[],
         )
         assert isinstance(lxr, CrossReference)
 
@@ -120,9 +120,9 @@ class TestLabeledCrossReference:
             obj="B:2",
             filename="f",
             subj_label="",
-            subj_biolink_type="",
+            subj_biolink_type=[],
             obj_label="",
-            obj_biolink_type="",
+            obj_biolink_type=[],
         )
         assert lxr.curies == frozenset({"A:1", "B:2"})
 
@@ -133,9 +133,9 @@ class TestLabeledCrossReference:
             obj="B:2",
             filename="f",
             subj_label="Alpha",
-            subj_biolink_type="biolink:Disease",
+            subj_biolink_type=["biolink:Disease"],
             obj_label="Beta",
-            obj_biolink_type="biolink:Gene",
+            obj_biolink_type=["biolink:Gene"],
         )
         s = str(lxr)
         assert "A:1" in s

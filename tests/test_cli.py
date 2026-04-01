@@ -132,7 +132,7 @@ class TestCliCommands:
         mock_ident = MagicMock()
         mock_ident.curie = "MONDO:0004979"
         mock_ident.label = "asthma"
-        mock_ident.biolink_type = "biolink:Disease"
+        mock_ident.biolink_type = ["biolink:Disease"]
 
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
             mock_nn.return_value.get_clique_identifiers.return_value = [mock_ident]
@@ -149,7 +149,7 @@ class TestCliCommands:
         mock_ident = MagicMock()
         mock_ident.curie = "MONDO:0004979"
         mock_ident.label = None
-        mock_ident.biolink_type = "biolink:Disease"
+        mock_ident.biolink_type = ["biolink:Disease"]
 
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
             mock_nn.return_value.get_clique_identifiers.return_value = [mock_ident]
@@ -158,3 +158,36 @@ class TestCliCommands:
         assert result.exit_code == 0
         assert "MONDO:0004979" in result.output
         assert "biolink:Disease" in result.output
+
+    def test_test_concord_unknown_curie_produces_no_output(self):
+        """When get_clique_identifiers returns [], no output is produced and exit code is 0."""
+        runner = CliRunner()
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.return_value = []
+            result = runner.invoke(cli, ["test-concord", "UNKNOWN:9999"])
+        assert result.exit_code == 0
+        assert result.output.strip() == ""
+
+    def test_test_concord_multiple_curies(self):
+        """Each CURIE is looked up independently."""
+        runner = CliRunner()
+        mock_a = MagicMock()
+        mock_a.curie = "A:1"
+        mock_a.label = "Alpha"
+        mock_a.biolink_type = ["biolink:Disease"]
+        mock_b = MagicMock()
+        mock_b.curie = "B:2"
+        mock_b.label = "Beta"
+        mock_b.biolink_type = ["biolink:Gene"]
+
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.side_effect = [
+                [mock_a],
+                [mock_b],
+            ]
+            result = runner.invoke(cli, ["test-concord", "A:1", "B:2"])
+
+        assert result.exit_code == 0
+        assert mock_nn.return_value.get_clique_identifiers.call_count == 2
+        assert "Alpha" in result.output
+        assert "Beta" in result.output
