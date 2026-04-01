@@ -31,11 +31,11 @@ def _load_nodenorm_urls() -> dict[str, str]:
         }
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Identifier:
     curie: str
     label: str = ""
-    biolink_type: str = ""
+    biolink_type: list[str] = dataclasses.field(default_factory=list)
     taxa: list[str] = dataclasses.field(default_factory=list)
     description: list[str] = dataclasses.field(default_factory=list)
 
@@ -43,17 +43,14 @@ class Identifier:
         return self.curie < other.curie
 
     @staticmethod
-    def from_dict(d: dict):
-        identifier = Identifier(curie=d["identifier"])
-        if "label" in d:
-            identifier.label = d["label"]
-        if "taxa" in d:
-            identifier.taxa = d["taxa"]
-        if "description" in d:
-            identifier.description = d["description"]
-        if "type" in d:
-            identifier.biolink_type = d["type"]
-        return identifier
+    def from_dict(d: dict) -> "Identifier":
+        return Identifier(
+            curie=d["identifier"],
+            label=d.get("label", ""),
+            biolink_type=d.get("type", []),
+            taxa=d.get("taxa", []),
+            description=d.get("description", []),
+        )
 
 
 class NodeNorm:
@@ -77,6 +74,9 @@ class NodeNorm:
                 logging.debug(f"Found exact match for {curie}: {identifier}")
                 return Identifier.from_dict(identifier)
 
+        logging.debug(
+            f"No exact match for {curie!r} in equivalent_identifiers; returning bare Identifier"
+        )
         return Identifier(curie=curie)
 
     @functools.lru_cache(maxsize=None)
@@ -113,12 +113,10 @@ class NodeNorm:
             return None
 
     @functools.lru_cache(maxsize=None)
-    def get_clique_identifiers(self, curie, **kwargs):
-        result = self.normalize_curie(curie, **kwargs)
+    def get_clique_identifiers(self, curie: str) -> list[Identifier]:
+        result = self.normalize_curie(curie)
         if not result:
-            return None
+            return []
         if "equivalent_identifiers" not in result:
-            return None
-        return list(
-            map(lambda x: Identifier.from_dict(x), result["equivalent_identifiers"])
-        )
+            return []
+        return [Identifier.from_dict(x) for x in result["equivalent_identifiers"]]

@@ -2,6 +2,11 @@ name: CI
 
 on:
   pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: "0 17 * * 2"  # Tuesdays at 12pm EST (17:00 UTC); 1pm during EDT
+  workflow_dispatch:
 
 jobs:
   lint:
@@ -20,3 +25,12 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --group dev
       - run: uv run pytest -v -m "not integration"
+
+  integration-test:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --group dev
+      - run: uv run pytest -v -m "integration and not slow"
