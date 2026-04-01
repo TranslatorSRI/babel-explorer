@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, computed, onMounted } from 'vue';
 import type { NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
@@ -42,7 +42,6 @@ function urlsToTargets(urls: string[]): string[] {
 const loading = ref(false);
 const error = ref<string | null>(null);
 const queriedCuries = ref<string[]>([]);
-const hasResults = ref(false);
 const visibleColumns = reactive(new Set(['type']));
 const prefixMap = ref<Record<string, string>>({});
 
@@ -54,6 +53,7 @@ const initialOptions = ref<Partial<ApiOptions> | undefined>(undefined);
 // Results keyed by instance URL
 const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
 const queriedInstances = ref<NodeNormInstance[]>([]);
+const hasResults = computed(() => resultsByInstance.value.size > 0);
 
 // Abort controller for in-flight requests
 let abortController: AbortController | null = null;
@@ -147,7 +147,6 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
     if (!signal.aborted) {
       const targets = urlsToTargets(payload.instanceUrls);
       window.history.replaceState(null, '', buildQueryUrl(curies, targets, payload.options));
-      hasResults.value = true;
     }
   } catch (e) {
     if ((e as Error)?.name === 'AbortError') {
