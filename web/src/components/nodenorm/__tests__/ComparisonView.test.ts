@@ -25,6 +25,7 @@ const defaultProps = {
   queriedInstances: [devInstance, prodInstance],
   prefixMap: prefixMapSubset,
   visibleColumns: new Set(['type']),
+  typeFilter: new Set<string>(),
 };
 
 describe('ComparisonView', () => {
@@ -86,6 +87,7 @@ describe('ComparisonView', () => {
         ...defaultProps,
         queriedInstances: [devInstance],
         resultsByInstance: singleInstance,
+        typeFilter: new Set<string>(),
       },
     });
     const summaryRow = wrapper.findAll('tbody')[0].find('tr');
@@ -137,6 +139,7 @@ describe('ComparisonView — column visibility', () => {
     queriedInstances: [devInstance],
     prefixMap: prefixMapSubset,
     resultsByInstance: singleInstance,
+    typeFilter: new Set<string>(),
   };
 
   it('shows type badges in main row when "type" is visible', () => {
@@ -176,5 +179,61 @@ describe('ComparisonView — column visibility', () => {
     await summaryRow.trigger('click');
     await summaryRow.trigger('click');
     expect(tbody.findAll('tr').length).toBe(1);
+  });
+});
+
+// ── Type filtering ────────────────────────────────────────────────────────────
+
+describe('ComparisonView — type filtering', () => {
+  const results = new Map<string, NodeNormResponse>([
+    [devInstance.url, { 'MONDO:0004979': mondoFixture['MONDO:0004979'] }],
+  ]);
+  const baseProps = {
+    curies: ['MONDO:0004979'],
+    queriedInstances: [devInstance],
+    prefixMap: prefixMapSubset,
+    visibleColumns: new Set<string>(),
+    resultsByInstance: results,
+  };
+
+  it('shows all CURIEs when typeFilter is empty', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...baseProps, typeFilter: new Set<string>() },
+    });
+    expect(wrapper.text()).toContain('MONDO:0004979');
+  });
+
+  it('shows CURIE when its type matches the active filter', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...baseProps, typeFilter: new Set(['Disease']) },
+    });
+    expect(wrapper.text()).toContain('MONDO:0004979');
+  });
+
+  it('hides CURIE when its type does not match the active filter', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...baseProps, typeFilter: new Set(['Gene']) },
+    });
+    expect(wrapper.text()).not.toContain('MONDO:0004979');
+  });
+
+  it('shows empty-state message when filter excludes all CURIEs', () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...baseProps, typeFilter: new Set(['Gene']) },
+    });
+    expect(wrapper.text()).toContain('No CURIEs match the selected type filter');
+  });
+
+  it('updates visible rows reactively when typeFilter prop changes', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...baseProps, typeFilter: new Set<string>() },
+    });
+    expect(wrapper.text()).toContain('MONDO:0004979');
+
+    await wrapper.setProps({ typeFilter: new Set(['Gene']) });
+    expect(wrapper.text()).not.toContain('MONDO:0004979');
+
+    await wrapper.setProps({ typeFilter: new Set<string>() });
+    expect(wrapper.text()).toContain('MONDO:0004979');
   });
 });
