@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue';
-import type { NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
+import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
 import { loadPrefixMap } from '../../lib/curie-links';
@@ -95,6 +95,28 @@ async function handleShare() {
   await navigator.clipboard.writeText(window.location.href);
 }
 
+function handleExport() {
+  const data: Record<string, Record<string, NormalizedNode | null>> = {};
+  for (const curie of queriedCuries.value) {
+    data[curie] = {};
+    for (const inst of queriedInstances.value) {
+      data[curie][inst.name] = resultsByInstance.value.get(inst.url)?.[curie] ?? null;
+    }
+  }
+  const payload = {
+    queried_curies: queriedCuries.value,
+    instances: queriedInstances.value.map((i) => i.name),
+    results: data,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'nodenorm.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 async function handleSubmit(payload: { curies: string; instanceUrls: string[]; options: ApiOptions }) {
   const curies = parseCuries(payload.curies);
   if (curies.length === 0) {
@@ -161,41 +183,51 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
 </script>
 
 <template>
-  <NodeNormForm
-    :instances="instances"
-    :loading="loading"
-    :has-results="hasResults"
-    :initial-curies="initialCuries"
-    :initial-targets="initialTargets"
-    :initial-options="initialOptions"
-    @submit="handleSubmit"
-    @stop="stopQuery"
-    @share="handleShare"
-  />
+  <div class="card mb-4">
+    <div class="card-header">Query</div>
+    <div class="card-body">
+      <NodeNormForm
+        :instances="instances"
+        :loading="loading"
+        :has-results="hasResults"
+        :initial-curies="initialCuries"
+        :initial-targets="initialTargets"
+        :initial-options="initialOptions"
+        @submit="handleSubmit"
+        @stop="stopQuery"
+        @share="handleShare"
+      />
+    </div>
+  </div>
 
-  <div v-if="error" class="alert alert-danger mt-3">{{ error }}</div>
+  <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-  <div v-if="resultsByInstance.size > 0" class="mt-4">
-    <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-      <h5 class="mb-0">
+  <div v-if="resultsByInstance.size > 0" class="card">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <span>
         Results — {{ queriedCuries.length }} CURIE{{ queriedCuries.length !== 1 ? 's' : '' }},
         {{ queriedInstances.length }} instance{{ queriedInstances.length !== 1 ? 's' : '' }}
-      </h5>
+      </span>
       <ColumnVisibility :visible-columns="visibleColumns" @toggle="toggleColumn" />
     </div>
-
-    <ResultsSummary
-      :results-by-instance="resultsByInstance"
-      :queried-instances="queriedInstances"
-      :curies="queriedCuries"
-    />
-
-    <ComparisonView
-      :results-by-instance="resultsByInstance"
-      :queried-instances="queriedInstances"
-      :curies="queriedCuries"
-      :visible-columns="visibleColumns"
-      :prefix-map="prefixMap"
-    />
+    <div class="card-body">
+      <ResultsSummary
+        :results-by-instance="resultsByInstance"
+        :queried-instances="queriedInstances"
+        :curies="queriedCuries"
+      />
+      <ComparisonView
+        :results-by-instance="resultsByInstance"
+        :queried-instances="queriedInstances"
+        :curies="queriedCuries"
+        :visible-columns="visibleColumns"
+        :prefix-map="prefixMap"
+      />
+    </div>
+    <div class="card-footer">
+      <button type="button" class="btn btn-sm btn-outline-secondary" @click="handleExport">
+        Download JSON
+      </button>
+    </div>
   </div>
 </template>
