@@ -267,14 +267,15 @@ class TestEtagMatches:
         ):
             assert dl._etag_matches("https://example.com/f.parquet", meta) is True
 
-    def test_returns_false_on_request_error(self, tmp_path):
+    def test_returns_true_on_request_error(self, tmp_path):
+        """Network errors are treated as 'assume still fresh' to avoid triggering large re-downloads."""
         dl = self._make_dl(tmp_path)
         meta = {"etag": '"abc"'}
         with patch(
             "babel_explorer.core.downloader.requests.head",
             side_effect=requests.ConnectionError("fail"),
         ):
-            assert dl._etag_matches("https://example.com/f.parquet", meta) is False
+            assert dl._etag_matches("https://example.com/f.parquet", meta) is True
 
 
 class TestGetDownloadedFileTiers:

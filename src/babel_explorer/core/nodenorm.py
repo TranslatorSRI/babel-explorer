@@ -4,7 +4,7 @@ import requests
 import logging
 
 
-@dataclasses.dataclass
+@dataclasses.dataclass(frozen=True)
 class Identifier:
     curie: str
     label: str = ""
@@ -16,17 +16,14 @@ class Identifier:
         return self.curie < other.curie
 
     @staticmethod
-    def from_dict(d: dict):
-        identifier = Identifier(curie=d["identifier"])
-        if "label" in d:
-            identifier.label = d["label"]
-        if "taxa" in d:
-            identifier.taxa = d["taxa"]
-        if "description" in d:
-            identifier.description = d["description"]
-        if "type" in d:
-            identifier.biolink_type = d["type"]
-        return identifier
+    def from_dict(d: dict) -> "Identifier":
+        return Identifier(
+            curie=d["identifier"],
+            label=d.get("label", ""),
+            biolink_type=d.get("type", []),
+            taxa=d.get("taxa", []),
+            description=d.get("description", []),
+        )
 
 
 class NodeNorm:
@@ -86,8 +83,8 @@ class NodeNorm:
             return None
 
     @functools.lru_cache(maxsize=None)
-    def get_clique_identifiers(self, curie, **kwargs) -> list[Identifier]:
-        result = self.normalize_curie(curie, **kwargs)
+    def get_clique_identifiers(self, curie: str) -> list[Identifier]:
+        result = self.normalize_curie(curie)
         if not result:
             return []
         if "equivalent_identifiers" not in result:
