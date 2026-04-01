@@ -47,6 +47,8 @@ class TestParseDuration:
             "3.5h",
             "1.5",
             "3x",
+            "-5",
+            "-5h",
         ],
     )
     def test_invalid_inputs_raise_bad_parameter(self, value):

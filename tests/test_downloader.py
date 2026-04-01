@@ -60,6 +60,19 @@ class TestBabelDownloaderInit:
         )
         assert dl.freshness_seconds == 0
 
+    def test_url_base_trailing_slash_added(self, tmp_path):
+        """url_base without trailing slash gets one appended automatically."""
+        dl = BabelDownloader(
+            url_base="https://example.com/path", local_path=str(tmp_path)
+        )
+        assert dl.url_base == "https://example.com/path/"
+
+    def test_url_base_with_trailing_slash_unchanged(self, tmp_path):
+        dl = BabelDownloader(
+            url_base="https://example.com/path/", local_path=str(tmp_path)
+        )
+        assert dl.url_base == "https://example.com/path/"
+
     def test_invalid_path_raises_value_error(self):
         """Using a file path (not a directory) should raise ValueError."""
         with tempfile.NamedTemporaryFile(delete=False) as f:
@@ -608,16 +621,6 @@ class TestStreamDownload:
             mock_response, str(out_path), resume_byte_pos=5, chunk_size=1024
         )
         assert out_path.read_bytes() == b"startend"
-
-
-class TestGetDownloadedDir:
-    """Tests for get_downloaded_dir."""
-
-    def test_raises_not_implemented(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
-        dl.get_downloaded_dir.cache_clear()
-        with pytest.raises(NotImplementedError):
-            dl.get_downloaded_dir("some/dir")
 
 
 # ==========================================================================
