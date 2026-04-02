@@ -45,10 +45,18 @@ const queriedCuries = ref<string[]>([]);
 const visibleColumns = reactive(new Set(['type', 'taxa']));
 const prefixMap = ref<Record<string, string>>({});
 
-// Initial values from URL (passed down to NodeNormForm)
-const initialCuries = ref<string | undefined>(undefined);
-const initialTargets = ref<string[] | undefined>(undefined);
-const initialOptions = ref<Partial<ApiOptions> | undefined>(undefined);
+// Read URL state synchronously so NodeNormForm receives correct initial values
+// on its first render (before onMounted fires).
+const urlState = typeof window !== 'undefined' ? readQueryState() : null;
+const initialCuries = ref<string | undefined>(
+  urlState?.curies.length ? urlState.curies.join('\n') : undefined,
+);
+const initialTargets = ref<string[] | undefined>(
+  urlState?.targets.length ? urlState.targets : undefined,
+);
+const initialOptions = ref<Partial<ApiOptions> | undefined>(
+  urlState?.options && Object.keys(urlState.options).length ? urlState.options : undefined,
+);
 
 // Results keyed by instance URL
 const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
@@ -62,20 +70,14 @@ let abortController: AbortController | null = null;
 onMounted(async () => {
   prefixMap.value = await loadPrefixMap();
 
-  const state = readQueryState();
-  if (state.curies.length > 0) {
-    initialCuries.value = state.curies.join('\n');
-    initialTargets.value = state.targets;
-    initialOptions.value = state.options;
-
-    // Auto-submit the query encoded in the URL
-    const instanceUrls = state.targets.length > 0
-      ? state.targets.map(resolveTarget)
+  if (urlState?.curies.length) {
+    const instanceUrls = urlState.targets.length > 0
+      ? urlState.targets.map(resolveTarget)
       : [instances[0].url];
     await handleSubmit({
-      curies: initialCuries.value,
+      curies: urlState.curies.join('\n'),
       instanceUrls,
-      options: { ...DEFAULT_API_OPTIONS, ...state.options },
+      options: { ...DEFAULT_API_OPTIONS, ...urlState.options },
     });
   }
 });
