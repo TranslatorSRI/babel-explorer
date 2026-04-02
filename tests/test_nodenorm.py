@@ -22,25 +22,27 @@ VALID_CURIES = load_curies()
 
 
 class TestIdentifier:
+    """Tests for the Identifier dataclass."""
+
     def test_creation_with_defaults(self):
         ident = Identifier(curie="MONDO:0004979")
         assert ident.curie == "MONDO:0004979"
         assert ident.label == ""
-        assert ident.biolink_type == []
-        assert ident.taxa == []
-        assert ident.description == []
+        assert ident.biolink_type == ()
+        assert ident.taxa == ()
+        assert ident.description == ()
 
     def test_full_creation(self):
         ident = Identifier(
             curie="MONDO:0004979",
             label="asthma",
-            biolink_type=["biolink:Disease"],
-            taxa=["NCBITaxon:9606"],
-            description=["A chronic respiratory disease"],
+            biolink_type=("biolink:Disease",),
+            taxa=("NCBITaxon:9606",),
+            description=("A chronic respiratory disease",),
         )
         assert ident.label == "asthma"
-        assert ident.biolink_type == ["biolink:Disease"]
-        assert ident.taxa == ["NCBITaxon:9606"]
+        assert ident.biolink_type == ("biolink:Disease",)
+        assert ident.taxa == ("NCBITaxon:9606",)
 
     def test_from_dict_minimal(self):
         d = {"identifier": "X:1"}
@@ -59,15 +61,15 @@ class TestIdentifier:
         ident = Identifier.from_dict(d)
         assert ident.curie == "X:1"
         assert ident.label == "Alpha"
-        assert ident.biolink_type == ["biolink:NamedThing"]
-        assert ident.taxa == ["NCBITaxon:9606"]
+        assert ident.biolink_type == ("biolink:NamedThing",)
+        assert ident.taxa == ("NCBITaxon:9606",)
 
     def test_from_dict_partial(self):
         d = {"identifier": "X:1", "label": "Beta"}
         ident = Identifier.from_dict(d)
         assert ident.curie == "X:1"
         assert ident.label == "Beta"
-        assert ident.biolink_type == []
+        assert ident.biolink_type == ()
 
     def test_lt_ordering(self):
         a = Identifier(curie="A:1")
@@ -90,6 +92,8 @@ class TestIdentifier:
 
 
 class TestNodeNormInit:
+    """Tests for NodeNorm constructor and URL normalisation."""
+
     def test_default_url(self):
         nn = NodeNorm()
         assert nn.nodenorm_url == ""
@@ -98,8 +102,19 @@ class TestNodeNormInit:
         nn = NodeNorm(nodenorm_url="https://custom.api/")
         assert nn.nodenorm_url == "https://custom.api/"
 
+    def test_empty_url_normalize_curie_returns_none_without_network(self):
+        """NodeNorm('') must not make any HTTP calls and must return None."""
+        nn = NodeNorm("")
+        nn.normalize_curie.cache_clear()
+        with patch("babel_explorer.core.nodenorm.requests.get") as mock_get:
+            result = nn.normalize_curie("MONDO:0004979")
+            mock_get.assert_not_called()
+        assert result is None
+
 
 class TestNormalizeCurieMocked:
+    """Unit tests for NodeNorm.normalize_curie() with mocked HTTP responses."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
@@ -156,6 +171,8 @@ class TestNormalizeCurieMocked:
 
 
 class TestGetIdentifierMocked:
+    """Unit tests for NodeNorm.get_identifier() with mocked normalize_curie."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
@@ -208,6 +225,8 @@ class TestGetIdentifierMocked:
 
 
 class TestGetCliqueIdentifiersMocked:
+    """Unit tests for NodeNorm.get_clique_identifiers() with mocked normalize_curie."""
+
     def _make_nn(self):
         nn = NodeNorm(nodenorm_url="https://example.com/")
         nn.normalize_curie.cache_clear()
