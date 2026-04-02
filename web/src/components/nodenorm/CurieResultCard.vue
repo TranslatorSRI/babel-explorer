@@ -14,6 +14,10 @@ const props = defineProps<{
 
 const accordionId = computed(() => `curie-${props.index}`);
 const equivIds = computed(() => props.node?.equivalent_identifiers ?? []);
+const uniqueTaxa = computed(() => {
+  const all = props.node?.equivalent_identifiers.flatMap(id => id.taxa ?? []) ?? [];
+  return [...new Set(all)];
+});
 </script>
 
 <template>
@@ -37,6 +41,9 @@ const equivIds = computed(() => props.node?.equivalent_identifiers ?? []);
               class="badge bg-info text-dark me-1"
             >{{ t.replace('biolink:', '') }}</span>
             <span v-if="node.type.length > 2" class="badge bg-secondary">+{{ node.type.length - 2 }}</span>
+          </span>
+          <span v-if="visibleColumns.has('taxa') && uniqueTaxa.length > 0" class="ms-2 text-muted small">
+            {{ uniqueTaxa.join(', ') }}
           </span>
           <span class="ms-2 text-muted small">
             {{ equivIds.length }} equivalent ID{{ equivIds.length !== 1 ? 's' : '' }}
