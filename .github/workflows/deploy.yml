@@ -1,9 +1,8 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches:
-      - main
+  # New releases will cause the gh-pages branch to be updated.
+  release:
   # TODO: Remove the pull_request trigger below before merging this PR
   pull_request:
 
