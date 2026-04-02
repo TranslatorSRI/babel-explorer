@@ -130,7 +130,7 @@ function getEquivCount(curie: string, instanceUrl: string): number {
                 >{{ t.replace('biolink:', '') }}</span>
                 <br />
               </template>
-              <small class="text-muted">{{ getEquivCount(curie, inst.url) }} equiv. IDs</small>
+              <small class="text-muted">{{ getEquivCount(curie, inst.url) }} equivalent IDs</small>
             </template>
             <span v-else class="text-muted">Not found</span>
           </td>
