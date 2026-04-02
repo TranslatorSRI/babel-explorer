@@ -42,7 +42,7 @@ function urlsToTargets(urls: string[]): string[] {
 const loading = ref(false);
 const error = ref<string | null>(null);
 const queriedCuries = ref<string[]>([]);
-const visibleColumns = reactive(new Set(['type']));
+const visibleColumns = reactive(new Set(['type', 'taxa']));
 const prefixMap = ref<Record<string, string>>({});
 
 // Initial values from URL (passed down to NodeNormForm)

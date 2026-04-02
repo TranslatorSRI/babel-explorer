@@ -16,7 +16,7 @@ const columns = [
 
 <template>
   <div class="mb-3">
-    <span class="me-2 text-muted small">Show columns:</span>
+    <span class="me-2 text-muted small">Show:</span>
     <div class="btn-group btn-group-sm" role="group">
       <button
         v-for="col in columns"
