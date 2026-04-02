@@ -39,7 +39,7 @@ const equivIds = computed(() => props.node?.equivalent_identifiers ?? []);
             <span v-if="node.type.length > 2" class="badge bg-secondary">+{{ node.type.length - 2 }}</span>
           </span>
           <span class="ms-2 text-muted small">
-            {{ equivIds.length }} equiv. ID{{ equivIds.length !== 1 ? 's' : '' }}
+            {{ equivIds.length }} equivalent ID{{ equivIds.length !== 1 ? 's' : '' }}
           </span>
         </span>
         <span v-else class="text-danger">
