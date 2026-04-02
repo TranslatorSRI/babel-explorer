@@ -6,8 +6,6 @@ on:
       - main
   # TODO: Remove the pull_request trigger below before merging this PR
   pull_request:
-    branches:
-      - main
 
 permissions:
   contents: write
