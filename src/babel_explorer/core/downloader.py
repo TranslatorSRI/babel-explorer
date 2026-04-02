@@ -1,3 +1,5 @@
+"""HTTP downloader for Babel Parquet files with ETag-based freshness checking."""
+
 import functools
 import json
 import os
@@ -23,7 +25,19 @@ class BabelDownloader:
         freshness_seconds=3 * 3600,
         timeout: int = 30,
     ):
-        # We assume the URL base is correct (if not, we can fix it later).
+        """
+        :param url_base: Base URL of the Babel server (must end with ``/``).
+        :param local_path: Directory for cached downloads. Defaults to
+            ``tempfile.gettempdir()`` if ``None``; created automatically if it
+            does not exist.
+        :param retries: Maximum number of download retry attempts on failure.
+        :param freshness_seconds: How long a local file is considered fresh without
+            re-checking the server. Use ``float('inf')`` to never re-check, or ``0``
+            to always issue a HEAD request. Defaults to 3 hours.
+        :param timeout: HTTP request timeout in seconds.
+        """
+        if not url_base.endswith("/"):
+            url_base += "/"
         self.url_base = url_base
         self.retries = retries
         self.freshness_seconds = freshness_seconds
@@ -48,6 +62,7 @@ class BabelDownloader:
 
     @functools.lru_cache(maxsize=None)
     def get_output_file(self, filename):
+        """Return (and create) the local filesystem path for a given relative filename."""
         filepath = os.path.join(self.local_path, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         return filepath
@@ -359,19 +374,3 @@ class BabelDownloader:
             f"Downloaded {url_to_download} to {local_path_to_download_to}: {bytes_downloaded} bytes"
         )
         return local_path_to_download_to
-
-    @functools.lru_cache(maxsize=None)
-    def get_downloaded_dir(self, dirpath: str):
-        """
-        Download a directory recursively.
-
-        NOTE: This method is not implemented in the Python-based downloader.
-        Use get_downloaded_file() for individual files instead.
-
-        Raises:
-            NotImplementedError: This method is not implemented
-        """
-        raise NotImplementedError(
-            "Recursive directory downloads are not supported. "
-            "Use get_downloaded_file() for individual files."
-        )

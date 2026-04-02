@@ -1,6 +1,10 @@
-# Babel XRefs is a tool for accessing and querying the intermediate files
-# that we make available with Babel builds. This allows you to find out
-# why we consider two identifiers to be identical.
+"""Query engine for Babel cross-reference intermediate files.
+
+Provides access to Concord.parquet and Identifiers.parquet via DuckDB,
+allowing callers to discover why two biological/chemical identifiers are
+considered identical in a Babel build.
+"""
+
 import dataclasses
 import logging
 import duckdb
@@ -12,6 +16,8 @@ from babel_explorer.core.nodenorm import NodeNorm
 
 @dataclasses.dataclass(frozen=True)
 class CrossReference:
+    """A single cross-reference edge read from Concord.parquet."""
+
     filename: str
     subj: str
     pred: str
@@ -19,12 +25,14 @@ class CrossReference:
 
     @staticmethod
     def from_tuple(tuple: tuple[str, str, str, str]):
+        """Construct from a ``(filename, subj, pred, obj)`` database row tuple."""
         return CrossReference(
             filename=tuple[0], subj=tuple[1], pred=tuple[2], obj=tuple[3]
         )
 
     @property
     def curies(self):
+        """The frozenset of both CURIEs in this edge (subject and object)."""
         return frozenset([self.subj, self.obj])
 
     def __lt__(self, other):
@@ -38,10 +46,12 @@ class CrossReference:
 
 @dataclasses.dataclass(frozen=True)
 class LabeledCrossReference(CrossReference):
+    """A CrossReference enriched with human-readable labels and Biolink types from NodeNorm."""
+
     subj_label: str
-    subj_biolink_type: list[str]
+    subj_biolink_type: tuple[str, ...]
     obj_label: str
-    obj_biolink_type: list[str]
+    obj_biolink_type: tuple[str, ...]
 
     def __str__(self):
         return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", subj_biolink_type="{self.subj_biolink_type}", obj_label="{self.obj_label}", obj_biolink_type="{self.obj_biolink_type}")"""
@@ -64,6 +74,7 @@ class IdentifierRecord:
         return IdentifierRecord(curie=row[curie_idx], extra_fields=extra)
 
     def __str__(self):
+        """Return a ``key=value`` string of the CURIE and all extra fields."""
         parts = [f"curie={self.curie!r}"]
         for name, value in self.extra_fields:
             parts.append(f"{name}={value!r}")
@@ -71,7 +82,20 @@ class IdentifierRecord:
 
 
 class BabelXRefs:
+    """Query engine for Babel cross-reference and identifier Parquet files.
+
+    Uses DuckDB for in-memory SQL queries against Concord.parquet and
+    Identifiers.parquet. NodeNorm is optional and only required when
+    ``label_curies=True`` is passed to enrichment-aware methods.
+    """
+
     def __init__(self, downloader: BabelDownloader, nodenorm: NodeNorm = None):
+        """
+        :param downloader: A configured ``BabelDownloader`` that provides local paths
+            to the required Parquet files, downloading them on first access.
+        :param nodenorm: Optional ``NodeNorm`` client. Required only when callers pass
+            ``label_curies=True``; may be ``None`` for label-free queries.
+        """
         self.downloader = downloader
         self.nodenorm = nodenorm
 
@@ -101,6 +125,16 @@ class BabelXRefs:
 
     @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):
+        """Return all cross-references in Concord.parquet where *curie* is the subject or object.
+
+        Results are LRU-cached per ``(curie, label_curies)`` pair.
+
+        :param curie: The CURIE to look up.
+        :param label_curies: If ``True``, annotate each result with NodeNorm labels and
+            Biolink types. Requires a NodeNorm instance to have been passed to ``__init__``.
+        :raises ValueError: If ``label_curies=True`` but no NodeNorm instance is available.
+        :return: A list of ``CrossReference`` (or ``LabeledCrossReference``) objects.
+        """
         if label_curies and self.nodenorm is None:
             raise ValueError(
                 "label_curies=True requires a configured NodeNorm instance (nodenorm was None)."
