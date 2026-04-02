@@ -75,7 +75,7 @@ describe('ComparisonView', () => {
       props: { ...defaultProps, resultsByInstance: agreeResults },
     });
     const equivCount = mondoFixture['MONDO:0004979'].equivalent_identifiers.length;
-    expect(wrapper.text()).toContain(`${equivCount} equiv. IDs`);
+    expect(wrapper.text()).toContain(`${equivCount} equivalent IDs`);
   });
 
   it('does not highlight row when only one instance queried', () => {

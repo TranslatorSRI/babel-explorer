@@ -38,7 +38,7 @@ describe('CurieResultCard', () => {
     const wrapper = mount(CurieResultCard, {
       props: { inputCurie: 'NCIT:C55060', node: smallCliqueNode, ...defaultProps },
     });
-    expect(wrapper.text()).toContain('2 equiv. IDs');
+    expect(wrapper.text()).toContain('2 equivalent IDs');
   });
 
   it('does not show expand button for small clique (≤10 equiv IDs)', () => {
