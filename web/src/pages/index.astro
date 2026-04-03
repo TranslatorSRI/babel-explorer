@@ -9,8 +9,9 @@ const base = rawBase.endsWith('/') ? rawBase : rawBase + '/';
   <p class="mb-4">
     Browser-based tools for exploring
     <a href="https://github.com/TranslatorSRI/Babel" target="_blank">Babel</a>
-    cross-references and
-    <a href="https://nodenormalization-sri.renci.org/docs" target="_blank">NodeNormalization</a>
+    cross-references,
+    <a href="https://nodenormalization-sri.renci.org/docs" target="_blank">NodeNormalization</a>,
+    and <a href="https://name-resolution-sri.renci.org/docs" target="_blank">NameRes</a>
     results.
   </p>
 
@@ -24,6 +25,18 @@ const base = rawBase.endsWith('/') ? rawBase : rawBase + '/';
             across NodeNorm deployments.
           </p>
           <a href={`${base}nodenorm`} class="btn btn-primary">Open NodeNorm</a>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-6 col-lg-4">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">NameRes</h5>
+          <p class="card-text">
+            Look up biomedical concepts by name, compare results across
+            NameRes deployments, validate expected CURIEs.
+          </p>
+          <a href={`${base}nameres`} class="btn btn-primary">Open NameRes</a>
         </div>
       </div>
     </div>
