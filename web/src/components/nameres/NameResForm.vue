@@ -3,7 +3,7 @@ import { ref, computed } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
 
-const DEFAULT_TERMS = 'asthma\ndiabetes\nheart failure';
+const DEFAULT_TERMS = 'asthma [[MONDO:0004979]]\ndiabetes type 2 [[MONDO:0005148]]\ndiabetes\nheart failure';
 
 const props = defineProps<{
   instances: NameResInstance[];
@@ -121,7 +121,7 @@ function onShare() {
         v-model="terms"
         class="form-control"
         rows="5"
-        placeholder="asthma [[MONDO:0004979]]&#10;diabetes&#10;heart failure [[MONDO:0005252]]"
+        placeholder="asthma [[MONDO:0004979]]&#10;diabetes type 2 [[MONDO:0005148]]&#10;diabetes&#10;heart failure"
       ></textarea>
     </div>
 
