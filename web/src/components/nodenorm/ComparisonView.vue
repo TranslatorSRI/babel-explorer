@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance } from '../../lib/types';
+import { getDirectTypes } from '../../lib/nodenorm-api';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 import CurieLink from '../shared/CurieLink.vue';
 import CurieDetailPanel from './CurieDetailPanel.vue';
 
@@ -22,8 +24,10 @@ const visibleCuries = computed(() => {
   if (props.typeFilter.size === 0) return props.curies;
   return props.curies.filter((curie) =>
     props.queriedInstances.some((inst) => {
-      const t = props.resultsByInstance.get(inst.url)?.[curie]?.type?.[0];
-      return t ? props.typeFilter.has(t.replace('biolink:', '')) : false;
+      const node = props.resultsByInstance.get(inst.url)?.[curie];
+      return node
+        ? getDirectTypes(node).some((t) => props.typeFilter.has(t.replace('biolink:', '')))
+        : false;
     }),
   );
 });
@@ -64,12 +68,6 @@ function getLabel(curie: string, instanceUrl: string): string {
   const resp = props.resultsByInstance.get(instanceUrl);
   if (!resp) return '';
   return resp[curie]?.id?.label ?? '';
-}
-
-function getTypes(curie: string, instanceUrl: string): string[] {
-  const resp = props.resultsByInstance.get(instanceUrl);
-  if (!resp) return [];
-  return resp[curie]?.type ?? [];
 }
 
 function getEquivCount(curie: string, instanceUrl: string): number {
@@ -123,11 +121,11 @@ function getEquivCount(curie: string, instanceUrl: string): number {
               <br />
               <template v-if="visibleColumns.has('type')">
                 <span
-                  v-for="t in getTypes(curie, inst.url).slice(0, 2)"
+                  v-for="t in getDirectTypes(getNode(curie, inst.url)!)"
                   :key="t"
                   class="badge bg-info text-dark me-1"
                   style="font-size: 0.7em;"
-                >{{ t.replace('biolink:', '') }}</span>
+                ><BiolinkTypeLink :type="t" /></span>
                 <br />
               </template>
               <small class="text-muted">{{ getEquivCount(curie, inst.url) }} equivalent IDs</small>
