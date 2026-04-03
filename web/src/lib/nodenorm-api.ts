@@ -1,4 +1,4 @@
-import type { ApiOptions, NodeNormResponse } from './types';
+import type { ApiOptions, NormalizedNode, NodeNormResponse } from './types';
 
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
@@ -30,6 +30,41 @@ export async function fetchNormalizedNodes(
     throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
   }
   return resp.json();
+}
+
+/**
+ * Compute the "direct types" for a normalized node.
+ *
+ * NodeNorm returns two distinct type structures:
+ *
+ *   node.type — The full biolink type *hierarchy* for the clique, from most-specific
+ *     (type[0]) to root (NamedThing). Example: ["biolink:Gene", "biolink:BiologicalEntity",
+ *     "biolink:NamedThing"]. This is the lineage, not just the direct type, so it is
+ *     not useful for display on its own.
+ *
+ *   identifier.type — The *direct* biolink type for one specific identifier within the
+ *     clique. Only present when individual_types=true is passed to the API (always
+ *     enabled in this app). Example: "biolink:Gene" for NCBIGene entries,
+ *     "biolink:Protein" for UniProtKB entries in a conflated gene+protein result.
+ *
+ * This function collects unique type values from equivalent_identifiers[*].type,
+ * preserving first-appearance order. For most non-conflated results this returns a
+ * single type (e.g. ["biolink:Gene"]). For conflated results (e.g. a gene/protein
+ * conflation) it returns 2–5 types in the order they first appear among the identifiers.
+ *
+ * Falls back to [node.type[0]] if no individual types are present (e.g. if the API
+ * was called without individual_types=true).
+ */
+export function getDirectTypes(node: NormalizedNode): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const id of node.equivalent_identifiers) {
+    if (id.type && !seen.has(id.type)) {
+      seen.add(id.type);
+      result.push(id.type);
+    }
+  }
+  return result.length > 0 ? result : node.type.slice(0, 1);
 }
 
 /**

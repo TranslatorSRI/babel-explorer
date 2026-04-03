@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { NormalizedNode } from '../../lib/types';
+import { getDirectTypes } from '../../lib/nodenorm-api';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 import EquivalentIdTable from './EquivalentIdTable.vue';
 
 const EXPAND_THRESHOLD = 10;
@@ -14,6 +16,7 @@ const props = defineProps<{
 const expanded = ref(false);
 
 const equivIds = computed(() => props.node?.equivalent_identifiers ?? []);
+const directTypes = computed(() => props.node ? getDirectTypes(props.node) : []);
 const isLargeClique = computed(() => equivIds.value.length > EXPAND_THRESHOLD);
 const showTable = computed(() => !isLargeClique.value || expanded.value);
 
@@ -41,8 +44,8 @@ const prefixSummary = computed(() => {
       </div>
       <div class="mb-1">
         <strong>Types:</strong>
-        <span v-for="t in node.type" :key="t" class="badge bg-info text-dark me-1">
-          {{ t.replace('biolink:', '') }}
+        <span v-for="t in directTypes" :key="t" class="badge bg-info text-dark me-1">
+          <BiolinkTypeLink :type="t" />
         </span>
       </div>
       <div v-if="node.information_content" class="mb-1">

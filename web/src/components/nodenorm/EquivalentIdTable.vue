@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { NormalizedIdentifier } from '../../lib/types';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 import CurieLink from '../shared/CurieLink.vue';
 
 defineProps<{
@@ -35,7 +36,9 @@ function truncate(s: string | undefined, max = 80): string {
         <tr v-for="id in identifiers" :key="id.identifier">
           <td><CurieLink :curie="id.identifier" :prefix-map="prefixMap" /></td>
           <td>{{ id.label || '' }}</td>
-          <td v-if="visibleColumns.has('type')">{{ id.type || '' }}</td>
+          <td v-if="visibleColumns.has('type')">
+            <BiolinkTypeLink v-if="id.type" :type="id.type" />
+          </td>
           <td v-if="visibleColumns.has('taxa')">{{ formatList(id.taxa) }}</td>
           <td v-if="visibleColumns.has('description')">
             <span :title="id.description">{{ truncate(id.description) }}</span>

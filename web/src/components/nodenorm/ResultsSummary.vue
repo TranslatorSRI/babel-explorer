@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { NodeNormResponse, NodeNormInstance } from '../../lib/types';
+import { getDirectTypes } from '../../lib/nodenorm-api';
 
 const props = defineProps<{
   resultsByInstance: Map<string, NodeNormResponse>;
@@ -68,12 +69,14 @@ const typeCounts = computed((): [string, number][] => {
   const curiesByType = new Map<string, Set<string>>();
   for (const curie of props.curies) {
     for (const inst of props.queriedInstances) {
-      const t = props.resultsByInstance.get(inst.url)?.[curie]?.type?.[0];
-      if (!t) continue;
-      const label = t.replace('biolink:', '');
-      if (!curiesByType.has(label)) curiesByType.set(label, new Set());
-      curiesByType.get(label)!.add(curie);
-      break; // one type per CURIE — take the first instance that finds it
+      const node = props.resultsByInstance.get(inst.url)?.[curie];
+      if (!node) continue;
+      for (const t of getDirectTypes(node)) {
+        const label = t.replace('biolink:', '');
+        if (!curiesByType.has(label)) curiesByType.set(label, new Set());
+        curiesByType.get(label)!.add(curie);
+      }
+      break; // take the first instance that finds this CURIE
     }
   }
   return [...curiesByType.entries()]

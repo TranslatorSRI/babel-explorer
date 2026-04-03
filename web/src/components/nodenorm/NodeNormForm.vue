@@ -188,10 +188,6 @@ function onShare() {
           <label for="opt-desc" class="form-check-label small">Description</label>
         </div>
         <div class="form-check">
-          <input id="opt-types" v-model="options.individual_types" type="checkbox" class="form-check-input" />
-          <label for="opt-types" class="form-check-label small">Individual Types</label>
-        </div>
-        <div class="form-check">
           <input id="opt-taxa" v-model="options.include_taxa" type="checkbox" class="form-check-input" />
           <label for="opt-taxa" class="form-check-label small">Include Taxa</label>
         </div>
