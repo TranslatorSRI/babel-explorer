@@ -61,6 +61,7 @@ const initialOptions = ref<Partial<ApiOptions> | undefined>(
 // Results keyed by instance URL
 const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
 const queriedInstances = ref<NodeNormInstance[]>([]);
+const queriedOptions = ref<ApiOptions>(DEFAULT_API_OPTIONS);
 const hasResults = computed(() => resultsByInstance.value.size > 0);
 const typeFilter = ref(new Set<string>());
 
@@ -142,6 +143,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
   error.value = null;
   resultsByInstance.value = new Map();
   queriedCuries.value = curies;
+  queriedOptions.value = payload.options;
   typeFilter.value = new Set();
 
   try {
@@ -238,6 +240,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :visible-columns="visibleColumns"
         :prefix-map="prefixMap"
         :type-filter="typeFilter"
+        :api-options="queriedOptions"
       />
     </div>
     <div class="card-footer">

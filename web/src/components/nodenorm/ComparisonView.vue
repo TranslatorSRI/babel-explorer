@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { NormalizedNode, NodeNormResponse, NodeNormInstance } from '../../lib/types';
-import { getDirectTypes } from '../../lib/nodenorm-api';
+import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
+import { getDirectTypes, buildNodeNormUrl } from '../../lib/nodenorm-api';
 import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 import CurieLink from '../shared/CurieLink.vue';
 import CurieDetailPanel from './CurieDetailPanel.vue';
@@ -16,6 +16,7 @@ const props = defineProps<{
   visibleColumns: Set<string>;
   /** Active type filters — only CURIEs whose most-specific type is in this set are shown. */
   typeFilter: Set<string>;
+  apiOptions: ApiOptions;
 }>();
 
 const expandedCuries = ref(new Set<string>());
@@ -145,7 +146,17 @@ function getEquivCount(curie: string, instanceUrl: string): number {
                 class="flex-fill border-end p-3"
                 :style="{ minWidth: `${100 / queriedInstances.length}%`, maxWidth: `${100 / queriedInstances.length}%` }"
               >
-                <div class="fw-semibold text-muted small mb-2">{{ inst.name }}</div>
+                <div class="fw-semibold text-muted small mb-2 d-flex align-items-center gap-1">
+                  {{ inst.name }}
+                  <a
+                    :href="buildNodeNormUrl(inst.url, curie, apiOptions)"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-muted"
+                    title="Open raw API response"
+                    @click.stop
+                  >↗</a>
+                </div>
                 <CurieDetailPanel
                   :node="getNode(curie, inst.url)"
                   :visible-columns="visibleColumns"
