@@ -33,6 +33,21 @@ export async function fetchNormalizedNodes(
 }
 
 /**
+ * Build the NodeNorm GET URL for a single CURIE with the given options.
+ * Useful for linking directly to the raw API response.
+ */
+export function buildNodeNormUrl(baseUrl: string, curie: string, options: ApiOptions): string {
+  const url = new URL('get_normalized_nodes', baseUrl);
+  url.searchParams.append('curie', curie);
+  url.searchParams.set('conflate', String(options.conflate));
+  url.searchParams.set('drug_chemical_conflate', String(options.drug_chemical_conflate));
+  url.searchParams.set('description', String(options.description));
+  url.searchParams.set('individual_types', String(options.individual_types));
+  url.searchParams.set('include_taxa', String(options.include_taxa));
+  return url.toString();
+}
+
+/**
  * Compute the "direct types" for a normalized node.
  *
  * NodeNorm returns two distinct type structures:

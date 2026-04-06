@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ComparisonView from '../ComparisonView.vue';
 import type { NodeNormResponse, NodeNormInstance } from '../../../lib/types';
+import { DEFAULT_API_OPTIONS } from '../../../lib/types';
 import mondoFixture from '../../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
 import prefixMapSubset from '../../../../../tests/fixtures/prefix_map_subset.json';
 
@@ -26,6 +27,7 @@ const defaultProps = {
   prefixMap: prefixMapSubset,
   visibleColumns: new Set(['type']),
   typeFilter: new Set<string>(),
+  apiOptions: DEFAULT_API_OPTIONS,
 };
 
 describe('ComparisonView', () => {
@@ -140,6 +142,7 @@ describe('ComparisonView — column visibility', () => {
     prefixMap: prefixMapSubset,
     resultsByInstance: singleInstance,
     typeFilter: new Set<string>(),
+    apiOptions: DEFAULT_API_OPTIONS,
   };
 
   it('shows type badges in main row when "type" is visible', () => {
@@ -194,6 +197,7 @@ describe('ComparisonView — type filtering', () => {
     prefixMap: prefixMapSubset,
     visibleColumns: new Set<string>(),
     resultsByInstance: results,
+    apiOptions: DEFAULT_API_OPTIONS,
   };
 
   it('shows all CURIEs when typeFilter is empty', () => {
