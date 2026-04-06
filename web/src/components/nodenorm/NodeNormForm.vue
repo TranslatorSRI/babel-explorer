@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import type { NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
+import InstanceSelector from '../shared/InstanceSelector.vue';
 
 const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
 
@@ -23,66 +24,20 @@ const emit = defineEmits<{
   share: [];
 }>();
 
-/** Resolve a target (env key or full URL) to an instance URL. */
-function resolveTarget(target: string): string {
-  return props.instances.find((i) => i.env === target || i.url === target)?.url ?? target;
-}
-
 // Form state
 const curies = ref(props.initialCuries ?? DEFAULT_CURIES);
 const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOptions });
 
-// Unified instance selection — always checkboxes
-const selectedUrls = ref(new Set<string>(
-  props.initialTargets?.length
-    ? props.initialTargets.map(resolveTarget)
-    : [props.instances[0]?.url ?? ''],
-));
-
-// Custom URL state
-const customUrlInput = ref('');
-const customUrlAdded = ref<string | null>(null);
-
-// Detect custom URL in initialTargets (a target that isn't a known env key or instance URL)
-if (props.initialTargets?.length) {
-  const customTarget = props.initialTargets.find(
-    (t) => !props.instances.find((i) => i.env === t || i.url === t),
-  );
-  if (customTarget) {
-    customUrlAdded.value = customTarget;
-    selectedUrls.value.add(customTarget);
-  }
-}
+// Instance selection driven by InstanceSelector via v-model
+const selectedUrls = ref<string[]>([]);
 
 // Share button "Copied!" flash
 const copied = ref(false);
 
-function toggleUrl(url: string) {
-  if (selectedUrls.value.has(url)) {
-    selectedUrls.value.delete(url);
-  } else {
-    selectedUrls.value.add(url);
-  }
-}
-
-function addCustomUrl() {
-  const url = customUrlInput.value.trim();
-  if (!url) return;
-  customUrlAdded.value = url;
-  selectedUrls.value.add(url);
-  customUrlInput.value = '';
-}
-
-function removeCustomUrl() {
-  if (customUrlAdded.value) selectedUrls.value.delete(customUrlAdded.value);
-  customUrlAdded.value = null;
-}
-
 function onSubmit() {
   if (!curies.value.trim()) return;
-  const urls = [...selectedUrls.value];
-  if (urls.length === 0) return;
-  emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
+  if (selectedUrls.value.length === 0) return;
+  emit('submit', { curies: curies.value, instanceUrls: selectedUrls.value, options: { ...options.value } });
 }
 
 const ADVANCED_KEYS = ['description', 'individual_types', 'include_taxa'] as const;
@@ -109,61 +64,15 @@ function onShare() {
       ></textarea>
     </div>
 
-    <!-- Instance selection — always checkboxes -->
+    <!-- Instance selection -->
     <div class="row mb-3">
       <div class="col-md-6">
         <label class="form-label">NodeNorm Instances</label>
-        <div v-for="inst in instances" :key="inst.url" class="form-check">
-          <input
-            :id="`inst-${inst.env}`"
-            type="checkbox"
-            class="form-check-input"
-            :checked="selectedUrls.has(inst.url)"
-            @change="toggleUrl(inst.url)"
-          />
-          <label :for="`inst-${inst.env}`" class="form-check-label">{{ inst.name }}</label>
-        </div>
-
-        <!-- Custom URL row (shown once one has been added) -->
-        <div v-if="customUrlAdded !== null" class="form-check mt-1">
-          <input
-            id="inst-custom"
-            type="checkbox"
-            class="form-check-input"
-            :checked="selectedUrls.has(customUrlAdded!)"
-            @change="toggleUrl(customUrlAdded!)"
-          />
-          <label for="inst-custom" class="form-check-label d-flex align-items-center gap-1">
-            <span>Custom:</span>
-            <span class="text-muted small text-truncate" style="max-width: 240px">{{ customUrlAdded }}</span>
-            <button
-              type="button"
-              class="btn-close"
-              style="font-size: 0.65rem"
-              aria-label="Remove custom URL"
-              @click.stop="removeCustomUrl()"
-            ></button>
-          </label>
-        </div>
-
-        <!-- Add custom URL control -->
-        <div class="mt-2 d-flex gap-2 align-items-center">
-          <input
-            v-model="customUrlInput"
-            type="url"
-            class="form-control form-control-sm"
-            placeholder="Add custom URL…"
-            style="max-width: 280px"
-          />
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-secondary"
-            :disabled="!customUrlInput.trim()"
-            @click="addCustomUrl()"
-          >
-            Add
-          </button>
-        </div>
+        <InstanceSelector
+          :instances="instances"
+          v-model="selectedUrls"
+          :initial-targets="initialTargets"
+        />
       </div>
     </div>
 
