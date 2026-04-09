@@ -71,6 +71,44 @@ class TestIdentifier:
         assert ident.label == "Beta"
         assert ident.biolink_type == ()
 
+    def test_from_dict_type_as_string(self):
+        """NodeNorm may return 'type' as a bare string for individual identifiers."""
+        d = {"identifier": "X:1", "type": "biolink:Disease"}
+        ident = Identifier.from_dict(d)
+        assert ident.biolink_type == ("biolink:Disease",), (
+            "biolink_type should be a 1-tuple, not a tuple of characters"
+        )
+
+    def test_from_dict_description_as_string(self):
+        """NodeNorm may return 'description' as a bare string."""
+        d = {"identifier": "X:1", "description": "A chronic disease"}
+        ident = Identifier.from_dict(d)
+        assert ident.description == ("A chronic disease",), (
+            "description should be a 1-tuple, not a tuple of characters"
+        )
+
+    def test_from_dict_taxa_as_string(self):
+        """NodeNorm may return 'taxa' as a bare string."""
+        d = {"identifier": "X:1", "taxa": "NCBITaxon:9606"}
+        ident = Identifier.from_dict(d)
+        assert ident.taxa == ("NCBITaxon:9606",), (
+            "taxa should be a 1-tuple, not a tuple of characters"
+        )
+
+    def test_from_dict_all_fields_as_strings(self):
+        """All three tuple fields as strings produce correct single-element tuples."""
+        d = {
+            "identifier": "X:1",
+            "label": "Alpha",
+            "type": "biolink:NamedThing",
+            "taxa": "NCBITaxon:9606",
+            "description": "Some description",
+        }
+        ident = Identifier.from_dict(d)
+        assert ident.biolink_type == ("biolink:NamedThing",)
+        assert ident.taxa == ("NCBITaxon:9606",)
+        assert ident.description == ("Some description",)
+
     def test_lt_ordering(self):
         a = Identifier(curie="A:1")
         b = Identifier(curie="B:2")
