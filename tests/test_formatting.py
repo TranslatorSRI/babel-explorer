@@ -6,10 +6,11 @@ import io
 import json
 
 import pytest
+from rich.console import Console
 
 from babel_explorer.core.babel_xrefs import CrossReference, LabeledCrossReference, IdentifierRecord
 from babel_explorer.core.nodenorm import Identifier
-from babel_explorer.formatting import _record_to_dict, write_records
+from babel_explorer.formatting import _record_to_dict, write_records, make_console, hl_curie
 
 
 # ---------------------------------------------------------------------------
@@ -53,6 +54,50 @@ def identifier():
         taxa=("NCBITaxon:9606",),
         description=("A chronic inflammatory disease",),
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests for make_console and hl_curie
+# ---------------------------------------------------------------------------
+
+
+class TestConsoleUtilities:
+    def test_make_console_returns_console(self):
+        console = make_console()
+        assert isinstance(console, Console)
+
+    def test_make_console_accepts_file(self):
+        out = io.StringIO()
+        console = make_console(file=out)
+        assert isinstance(console, Console)
+        console.print("hello")
+        assert "hello" in out.getvalue()
+
+    def test_hl_curie_highlighted_contains_markup(self):
+        result = hl_curie("HGNC:1100", highlight=True)
+        assert "bold cyan" in result
+        assert "HGNC:1100" in result
+
+    def test_hl_curie_not_highlighted_is_plain(self):
+        result = hl_curie("HGNC:1100", highlight=False)
+        assert result == "HGNC:1100"
+        assert "[" not in result
+
+    def test_hl_curie_highlighted_renders_correctly(self):
+        """Markup renders to plain text on a non-TTY console."""
+        out = io.StringIO()
+        console = Console(file=out, highlight=False, no_color=True)
+        console.print(hl_curie("HGNC:1100", highlight=True))
+        assert "HGNC:1100" in out.getvalue()
+
+    def test_hl_curie_highlighted_renders_with_color(self):
+        """On a forced-TTY console, ANSI codes are emitted."""
+        out = io.StringIO()
+        console = Console(file=out, highlight=False, force_terminal=True)
+        console.print(hl_curie("HGNC:1100", highlight=True))
+        output = out.getvalue()
+        assert "HGNC:1100" in output
+        assert "\x1b[" in output  # ANSI escape present
 
 
 # ---------------------------------------------------------------------------
@@ -106,24 +151,6 @@ class TestRecordToDict:
 
 
 class TestWriteRecords:
-
-    # -- text format --
-
-    def test_text_uses_str(self, xref):
-        out = io.StringIO()
-        write_records([xref], "text", file=out)
-        assert out.getvalue().strip() == str(xref)
-
-    def test_text_empty_no_output(self):
-        out = io.StringIO()
-        write_records([], "text", file=out)
-        assert out.getvalue() == ""
-
-    def test_text_multiple_records(self, xref):
-        out = io.StringIO()
-        write_records([xref, xref], "text", file=out)
-        lines = out.getvalue().strip().splitlines()
-        assert len(lines) == 2
 
     # -- json format --
 
@@ -225,9 +252,20 @@ class TestWriteRecords:
         lines = out.getvalue().splitlines()
         assert "biolink:Gene|biolink:NamedThing" in lines[1]
 
-    # -- invalid format --
+    # -- invalid formats (including console, which is handled at CLI layer) --
 
-    def test_invalid_format_raises_value_error(self, xref):
+    def test_text_format_raises_value_error(self, xref):
+        out = io.StringIO()
+        with pytest.raises(ValueError, match="Unknown format"):
+            write_records([xref], "text", file=out)
+
+    def test_console_format_raises_value_error(self, xref):
+        """Console format is handled by the CLI, not write_records."""
+        out = io.StringIO()
+        with pytest.raises(ValueError, match="Unknown format"):
+            write_records([xref], "console", file=out)
+
+    def test_unknown_format_raises_value_error(self, xref):
         out = io.StringIO()
         with pytest.raises(ValueError, match="Unknown format"):
             write_records([xref], "xml", file=out)

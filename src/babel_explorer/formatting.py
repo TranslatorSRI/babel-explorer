@@ -1,7 +1,8 @@
 """Output formatting for babel-explorer CLI commands.
 
-Provides write_records() to render any list of dataclass records (or plain
-dicts) as text, JSON, TSV, or CSV.
+Provides:
+- write_records() for machine-readable output (json, tsv, csv)
+- make_console() and hl_curie() for rich console output
 """
 
 import csv
@@ -9,6 +10,9 @@ import dataclasses
 import json
 import sys
 from typing import Any
+
+from rich.console import Console
+from rich.markup import escape
 
 
 def _record_to_dict(record) -> dict[str, Any]:
@@ -31,11 +35,27 @@ def _flatten_for_tabular(row: dict) -> dict:
     return {k: "|".join(v) if isinstance(v, (list, tuple)) else v for k, v in row.items()}
 
 
+def make_console(file=None) -> Console:
+    """Create a rich Console with babel-explorer defaults.
+
+    Auto-detects TTY and NO_COLOR; strips markup when output is piped.
+    highlight=False prevents rich from auto-highlighting numbers and strings.
+    """
+    return Console(file=file, highlight=False)
+
+
+def hl_curie(curie: str, highlight: bool) -> str:
+    """Return rich markup for a CURIE — bold cyan if it is a query CURIE."""
+    escaped = escape(curie)
+    return f"[bold cyan]{escaped}[/bold cyan]" if highlight else escaped
+
+
 def write_records(records, fmt: str, indent: int = 2, file=None):
     """Write an iterable of dataclass records (or dicts) in the requested format.
 
     :param records: Iterable of dataclass instances or plain dicts.
-    :param fmt: One of "text", "json", "tsv", "csv".
+    :param fmt: One of "json", "tsv", "csv". (Console output is handled by
+        make_console/hl_curie in the CLI layer.)
     :param indent: JSON indentation depth (ignored for other formats).
     :param file: Output file-like object; defaults to sys.stdout.
     :raises ValueError: If fmt is not a recognised format.
@@ -44,11 +64,7 @@ def write_records(records, fmt: str, indent: int = 2, file=None):
         file = sys.stdout
     records = list(records)
 
-    if fmt == "text":
-        for r in records:
-            print(r, file=file)
-
-    elif fmt == "json":
+    if fmt == "json":
         rows = [_record_to_dict(r) for r in records]
         json.dump(rows, file, indent=indent, default=str)
         print(file=file)  # trailing newline

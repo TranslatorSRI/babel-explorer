@@ -67,6 +67,10 @@ class TestCliCommands:
         runner = CliRunner()
         mock_xref = MagicMock()
         mock_xref.__str__ = lambda self: "A:1 skos:exactMatch B:2"
+        mock_xref.subj = "A:1"
+        mock_xref.obj = "B:2"
+        mock_xref.pred = "skos:exactMatch"
+        mock_xref.filename = "test.parquet"
 
         with (
             patch("babel_explorer.cli.BabelDownloader"),
@@ -84,7 +88,10 @@ class TestCliCommands:
     def test_xrefs_recurse_and_labels_flags(self):
         runner = CliRunner()
         mock_xref = MagicMock()
-        mock_xref.__str__ = lambda self: "A:1 skos:exactMatch B:2"
+        mock_xref.subj = "A:1"
+        mock_xref.obj = "B:2"
+        mock_xref.pred = "skos:exactMatch"
+        mock_xref.filename = "test.parquet"
 
         with (
             patch("babel_explorer.cli.BabelDownloader"),
@@ -210,7 +217,65 @@ class TestOutputFormats:
         biolink_type=("biolink:Disease",), taxa=(), description=(),
     )
 
-    # -- xrefs --
+    # -- console format (default) --
+
+    def test_xrefs_default_format_is_console(self):
+        """Default format is console — output contains the CURIEs as plain text (no TTY in runner)."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = [self._xref]
+            result = runner.invoke(cli, ["xrefs", "A:1"])
+
+        assert result.exit_code == 0
+        # Rich strips markup on non-TTY; plain CURIEs and predicate appear
+        assert "A:1" in result.output
+        assert "B:2" in result.output
+        assert "skos:exactMatch" in result.output
+
+    def test_xrefs_console_shows_query_curie(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = [self._xref]
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "console"])
+
+        assert result.exit_code == 0
+        assert "A:1" in result.output
+
+    def test_test_concord_console_format(self):
+        runner = CliRunner()
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
+            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "console"])
+
+        assert result.exit_code == 0
+        assert "MONDO:0004979" in result.output
+        assert "asthma" in result.output
+        assert "biolink:Disease" in result.output
+
+    def test_test_concord_console_no_label_shows_dash(self):
+        """Identifiers with no label display '-' in console format."""
+        runner = CliRunner()
+        mock_ident = MagicMock()
+        mock_ident.curie = "MONDO:0004979"
+        mock_ident.label = None
+        mock_ident.biolink_type = ["biolink:Disease"]
+
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.return_value = [mock_ident]
+            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "console"])
+
+        assert result.exit_code == 0
+        assert "-" in result.output
+
+    # -- json format --
 
     def test_xrefs_format_json(self):
         runner = CliRunner()
@@ -291,7 +356,7 @@ class TestOutputFormats:
         assert "label" in lines[0]
         assert "gene" in lines[1]
 
-    # -- test-concord --
+    # -- test-concord structured formats --
 
     def test_test_concord_format_json_includes_query_curie(self):
         runner = CliRunner()
@@ -327,5 +392,17 @@ class TestOutputFormats:
             patch("babel_explorer.cli.NodeNorm"),
         ):
             result = runner.invoke(cli, ["xrefs", "A:1", "--format", "xml"])
+
+        assert result.exit_code != 0
+
+    def test_text_format_rejected_by_click(self):
+        """'text' was removed; it is no longer a valid choice."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs"),
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "text"])
 
         assert result.exit_code != 0
