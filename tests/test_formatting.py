@@ -1,0 +1,233 @@
+"""
+Unit tests for formatting.py — no network, no mocking required.
+"""
+
+import io
+import json
+
+import pytest
+
+from babel_explorer.core.babel_xrefs import CrossReference, LabeledCrossReference, IdentifierRecord
+from babel_explorer.core.nodenorm import Identifier
+from babel_explorer.formatting import _record_to_dict, write_records
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def xref():
+    return CrossReference(filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2")
+
+
+@pytest.fixture
+def labeled_xref():
+    return LabeledCrossReference(
+        filename="Concord.parquet",
+        subj="A:1",
+        pred="skos:exactMatch",
+        obj="B:2",
+        subj_label="Alpha",
+        subj_biolink_type=("biolink:Disease",),
+        obj_label="Beta",
+        obj_biolink_type=("biolink:Gene", "biolink:NamedThing"),
+    )
+
+
+@pytest.fixture
+def id_record():
+    return IdentifierRecord(
+        curie="A:1",
+        extra_fields=(("type", "gene"), ("label", "Alpha")),
+    )
+
+
+@pytest.fixture
+def identifier():
+    return Identifier(
+        curie="MONDO:0004979",
+        label="asthma",
+        biolink_type=("biolink:Disease",),
+        taxa=("NCBITaxon:9606",),
+        description=("A chronic inflammatory disease",),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tests for _record_to_dict
+# ---------------------------------------------------------------------------
+
+
+class TestRecordToDict:
+    def test_cross_reference(self, xref):
+        d = _record_to_dict(xref)
+        assert d == {"filename": "Concord.parquet", "subj": "A:1", "pred": "skos:exactMatch", "obj": "B:2"}
+
+    def test_labeled_cross_reference_has_all_eight_fields(self, labeled_xref):
+        d = _record_to_dict(labeled_xref)
+        assert set(d.keys()) == {
+            "filename", "subj", "pred", "obj",
+            "subj_label", "subj_biolink_type", "obj_label", "obj_biolink_type",
+        }
+        # dataclasses.asdict() preserves tuple types
+        assert d["subj_biolink_type"] == ("biolink:Disease",)
+        assert d["obj_biolink_type"] == ("biolink:Gene", "biolink:NamedThing")
+
+    def test_identifier_record_extra_fields_expanded(self, id_record):
+        d = _record_to_dict(id_record)
+        assert "extra_fields" not in d
+        assert d["curie"] == "A:1"
+        assert d["type"] == "gene"
+        assert d["label"] == "Alpha"
+
+    def test_identifier_record_no_extra_fields(self):
+        rec = IdentifierRecord(curie="X:1")
+        d = _record_to_dict(rec)
+        assert d == {"curie": "X:1"}
+
+    def test_plain_dict_passthrough(self):
+        data = {"a": 1, "b": "hello"}
+        assert _record_to_dict(data) is data
+
+    def test_identifier_dataclass(self, identifier):
+        d = _record_to_dict(identifier)
+        assert d["curie"] == "MONDO:0004979"
+        assert d["label"] == "asthma"
+        # dataclasses.asdict() preserves tuple types
+        assert d["biolink_type"] == ("biolink:Disease",)
+        assert d["taxa"] == ("NCBITaxon:9606",)
+
+
+# ---------------------------------------------------------------------------
+# Tests for write_records
+# ---------------------------------------------------------------------------
+
+
+class TestWriteRecords:
+
+    # -- text format --
+
+    def test_text_uses_str(self, xref):
+        out = io.StringIO()
+        write_records([xref], "text", file=out)
+        assert out.getvalue().strip() == str(xref)
+
+    def test_text_empty_no_output(self):
+        out = io.StringIO()
+        write_records([], "text", file=out)
+        assert out.getvalue() == ""
+
+    def test_text_multiple_records(self, xref):
+        out = io.StringIO()
+        write_records([xref, xref], "text", file=out)
+        lines = out.getvalue().strip().splitlines()
+        assert len(lines) == 2
+
+    # -- json format --
+
+    def test_json_is_valid_list(self, xref):
+        out = io.StringIO()
+        write_records([xref], "json", file=out)
+        data = json.loads(out.getvalue())
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["subj"] == "A:1"
+
+    def test_json_empty_list(self):
+        out = io.StringIO()
+        write_records([], "json", file=out)
+        assert json.loads(out.getvalue()) == []
+
+    def test_json_indent_controls_formatting(self, xref):
+        out_pretty = io.StringIO()
+        write_records([xref], "json", indent=2, file=out_pretty)
+
+        out_compact = io.StringIO()
+        write_records([xref], "json", indent=None, file=out_compact)
+
+        # Pretty-printed output has more lines (has newlines per field)
+        assert out_pretty.getvalue().count("\n") > out_compact.getvalue().count("\n")
+
+    def test_json_tuple_fields_serialized_as_arrays(self, labeled_xref):
+        # json.dump converts tuples to JSON arrays, so json.loads gives back lists
+        out = io.StringIO()
+        write_records([labeled_xref], "json", file=out)
+        data = json.loads(out.getvalue())
+        assert isinstance(data[0]["subj_biolink_type"], list)
+        assert data[0]["obj_biolink_type"] == ["biolink:Gene", "biolink:NamedThing"]
+
+    def test_json_plain_dict(self):
+        out = io.StringIO()
+        write_records([{"a": 1, "b": "x"}], "json", file=out)
+        assert json.loads(out.getvalue()) == [{"a": 1, "b": "x"}]
+
+    # -- tsv format --
+
+    def test_tsv_has_header_row(self, xref):
+        out = io.StringIO()
+        write_records([xref], "tsv", file=out)
+        lines = out.getvalue().splitlines()
+        assert lines[0] == "filename\tsubj\tpred\tobj"
+
+    def test_tsv_data_row(self, xref):
+        out = io.StringIO()
+        write_records([xref], "tsv", file=out)
+        lines = out.getvalue().splitlines()
+        assert lines[1] == "Concord.parquet\tA:1\tskos:exactMatch\tB:2"
+
+    def test_tsv_tuple_fields_pipe_joined(self, labeled_xref):
+        out = io.StringIO()
+        write_records([labeled_xref], "tsv", file=out)
+        lines = out.getvalue().splitlines()
+        # Header row
+        assert "subj_biolink_type" in lines[0]
+        # Data row: multi-value tuple joined with pipe
+        assert "biolink:Gene|biolink:NamedThing" in lines[1]
+
+    def test_tsv_empty_no_output(self):
+        out = io.StringIO()
+        write_records([], "tsv", file=out)
+        assert out.getvalue() == ""
+
+    def test_tsv_identifier_record_extra_fields_expanded(self, id_record):
+        out = io.StringIO()
+        write_records([id_record], "tsv", file=out)
+        lines = out.getvalue().splitlines()
+        assert "curie" in lines[0]
+        assert "type" in lines[0]
+        assert "label" in lines[0]
+        assert "A:1" in lines[1]
+
+    # -- csv format --
+
+    def test_csv_has_header_row(self, xref):
+        out = io.StringIO()
+        write_records([xref], "csv", file=out)
+        lines = out.getvalue().splitlines()
+        assert lines[0] == "filename,subj,pred,obj"
+
+    def test_csv_data_row(self, xref):
+        out = io.StringIO()
+        write_records([xref], "csv", file=out)
+        lines = out.getvalue().splitlines()
+        assert lines[1] == "Concord.parquet,A:1,skos:exactMatch,B:2"
+
+    def test_csv_empty_no_output(self):
+        out = io.StringIO()
+        write_records([], "csv", file=out)
+        assert out.getvalue() == ""
+
+    def test_csv_tuple_fields_pipe_joined(self, labeled_xref):
+        out = io.StringIO()
+        write_records([labeled_xref], "csv", file=out)
+        lines = out.getvalue().splitlines()
+        assert "biolink:Gene|biolink:NamedThing" in lines[1]
+
+    # -- invalid format --
+
+    def test_invalid_format_raises_value_error(self, xref):
+        out = io.StringIO()
+        with pytest.raises(ValueError, match="Unknown format"):
+            write_records([xref], "xml", file=out)
