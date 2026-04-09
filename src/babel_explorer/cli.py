@@ -4,6 +4,26 @@ import logging
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
+from babel_explorer.formatting import write_records, _record_to_dict
+
+
+def format_option(f):
+    """Decorator adding --format and --json-indent options to a command."""
+    f = click.option(
+        "--format",
+        "fmt",
+        default="text",
+        type=click.Choice(["text", "json", "tsv", "csv"]),
+        show_default=True,
+        help="Output format",
+    )(f)
+    f = click.option(
+        "--json-indent",
+        default=2,
+        show_default=True,
+        help="Indentation depth for JSON output",
+    )(f)
+    return f
 
 
 def parse_duration(value: str) -> int | float:
@@ -83,6 +103,7 @@ def cli():
     help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
     "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
 )
+@format_option
 def xrefs(
     curies: list[str],
     babel_url: str,
@@ -91,6 +112,8 @@ def xrefs(
     recurse: bool,
     labels: bool,
     check_download: str,
+    fmt: str,
+    json_indent: int,
 ):
     """
     Fetches and prints the cross-references (xrefs) for the given CURIEs.
@@ -113,8 +136,7 @@ def xrefs(
         NodeNorm(nodenorm_url),
     )
     xrefs = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
-    for xref in xrefs:
-        print(xref)
+    write_records(xrefs, fmt=fmt, indent=json_indent)
 
 
 @cli.command("ids")
@@ -139,7 +161,8 @@ def xrefs(
     help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
     "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
 )
-def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
+@format_option
+def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, fmt: str, json_indent: int):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
 
@@ -160,8 +183,7 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
         BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness)
     )
     xrefs = bxref.get_curie_ids(curies)
-    for xref in xrefs:
-        print(xref)
+    write_records(xrefs, fmt=fmt, indent=json_indent)
 
 
 @cli.command("test-concord")
@@ -172,21 +194,27 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str):
     default="https://nodenormalization-sri.renci.org/",
     help="NodeNorm URL to check for concord changes",
 )
-def test_concord(curies, nodenorm_url):
+@format_option
+def test_concord(curies, nodenorm_url, fmt, json_indent):
     """For each CURIE, print the current NodeNorm clique (all equivalent identifiers, labels, and Biolink types).
 
     Useful for inspecting how a potential Babel concordance change would affect NodeNorm:
     run before and after a Babel rebuild to see how cliques would shift.
     """
     nodenorm = NodeNorm(nodenorm_url)
-    for curie in curies:
-        identifiers = nodenorm.get_clique_identifiers(curie)
-        for identifier in identifiers:
-            biolink = ", ".join(identifier.biolink_type)
-            if identifier.label:
-                print(f"{curie}\t{identifier.curie}\t{identifier.label}\t{biolink}")
-            else:
-                print(f"{curie}\t{identifier.curie}\t\t{biolink}")
+    if fmt == "text":
+        for curie in curies:
+            for identifier in nodenorm.get_clique_identifiers(curie):
+                biolink = ", ".join(identifier.biolink_type)
+                label = identifier.label or ""
+                print(f"{curie}\t{identifier.curie}\t{label}\t{biolink}")
+    else:
+        rows = [
+            {"query_curie": curie, **_record_to_dict(ident)}
+            for curie in curies
+            for ident in nodenorm.get_clique_identifiers(curie)
+        ]
+        write_records(rows, fmt=fmt, indent=json_indent)
 
 
 if __name__ == "__main__":

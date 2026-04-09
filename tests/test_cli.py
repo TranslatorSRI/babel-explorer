@@ -4,12 +4,16 @@ Tests for CLI helper functions.
 Unit tests — no network required.
 """
 
-import pytest
+import json
+
 import click
+import pytest
 from click.testing import CliRunner
 from unittest.mock import patch, MagicMock
 
 from babel_explorer.cli import parse_duration, cli
+from babel_explorer.core.babel_xrefs import CrossReference, IdentifierRecord
+from babel_explorer.core.nodenorm import Identifier
 
 
 # ==========================================================================
@@ -193,3 +197,135 @@ class TestCliCommands:
         assert mock_nn.return_value.get_clique_identifiers.call_count == 2
         assert "Alpha" in result.output
         assert "Beta" in result.output
+
+
+class TestOutputFormats:
+    """Tests for --format option on all commands."""
+
+    # Shared real dataclass instances (no mocking needed for formatting logic)
+    _xref = CrossReference(filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2")
+    _id_record = IdentifierRecord(curie="A:1", extra_fields=(("type", "gene"), ("label", "Alpha")))
+    _identifier = Identifier(
+        curie="MONDO:0004979", label="asthma",
+        biolink_type=("biolink:Disease",), taxa=(), description=(),
+    )
+
+    # -- xrefs --
+
+    def test_xrefs_format_json(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = [self._xref]
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, list)
+        assert data[0]["subj"] == "A:1"
+        assert data[0]["obj"] == "B:2"
+
+    def test_xrefs_format_tsv(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = [self._xref]
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "tsv"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        assert lines[0] == "filename\tsubj\tpred\tobj"
+        assert "A:1" in lines[1]
+
+    def test_xrefs_format_csv(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = [self._xref]
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "csv"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        assert lines[0] == "filename,subj,pred,obj"
+        assert "A:1" in lines[1]
+
+    # -- ids --
+
+    def test_ids_format_json_expands_extra_fields(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+        ):
+            mock_bx.return_value.get_curie_ids.return_value = [self._id_record]
+            result = runner.invoke(cli, ["ids", "A:1", "--format", "json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["curie"] == "A:1"
+        assert data[0]["type"] == "gene"
+        assert data[0]["label"] == "Alpha"
+        assert "extra_fields" not in data[0]
+
+    def test_ids_format_tsv_expands_extra_fields(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+        ):
+            mock_bx.return_value.get_curie_ids.return_value = [self._id_record]
+            result = runner.invoke(cli, ["ids", "A:1", "--format", "tsv"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        assert "type" in lines[0]
+        assert "label" in lines[0]
+        assert "gene" in lines[1]
+
+    # -- test-concord --
+
+    def test_test_concord_format_json_includes_query_curie(self):
+        runner = CliRunner()
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
+            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "json"])
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert data[0]["query_curie"] == "MONDO:0004979"
+        assert data[0]["curie"] == "MONDO:0004979"
+        assert data[0]["label"] == "asthma"
+        assert data[0]["biolink_type"] == ["biolink:Disease"]
+
+    def test_test_concord_format_tsv(self):
+        runner = CliRunner()
+        with patch("babel_explorer.cli.NodeNorm") as mock_nn:
+            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
+            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "tsv"])
+
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        assert "query_curie" in lines[0]
+        assert "MONDO:0004979" in lines[1]
+
+    # -- format validation --
+
+    def test_invalid_format_rejected_by_click(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs"),
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            result = runner.invoke(cli, ["xrefs", "A:1", "--format", "xml"])
+
+        assert result.exit_code != 0
