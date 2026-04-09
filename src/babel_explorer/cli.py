@@ -4,7 +4,9 @@ import logging
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
-from babel_explorer.formatting import write_records, _record_to_dict
+from babel_explorer.core.babel_xrefs import LabeledCrossReference
+from babel_explorer.formatting import write_records, _record_to_dict, make_console, hl_curie
+from rich.markup import escape
 
 
 def format_option(f):
@@ -12,8 +14,8 @@ def format_option(f):
     f = click.option(
         "--format",
         "fmt",
-        default="text",
-        type=click.Choice(["text", "json", "tsv", "csv"]),
+        default="console",
+        type=click.Choice(["console", "json", "tsv", "csv"]),
         show_default=True,
         help="Output format",
     )(f)
@@ -136,7 +138,24 @@ def xrefs(
         NodeNorm(nodenorm_url),
     )
     xrefs = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
-    write_records(xrefs, fmt=fmt, indent=json_indent)
+
+    if fmt == "console":
+        console = make_console()
+        query_set = set(curies)
+        for xref in xrefs:
+            subj_str = hl_curie(xref.subj, xref.subj in query_set)
+            obj_str = hl_curie(xref.obj, xref.obj in query_set)
+            if isinstance(xref, LabeledCrossReference):
+                if xref.subj_label:
+                    subj_str += f" ({escape(xref.subj_label)})"
+                if xref.obj_label:
+                    obj_str += f" ({escape(xref.obj_label)})"
+            console.print(
+                f"{subj_str}  [dim]{escape(xref.pred)}[/dim]  "
+                f"{obj_str}  [dim italic]{escape(xref.filename)}[/dim italic]"
+            )
+    else:
+        write_records(xrefs, fmt=fmt, indent=json_indent)
 
 
 @cli.command("ids")
@@ -183,7 +202,13 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, 
         BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness)
     )
     xrefs = bxref.get_curie_ids(curies)
-    write_records(xrefs, fmt=fmt, indent=json_indent)
+
+    if fmt == "console":
+        console = make_console()
+        for record in xrefs:
+            console.print(str(record))
+    else:
+        write_records(xrefs, fmt=fmt, indent=json_indent)
 
 
 @cli.command("test-concord")
@@ -202,12 +227,18 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
     run before and after a Babel rebuild to see how cliques would shift.
     """
     nodenorm = NodeNorm(nodenorm_url)
-    if fmt == "text":
+    if fmt == "console":
+        console = make_console()
+        query_set = set(curies)
         for curie in curies:
-            for identifier in nodenorm.get_clique_identifiers(curie):
-                biolink = ", ".join(identifier.biolink_type)
-                label = identifier.label or ""
-                print(f"{curie}\t{identifier.curie}\t{label}\t{biolink}")
+            for ident in nodenorm.get_clique_identifiers(curie):
+                biolink = ", ".join(ident.biolink_type)
+                console.print(
+                    f"{hl_curie(curie, True)}  "
+                    f"{hl_curie(ident.curie, ident.curie in query_set)}  "
+                    f"{escape(ident.label or '-')}  "
+                    f"[dim]{escape(biolink)}[/dim]"
+                )
     else:
         rows = [
             {"query_curie": curie, **_record_to_dict(ident)}
