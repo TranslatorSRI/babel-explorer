@@ -21,12 +21,18 @@ class Identifier:
 
     @staticmethod
     def from_dict(d: dict) -> "Identifier":
+        def _to_tuple(val) -> tuple[str, ...]:
+            """Coerce a string or list to a tuple — guards against iterating string chars."""
+            if not val:
+                return ()
+            return (val,) if isinstance(val, str) else tuple(val)
+
         return Identifier(
             curie=d["identifier"],
             label=d.get("label", ""),
-            biolink_type=tuple(d.get("type", [])),
-            taxa=tuple(d.get("taxa", [])),
-            description=tuple(d.get("description", [])),
+            biolink_type=_to_tuple(d.get("type")),
+            taxa=_to_tuple(d.get("taxa")),
+            description=_to_tuple(d.get("description")),
         )
 
 
