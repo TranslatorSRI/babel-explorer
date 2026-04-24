@@ -8,7 +8,7 @@ babel-explorer has **two** web frontends:
 
 | Frontend | Stack | Deployment | Tools | Directory |
 |----------|-------|------------|-------|-----------|
-| **This one** | Astro + Vue 3 | GitHub Pages | NodeNorm (more planned) | `web/` |
+| **This one** | Astro + Vue 3 | GitHub Pages | NodeNorm, NameRes, Autocomplete | `web/` |
 | **Python frontend** | FastAPI + htmx | Kubernetes | XRefs, IDs, Test Concordance, NodeNorm | `src/babel_explorer/web/` |
 
 The split follows data dependencies: tools that only call external APIs (NodeNorm, NameRes) can run entirely in the browser. Tools that query multi-GB Parquet files via DuckDB need a server.
@@ -28,6 +28,26 @@ Both frontends share the same Bootstrap 5 dark-navbar styling for visual consist
 - **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
+### NameRes Lookup (`/nameres`)
+
+- **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
+- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold
+- **Multi-instance comparison**: Same unified instance selector as NodeNorm
+- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; shareable URL state and JSON export
+
+### Autocomplete Playground (`/autocomplete`)
+
+Purpose-built for evaluating NameRes as a real autocomplete (the primary way the Translator UI uses it).
+
+- **Live-as-you-type**: every keystroke re-queries after a configurable debounce (0/150/300/500 ms); in-flight requests are aborted via `AbortController` so stale responses never render
+- **Preset dropdown**: one-click switches between the three Translator UI query shapes — Disease (`DiseaseOrPhenotypicFeature` + `only_prefixes=MONDO|HP`), Gene, Small Molecule — plus Custom. Presets only set `biolink_type` and `only_prefixes`; every other field stays user-editable
+- **Advanced options**: debounce, autocomplete flag, highlighting toggle, exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
+- **Latency badges**: per-instance response time, with a tooltip noting parallel-contention when comparing multiple environments
+- **Match-reason highlighting**: renders NameRes's Solr `highlighting` fragments (`<em>`-wrapped matches) behind a whitelist sanitiser — the only place `v-html` is used in the codebase
+- **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches
+- **Expected-CURIE panel**: paste CURIEs you expect to see; "Check" button fires a `limit=100` parallel lookup per instance and shows whether each expected CURIE appears in the top-N (green), top-100 (amber) or is missing (red). Round-trips through URL state for shareable review links
+- **Shareable state**: `q`, `preset`, repeated `target`, repeated `expected`, per-field option overrides, non-default `debounce` and `highlight` all encoded in the URL
+
 ## Development
 
 ```bash
@@ -41,7 +61,7 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ## Testing
 
 ```bash
-npm test            # Run all 99 Vitest unit + component tests
+npm test            # Run all Vitest unit + component tests (~275 tests across lib and components)
 npm run test:watch  # Watch mode
 ```
 
@@ -78,24 +98,30 @@ src/
   pages/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # Hosts NodeNormApp Vue island
+    nameres.astro                   # Hosts NameResApp Vue island
+    autocomplete.astro              # Hosts AutocompleteApp Vue island
   components/
     Navbar.astro                    # Shared navbar (Astro component)
-    nodenorm/                       # NodeNorm Vue components
-      NodeNormApp.vue               # Root island: orchestrates form + results
-      NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
-      ComparisonView.vue            # Results table with expandable per-CURIE rows
-      CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
-      CurieResultCard.vue           # Accordion card wrapping CurieDetailPanel
-      ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
-      EquivalentIdTable.vue         # Equiv ID table with togglable columns
-      ColumnVisibility.vue          # Column show/hide controls
+    nodenorm/                       # NodeNorm Vue components (App, Form, ComparisonView, CurieDetailPanel, CurieResultCard, ResultsSummary, EquivalentIdTable, ColumnVisibility)
+    nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
+    autocomplete/                   # Autocomplete Vue components (App, Form, Results, ComparisonView, HighlightedFragment, ExpectedCuriePanel, LatencyBadge)
     shared/
+      InstanceSelector.vue          # Env checkboxes + custom URL + localStorage prefs (used by all tools)
       CurieLink.vue                 # CURIE → external URL link
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
+    nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
+    nameres-types.ts                # NameRes TypeScript interfaces + DEFAULT_NAMERES_OPTIONS
+    nameres-url-state.ts            # NameRes URL-state encode/decode
+    autocomplete-url-state.ts       # Autocomplete URL-state encode/decode + DEFAULT_AUTOCOMPLETE_OPTIONS + parseExpectedCuries
+    autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom presets + detectPreset
+    autocomplete-diff.ts            # Cross-instance diff signals + expected-CURIE classification
+    debounce.ts                     # debounce(fn, ms) with .cancel() and synchronous 0-ms path
+    highlight-sanitize.ts           # Whitelist sanitizer — allow only <em>/</em>
+    instance-prefs.ts               # sessionPrefs + localStorage helpers
     curie-links.ts                  # Biolink prefix map loader
-    url-state.ts                    # Encode/decode query state in URL params
-    types.ts                        # TypeScript interfaces
+    url-state.ts                    # NodeNorm URL-state encode/decode
+    types.ts                        # NodeNorm TypeScript interfaces
 ```
 
 ## Adding a New Tool
