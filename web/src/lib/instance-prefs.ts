@@ -33,3 +33,25 @@ export function loadPrefs(): string[] | null {
     return null;
   }
 }
+
+const ENV_ORDER: Record<string, number> = {
+  exp:   0,
+  dev:   1,
+  ci:    2,
+  es_ci: 3,
+  test:  4,
+  prod:  5,
+};
+
+/**
+ * Sort instances into canonical pipeline order: Exp → Dev → CI → ES CI → Test → Prod → custom URLs.
+ * Custom URLs (env not in the known set) sort last, then alphabetically by URL for stability.
+ */
+export function sortInstances<T extends { env: string; url: string }>(instances: T[]): T[] {
+  return [...instances].sort((a, b) => {
+    const oa = ENV_ORDER[a.env] ?? 6;
+    const ob = ENV_ORDER[b.env] ?? 6;
+    if (oa !== ob) return oa - ob;
+    return a.url.localeCompare(b.url);
+  });
+}

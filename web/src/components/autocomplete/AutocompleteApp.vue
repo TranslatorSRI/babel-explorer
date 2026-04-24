@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import type { NameResInstance, NameResResult, NameResApiOptions } from '../../lib/nameres-types';
 import { fetchNameResLookup } from '../../lib/nameres-api';
 import { loadPrefixMap } from '../../lib/curie-links';
+import { sortInstances } from '../../lib/instance-prefs';
 import {
   DEFAULT_AUTOCOMPLETE_OPTIONS,
   DEFAULT_DEBOUNCE_MS,
@@ -80,7 +81,9 @@ const debounceMs = ref<DebounceMs>(urlState?.debounceMs ?? DEFAULT_DEBOUNCE_MS);
 const highlight = ref<boolean>(urlState?.highlight ?? true);
 
 const perInstance = ref<Map<string, InstanceState>>(new Map());
-const queriedInstances = computed<NameResInstance[]>(() => selectedUrls.value.map(instanceFor));
+const queriedInstances = computed<NameResInstance[]>(() =>
+  sortInstances(selectedUrls.value.map(instanceFor))
+);
 const prefixMap = ref<Record<string, string>>({});
 const checking = ref(false);
 const hasDeepResults = computed(() => {
