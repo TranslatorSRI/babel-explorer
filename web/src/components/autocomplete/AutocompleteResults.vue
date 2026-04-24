@@ -4,6 +4,7 @@ import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
 import CurieLink from '../shared/CurieLink.vue';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 
 interface InstanceState {
   results: NameResResult[];
@@ -115,7 +116,7 @@ const hasResults = computed(() => props.state.results.length > 0);
             </td>
             <td><CurieLink :curie="r.curie" :prefix-map="prefixMap" /></td>
             <td>
-              <span v-for="t in r.types" :key="t" class="badge bg-secondary-subtle text-secondary-emphasis me-1">{{ t }}</span>
+              <span v-for="t in r.types" :key="t" class="badge bg-secondary-subtle text-secondary-emphasis me-1"><BiolinkTypeLink :type="t" /></span>
             </td>
             <td class="text-muted">{{ r.clique_identifier_count }}</td>
             <td class="text-muted">{{ r.score.toFixed(2) }}</td>

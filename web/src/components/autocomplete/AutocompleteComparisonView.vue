@@ -5,6 +5,7 @@ import { computeInstanceDiffs } from '../../lib/autocomplete-diff';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
 import CurieLink from '../shared/CurieLink.vue';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 
 interface InstanceState {
   results: NameResResult[];
@@ -56,6 +57,16 @@ function rowClass(curie: string): string {
 function expectedClass(curie: string): string {
   return expectedSet.value.has(curie) ? 'fw-semibold border-start border-3 border-info' : '';
 }
+
+function primaryTypesForCurie(curie: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const inst of props.queriedInstances) {
+    const t = resultFor(inst.url, curie)?.types[0];
+    if (t && !seen.has(t)) { seen.add(t); result.push(t); }
+  }
+  return result;
+}
 </script>
 
 <template>
@@ -68,7 +79,7 @@ function expectedClass(curie: string): string {
       <table class="table table-sm table-hover mb-0 align-middle">
         <thead>
           <tr>
-            <th style="min-width: 220px">CURIE / Label</th>
+            <th style="min-width: 220px">CURIE / Type</th>
             <th
               v-for="inst in queriedInstances"
               :key="inst.url"
@@ -100,18 +111,13 @@ function expectedClass(curie: string): string {
             <td :class="expectedClass(curie)">
               <div><CurieLink :curie="curie" :prefix-map="prefixMap" /></div>
               <div class="small text-muted">
-                <template v-for="(inst, i) in queriedInstances" :key="inst.url">
-                  <template v-if="resultFor(inst.url, curie)?.label">
-                    {{ resultFor(inst.url, curie)!.label }}
-                    <span v-if="i < queriedInstances.length - 1"> · </span>
-                  </template>
+                <template v-for="(t, i) in primaryTypesForCurie(curie)" :key="t">
+                  <BiolinkTypeLink :type="t" />
+                  <span v-if="i < primaryTypesForCurie(curie).length - 1"> · </span>
                 </template>
               </div>
               <div v-if="diffs.labelMismatch.has(curie)" class="small">
                 <span class="badge bg-warning-subtle text-warning-emphasis">label differs</span>
-              </div>
-              <div v-if="diffs.typesMismatch.has(curie)" class="small">
-                <span class="badge bg-warning-subtle text-warning-emphasis">types differ</span>
               </div>
             </td>
             <td
@@ -136,6 +142,12 @@ function expectedClass(curie: string): string {
                     :fragment="resultFor(inst.url, curie)!.label"
                     :highlight="highlight"
                   />
+                </div>
+                <div
+                  v-if="diffs.typesMismatch.has(curie) && resultFor(inst.url, curie)?.types[0]"
+                  class="small fst-italic text-muted"
+                >
+                  <BiolinkTypeLink :type="resultFor(inst.url, curie)!.types[0]" />
                 </div>
               </template>
               <span v-else class="text-muted small">—</span>
