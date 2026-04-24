@@ -15,6 +15,7 @@ const ENV_LABELS: Record<string, string> = {
   dev: 'Dev',
   exp: 'Exp',
   ci: 'CI',
+  es_ci: 'ES CI',
   test: 'Test',
   prod: 'Production',
 };
