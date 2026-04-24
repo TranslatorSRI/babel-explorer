@@ -124,7 +124,7 @@ cd web && npm run test:watch # Watch mode
    - Calls NodeNorm and NameRes APIs directly from the browser via `fetch()` (CORS-enabled)
    - Uses Bootstrap 5 (CDN) with the same dark-navbar styling as the Python frontend
    - CURIE link-outs via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7, fetched at runtime)
-   - Tested with Vitest + @vue/test-utils + happy-dom (275 tests); see `web/tests/README.md`
+   - Tested with Vitest + @vue/test-utils + happy-dom (276 tests); see `web/tests/README.md`
    - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
 
 7. **Shared Configuration** (`config/`):
@@ -157,6 +157,7 @@ web/src/
     shared/
       InstanceSelector.vue          # Reusable env checkboxes + custom URL + localStorage prefs
       CurieLink.vue                 # CURIE → external URL link using biolink prefix map
+      BiolinkTypeLink.vue           # Biolink type badge → link to biolink.github.io/biolink-model/{Type}; handles both prefixed ("biolink:Gene") and unprefixed ("Gene") types; used by NodeNorm, NameRes, and Autocomplete
   lib/
     nodenorm-api.ts                 # fetch() wrapper for NodeNorm get_normalized_nodes (AbortSignal support)
     nameres-api.ts                  # fetch() wrapper for NameRes /lookup; parseSearchTerms; validateExpectedCuries

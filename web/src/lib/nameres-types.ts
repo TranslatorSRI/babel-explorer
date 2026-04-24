@@ -2,6 +2,7 @@
 export interface NameResResult {
   curie: string;
   label: string;
+  /** Biolink type hierarchy, most-specific first (e.g. ["Gene", "GeneOrGeneProduct", ..., "NamedThing"]). Use types[0] for the most-specific type. */
   types: string[];
   taxa: string[];
   synonyms: string[];

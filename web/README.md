@@ -108,6 +108,7 @@ src/
     shared/
       InstanceSelector.vue          # Env checkboxes + custom URL + localStorage prefs (used by all tools)
       CurieLink.vue                 # CURIE → external URL link
+      BiolinkTypeLink.vue           # Biolink type → link to biolink.github.io/biolink-model/{Type}; accepts both "biolink:Gene" and "Gene"
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
     nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
