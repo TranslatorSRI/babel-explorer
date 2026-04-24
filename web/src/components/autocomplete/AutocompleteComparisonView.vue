@@ -21,6 +21,7 @@ const props = defineProps<{
   expected: string[];
   highlight: boolean;
   prefixMap: Record<string, string>;
+  apiUrls: Map<string, string>;
 }>();
 
 const resultsMap = computed(() => {
@@ -97,7 +98,16 @@ function uniqueLabelsForCurie(curie: string): string[] {
               style="min-width: 170px"
             >
               <div class="d-flex flex-column align-items-center gap-1">
-                <span>{{ inst.name }}</span>
+                <span>
+                  {{ inst.name }}
+                  <a
+                    v-if="apiUrls.get(inst.url)"
+                    :href="apiUrls.get(inst.url)"
+                    target="_blank"
+                    rel="noopener"
+                    class="text-muted small ms-1"
+                  >API↗</a>
+                </span>
                 <LatencyBadge
                   :elapsed-ms="perInstance.get(inst.url)?.elapsedMs ?? null"
                   :state="perInstance.get(inst.url)?.state ?? 'idle'"

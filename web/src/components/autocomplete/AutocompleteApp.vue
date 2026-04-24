@@ -292,6 +292,12 @@ function apiUrlFor(url: string): string {
   }
 }
 
+const apiUrlsMap = computed(() => {
+  const m = new Map<string, string>();
+  for (const inst of queriedInstances.value) m.set(inst.url, apiUrlFor(inst.url));
+  return m;
+});
+
 // ─── Lifecycle ──────────────────────────────────────────────────────────────
 
 onMounted(async () => {
@@ -360,6 +366,7 @@ const initialTargets = computed<string[] | undefined>(() =>
       :expected="expected"
       :highlight="highlight"
       :prefix-map="prefixMap"
+      :api-urls="apiUrlsMap"
     />
   </div>
   <div v-else class="alert alert-info">
