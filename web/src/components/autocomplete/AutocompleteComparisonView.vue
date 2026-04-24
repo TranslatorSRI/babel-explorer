@@ -67,6 +67,16 @@ function primaryTypesForCurie(curie: string): string[] {
   }
   return result;
 }
+
+function uniqueLabelsForCurie(curie: string): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const inst of props.queriedInstances) {
+    const label = resultFor(inst.url, curie)?.label;
+    if (label && !seen.has(label)) { seen.add(label); result.push(label); }
+  }
+  return result;
+}
 </script>
 
 <template>
@@ -79,7 +89,7 @@ function primaryTypesForCurie(curie: string): string[] {
       <table class="table table-sm table-hover mb-0 align-middle">
         <thead>
           <tr>
-            <th style="min-width: 220px">CURIE / Type</th>
+            <th style="min-width: 220px">CURIE / Label</th>
             <th
               v-for="inst in queriedInstances"
               :key="inst.url"
@@ -109,12 +119,17 @@ function primaryTypesForCurie(curie: string): string[] {
             :class="rowClass(curie)"
           >
             <td :class="expectedClass(curie)">
-              <div><CurieLink :curie="curie" :prefix-map="prefixMap" /></div>
-              <div class="small text-muted">
-                <template v-for="(t, i) in primaryTypesForCurie(curie)" :key="t">
-                  <BiolinkTypeLink :type="t" />
-                  <span v-if="i < primaryTypesForCurie(curie).length - 1"> · </span>
-                </template>
+              <div class="d-flex align-items-center gap-1 flex-wrap">
+                <CurieLink :curie="curie" :prefix-map="prefixMap" />
+                <span
+                  v-for="t in primaryTypesForCurie(curie)"
+                  :key="t"
+                  class="badge bg-secondary-subtle text-secondary-emphasis"
+                  style="font-size: 0.7em"
+                ><BiolinkTypeLink :type="t" /></span>
+              </div>
+              <div v-if="uniqueLabelsForCurie(curie).length" class="small text-muted">
+                {{ uniqueLabelsForCurie(curie).join(' · ') }}
               </div>
               <div v-if="diffs.labelMismatch.has(curie)" class="small">
                 <span class="badge bg-warning-subtle text-warning-emphasis">label differs</span>
