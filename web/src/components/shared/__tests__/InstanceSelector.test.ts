@@ -3,15 +3,26 @@ import { mount } from '@vue/test-utils';
 import InstanceSelector from '../InstanceSelector.vue';
 import { sessionPrefs } from '../../../lib/instance-prefs';
 
+// happy-dom doesn't implement localStorage — provide a minimal in-memory mock.
+const localStorageStore: Record<string, string> = {};
+const localStorageMock = {
+  getItem: (key: string) => localStorageStore[key] ?? null,
+  setItem: (key: string, value: string) => { localStorageStore[key] = value; },
+  removeItem: (key: string) => { delete localStorageStore[key]; },
+  clear: () => { Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]); },
+};
+vi.stubGlobal('localStorage', localStorageMock);
+
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const devInstance = { name: 'NodeNorm Dev', env: 'dev', url: 'https://dev.example.com/' };
 const expInstance = { name: 'NodeNorm Exp', env: 'exp', url: 'https://exp.example.com/' };
 const ciInstance = { name: 'NodeNorm CI', env: 'ci', url: 'https://ci.example.com/' };
+const esCiInstance = { name: 'NameRes ES CI', env: 'es_ci', url: 'https://es-ci.example.com/' };
 const testInstance = { name: 'NodeNorm Test', env: 'test', url: 'https://test.example.com/' };
 const prodInstance = { name: 'NodeNorm Prod', env: 'prod', url: 'https://prod.example.com/' };
 
-const ALL_INSTANCES = [expInstance, devInstance, ciInstance, testInstance, prodInstance];
+const ALL_INSTANCES = [expInstance, devInstance, ciInstance, esCiInstance, testInstance, prodInstance];
 
 function mountSelector(overrides: Record<string, unknown> = {}) {
   return mount(InstanceSelector, {
@@ -47,6 +58,18 @@ describe('InstanceSelector — rendering', () => {
     expect(details.exists()).toBe(true);
     expect(details.text()).toContain('RENCI Experimental');
     expect(details.text()).toContain('ITRB Test');
+  });
+
+  it('renders es_ci label as primary with an <abbr> for ElasticSearch', () => {
+    const wrapper = mountSelector();
+    const label = wrapper.find('label[for="inst-es_ci"]');
+    expect(label.exists()).toBe(true);
+    const abbr = label.find('abbr');
+    expect(abbr.exists()).toBe(true);
+    expect(abbr.attributes('title')).toBe('ElasticSearch');
+    expect(abbr.text()).toBe('ES');
+    // es_ci must be in the primary section, not inside <details>
+    expect(wrapper.find('details').html()).not.toContain('inst-es_ci');
   });
 
   it('does not open <details> by default', () => {
@@ -186,13 +209,14 @@ describe('InstanceSelector — checkbox interaction', () => {
 // ─── Quick-select presets ─────────────────────────────────────────────────────
 
 describe('InstanceSelector — quick-select presets', () => {
-  it('"Primary" selects only dev, ci, prod', async () => {
+  it('"Primary" selects only dev, ci, es_ci, prod', async () => {
     const wrapper = mountSelector({ initialTargets: ['exp'] });
     await wrapper.findAll('button').find((b) => b.text() === 'Primary')!.trigger('click');
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     const last = emitted[emitted.length - 1][0];
     expect(last).toContain(devInstance.url);
     expect(last).toContain(ciInstance.url);
+    expect(last).toContain(esCiInstance.url);
     expect(last).toContain(prodInstance.url);
     expect(last).not.toContain(expInstance.url);
     expect(last).not.toContain(testInstance.url);
@@ -206,6 +230,7 @@ describe('InstanceSelector — quick-select presets', () => {
     expect(last).toContain(expInstance.url);
     expect(last).toContain(devInstance.url);
     expect(last).toContain(ciInstance.url);
+    expect(last).toContain(esCiInstance.url);
     expect(last).toContain(testInstance.url);
     expect(last).toContain(prodInstance.url);
     expect(wrapper.find('details').attributes('open')).toBe('');
