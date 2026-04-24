@@ -284,7 +284,7 @@ function onShare() {
         class="btn btn-sm btn-outline-secondary"
         @click="emit('stop')"
       >
-        Cancel in-flight
+        Cancel lookup
       </button>
     </div>
   </form>
