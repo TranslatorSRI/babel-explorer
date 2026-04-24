@@ -35,12 +35,13 @@ export function loadPrefs(): string[] | null {
 }
 
 const ENV_ORDER: Record<string, number> = {
-  exp:   0,
-  dev:   1,
-  ci:    2,
-  es_ci: 3,
-  test:  4,
-  prod:  5,
+  exp:      0,
+  dev:      1,
+  ci:       2,
+  es_ci:    3,
+  redis_ci: 4,
+  test:     5,
+  prod:     6,
 };
 
 /**

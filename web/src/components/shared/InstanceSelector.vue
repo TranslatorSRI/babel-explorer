@@ -8,16 +8,17 @@ import { sessionPrefs, savePrefs, loadPrefs } from '../../lib/instance-prefs';
  * objects for use in result tables (ComparisonView column headers, etc.).
  */
 const ENV_LABELS: Record<string, string> = {
-  exp: 'RENCI Experimental',
-  dev: 'RENCI Dev',
-  ci: 'ITRB CI',
-  es_ci: 'ITRB ES CI',
-  test: 'ITRB Test',
-  prod: 'ITRB Prod',
+  exp:      'RENCI Experimental',
+  dev:      'RENCI Dev',
+  ci:       'ITRB CI',
+  es_ci:    'ITRB ES CI',
+  redis_ci: 'ITRB Redis CI',
+  test:     'ITRB Test',
+  prod:     'ITRB Prod',
 };
 
 /** Environments shown in the main section (always visible). */
-const PRIMARY_ENVS = new Set(['dev', 'ci', 'es_ci', 'prod']);
+const PRIMARY_ENVS = new Set(['dev', 'ci', 'es_ci', 'redis_ci', 'prod']);
 
 interface Instance {
   name: string;
@@ -196,6 +197,7 @@ function removeCustomUrl() {
  *  Safe: only developer-controlled strings reach v-html. */
 function labelHtml(inst: Instance): string {
   if (inst.env === 'es_ci') return 'ITRB <abbr title="ElasticSearch">ES</abbr> CI';
+  if (inst.env === 'redis_ci') return 'ITRB <abbr title="Redis">Redis</abbr> CI';
   return ENV_LABELS[inst.env] ?? inst.name;
 }
 

@@ -14,11 +14,12 @@ import endpoints from '../../../../config/translator-endpoints.json';
 
 // Build instance list from shared config
 const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  test: 'Test',
-  prod: 'Production',
+  dev:      'Dev',
+  exp:      'Exp',
+  es_ci:    'ES CI',
+  redis_ci: 'Redis CI',
+  test:     'Test',
+  prod:     'Production',
 };
 
 const instances: NodeNormInstance[] = Object.entries(endpoints.nodenorm).map(
