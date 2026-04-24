@@ -20,7 +20,7 @@ Both frontends share the same Bootstrap 5 dark-navbar styling for visual consist
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, individual types, taxa)
-- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, ES CI, Redis CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
@@ -44,7 +44,8 @@ Purpose-built for evaluating NameRes as a real autocomplete (the primary way the
 - **Advanced options**: debounce, autocomplete flag, highlighting toggle, exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
 - **Latency badges**: per-instance response time, with a tooltip noting parallel-contention when comparing multiple environments
 - **Match-reason highlighting**: renders NameRes's Solr `highlighting` fragments (`<em>`-wrapped matches) behind a whitelist sanitiser — the only place `v-html` is used in the codebase
-- **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches
+- **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches; each column header has an `API↗` link to the raw NameRes JSON for that instance
+- **Biolink type display**: the left-hand CURIE column shows the most specific Biolink type as a badge (linked to biolink.github.io/biolink-model); when instances disagree, all distinct types are shown and the type is repeated per-cell for easy comparison
 - **Expected-CURIE panel**: paste CURIEs you expect to see; "Check" button fires a `limit=100` parallel lookup per instance and shows whether each expected CURIE appears in the top-N (green), top-100 (amber) or is missing (red). Round-trips through URL state for shareable review links
 - **Shareable state**: `q`, `preset`, repeated `target`, repeated `expected`, per-field option overrides, non-default `debounce` and `highlight` all encoded in the URL
 
@@ -61,7 +62,7 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ## Testing
 
 ```bash
-npm test            # Run all Vitest unit + component tests (~275 tests across lib and components)
+npm test            # Run all Vitest unit + component tests (~276 tests across lib and components)
 npm run test:watch  # Watch mode
 ```
 
@@ -119,7 +120,7 @@ src/
     autocomplete-diff.ts            # Cross-instance diff signals + expected-CURIE classification
     debounce.ts                     # debounce(fn, ms) with .cancel() and synchronous 0-ms path
     highlight-sanitize.ts           # Whitelist sanitizer — allow only <em>/</em>
-    instance-prefs.ts               # sessionPrefs + localStorage helpers
+    instance-prefs.ts               # sessionPrefs + localStorage helpers + sortInstances (ENV_ORDER canonical sort)
     curie-links.ts                  # Biolink prefix map loader
     url-state.ts                    # NodeNorm URL-state encode/decode
     types.ts                        # NodeNorm TypeScript interfaces

@@ -128,16 +128,14 @@ cd web && npm run test:watch # Watch mode
    - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
 
 7. **Shared Configuration** (`config/`):
-   - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments (dev, exp, ci, test, prod)
+   - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments
    - Consumed by Python CLI/frontend (`nodenorm.py`) and Astro frontend (`NodeNormApp.vue`, `NameResApp.vue`, `AutocompleteApp.vue`)
+   - **NodeNorm envs**: `dev`, `exp`, `es_ci` (ElasticSearch CI — the current CI), `redis_ci` (Redis CI — kept for comparison), `test`, `prod`
+   - **NameRes envs**: `dev`, `exp`, `ci`, `es_ci` (ElasticSearch CI), `test`, `prod`
+   - Note: NodeNorm and NameRes use different env key sets. NodeNorm has no plain `ci` — it was replaced by `es_ci` when CI migrated to ElasticSearch.
 
 ### Data Flow
 
-1. User provides CURIEs via CLI
-2. BabelDownloader ensures required Parquet files are downloaded
-3. BabelXRefs queries files using DuckDB
-4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata
-5. Results are printed to stdout
 1. User provides CURIEs via CLI, Python web UI, or Astro web UI
 2. For DB-dependent tools (XRefs, IDs): BabelDownloader ensures required Parquet files are downloaded, BabelXRefs queries files using DuckDB
 3. For API-only tools (NodeNorm): the Astro frontend calls the NodeNorm API directly from the browser; the Python frontend proxies through the server
@@ -168,7 +166,7 @@ web/src/
     autocomplete-diff.ts            # computeInstanceDiffs (presence/rank/label/types mismatch) + classifyExpectedCurie
     debounce.ts                     # debounce(fn, ms) with .cancel(); synchronous path when ms===0
     highlight-sanitize.ts           # Whitelist sanitizer for Solr highlighting (<em> only)
-    instance-prefs.ts               # Shared sessionPrefs + localStorage helpers (used by InstanceSelector)
+    instance-prefs.ts               # sessionPrefs + localStorage helpers + sortInstances (ENV_ORDER canonical sort) — used by InstanceSelector and all App components
     curie-links.ts                  # Biolink prefix map loader + URL builder
     url-state.ts                    # Encode/decode NodeNorm query state
     types.ts                        # NodeNorm TypeScript interfaces + DEFAULT_API_OPTIONS
@@ -205,6 +203,8 @@ The NodeNorm and Test Concordance pages include a dropdown to select from predef
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
 - **Dual frontend**: DB-dependent tools on a server (FastAPI + htmx), API-only tools in the browser (Astro + Vue). Split follows data dependencies.
 - **Shared config**: `config/translator-endpoints.json` is the single source of truth for deployment URLs, consumed by both frontends and the CLI
+- **Canonical instance ordering**: `sortInstances()` in `instance-prefs.ts` sorts by `ENV_ORDER` (Exp → Dev → CI → ES CI → Redis CI → Test → Prod → custom URLs). Called in every App component after setting `queriedInstances` so comparison tables always display in pipeline order.
+- **Adding a new named instance**: requires (1) entry in `config/translator-endpoints.json`, (2) add env key to `PRIMARY_ENVS` in `InstanceSelector.vue` if it should appear in the main section rather than "Extended environments", (3) add to `ENV_ORDER` in `instance-prefs.ts` for sort position, (4) add label to `ENV_LABELS` in the relevant App component(s) and in `InstanceSelector.vue`, (5) add a `labelHtml()` case in `InstanceSelector.vue` if the label needs `<abbr>` rendering (e.g. ES, Redis), (6) add to Python `env_labels` in `nodenorm.py` if it's a NodeNorm instance.
 
 ## Testing
 
@@ -241,6 +241,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
 - **Babel versions**: The default Babel version is `2025nov19`, but this can be customized via `--local-dir` and `--babel-url`
+- **Pre-existing Python test failures**: `tests/test_web.py::test_nodenorm_page` and `tests/test_web.py::test_test_concord_page` fail with `AttributeError: type object 'NodeNorm' has no attribute 'URLs'` — this is a pre-existing issue unrelated to the Astro frontend work. The `NodeNorm.URLs` attribute referenced in the Python web routes no longer matches the actual class interface.
 
 ## File Locations
 
