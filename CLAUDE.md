@@ -130,9 +130,9 @@ cd web && npm run test:watch # Watch mode
 7. **Shared Configuration** (`config/`):
    - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments
    - Consumed by Python CLI/frontend (`nodenorm.py`) and Astro frontend (`NodeNormApp.vue`, `NameResApp.vue`, `AutocompleteApp.vue`)
-   - **NodeNorm envs**: `dev`, `exp`, `es_ci` (ElasticSearch CI — the current CI), `redis_ci` (Redis CI — kept for comparison), `test`, `prod`
-   - **NameRes envs**: `dev`, `exp`, `ci`, `es_ci` (ElasticSearch CI), `test`, `prod`
-   - Note: NodeNorm and NameRes use different env key sets. NodeNorm has no plain `ci` — it was replaced by `es_ci` when CI migrated to ElasticSearch.
+   - **NodeNorm envs**: `dev`, `exp`, `ci` (ElasticSearch-backed CI), `redis_ci` (Redis CI — kept for comparison, to be retired), `test`, `prod`
+   - **NameRes envs**: `dev`, `exp`, `ci` (Solr-backed CI — the stable default), `es_ci` (ElasticSearch CI — experimental), `test`, `prod`
+   - Note: NodeNorm and NameRes use the same `ci` key but point to different backends. NodeNorm CI is ES-based; NameRes CI is still Solr-based. The NameRes `es_ci` key is a separate experimental instance.
 
 ### Data Flow
 

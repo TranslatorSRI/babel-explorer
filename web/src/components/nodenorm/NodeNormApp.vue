@@ -16,7 +16,7 @@ import endpoints from '../../../../config/translator-endpoints.json';
 const ENV_LABELS: Record<string, string> = {
   dev:      'Dev',
   exp:      'Exp',
-  es_ci:    'ES CI',
+  ci:       'CI',
   redis_ci: 'Redis CI',
   test:     'Test',
   prod:     'Production',

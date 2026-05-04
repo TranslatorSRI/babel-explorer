@@ -18,7 +18,7 @@ def _load_nodenorm_urls() -> dict[str, str]:
         env_labels = {
             "dev":      "Dev",
             "exp":      "Exp",
-            "es_ci":    "ES CI",
+            "ci":       "CI",
             "redis_ci": "Redis CI",
             "test":     "Test",
             "prod":     "Production",

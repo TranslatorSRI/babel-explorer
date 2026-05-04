@@ -139,4 +139,82 @@ describe('AutocompleteApp', () => {
     expect(wrapper.text()).not.toContain('Comparison —');
     expect(wrapper.text()).toContain('Copy API URL');
   });
+
+  // ── ES CI regression: target=es_ci must resolve to the ES CI base URL ─────────
+  //
+  // Bug: the comparison view showed an empty ES CI column even though clicking the
+  // "API↗" link returned results. Root cause: a mismatch between the env key used
+  // in the URL (`es_ci`) and how the instance URL was resolved / used as a key.
+
+  it('resolves target=es_ci to the ES CI NameRes URL and queries it', async () => {
+    const esCiResult = mkResult('MONDO:0004979', 'asthma');
+    vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([esCiResult]);
+
+    setLocation('?q=asthma&target=es_ci');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    // The fetch must have been called — not skipped because of an unrecognised env key.
+    expect(nameresApi.fetchNameResLookup).toHaveBeenCalled();
+
+    // The first argument to every call must be the ES CI base URL, not the bare
+    // string 'es_ci' (which would happen if resolveTarget fell through to its fallback).
+    const calls = vi.mocked(nameresApi.fetchNameResLookup).mock.calls;
+    for (const [baseUrl] of calls) {
+      expect(baseUrl).toContain('namelookup-es.ci.transltr.io');
+      expect(baseUrl).not.toBe('es_ci');
+    }
+  });
+
+  it('queries all four instances — including ES CI — when the URL lists target=dev&target=prod&target=ci&target=es_ci', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation((baseUrl) => {
+      if (baseUrl.includes('namelookup-es.ci.transltr.io')) {
+        return Promise.resolve([mkResult('MONDO:ES', 'es-ci-only result')]);
+      }
+      return Promise.resolve([mkResult('MONDO:OTHER', 'shared result')]);
+    });
+
+    setLocation('?q=diabetes&target=dev&target=prod&target=ci&target=es_ci');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    const calls = vi.mocked(nameresApi.fetchNameResLookup).mock.calls;
+
+    // All four instances must have been queried.
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+
+    // ES CI specifically must be queried with its real URL, not 'es_ci'.
+    const esCiCall = calls.find(([baseUrl]) => baseUrl.includes('namelookup-es.ci.transltr.io'));
+    expect(esCiCall).toBeDefined();
+    expect(esCiCall![0]).not.toBe('es_ci');
+
+    // The comparison view must be visible (4 queried instances → comparison, not single-instance).
+    expect(wrapper.text()).toContain('Comparison —');
+
+    // ES CI's unique result must appear in the rendered table.
+    expect(wrapper.text()).toContain('MONDO:ES');
+  });
+
+  it('shows ES CI results in the comparison view column, not just an empty dash', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation((baseUrl) => {
+      if (baseUrl.includes('namelookup-es.ci.transltr.io')) {
+        return Promise.resolve([mkResult('MONDO:ES_UNIQUE', 'ES CI only')]);
+      }
+      return Promise.resolve([]);
+    });
+
+    setLocation('?q=diabetes&target=dev&target=es_ci');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    // The CURIE that only ES CI returned must be visible — it would be absent if the
+    // ES CI URL key in `perInstance` didn't match the key used by the comparison view.
+    expect(wrapper.text()).toContain('MONDO:ES_UNIQUE');
+  });
 });
