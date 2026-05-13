@@ -1,11 +1,18 @@
 # Command line interface for babel-explorer
+import dataclasses
 import click
 import logging
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.core.babel_xrefs import LabeledCrossReference
-from babel_explorer.formatting import write_records, _record_to_dict, make_console, hl_curie
+from babel_explorer.core.providers import PROVIDERS
+from babel_explorer.formatting import (
+    write_records,
+    _record_to_dict,
+    make_console,
+    hl_curie,
+)
 from rich.markup import escape
 
 
@@ -181,7 +188,14 @@ def xrefs(
     "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
 )
 @format_option
-def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, fmt: str, json_indent: int):
+def ids(
+    curies: list[str],
+    babel_url: str,
+    local_dir: str,
+    check_download: str,
+    fmt: str,
+    json_indent: int,
+):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
 
@@ -246,6 +260,164 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
             for ident in nodenorm.get_clique_identifiers(curie)
         ]
         write_records(rows, fmt=fmt, indent=json_indent)
+
+
+@cli.command("search-xrefs")
+@click.argument("curies", type=str, required=True, nargs=-1)
+@click.option(
+    "--providers",
+    "providers_arg",
+    type=str,
+    default="",
+    help="Comma-separated list of provider names to query "
+    "(default: all registered, e.g. 'ols,mychem').",
+)
+@click.option(
+    "--ols-url",
+    type=str,
+    default="https://www.ebi.ac.uk/ols4",
+    show_default=True,
+    help="Base URL of the OLS4 server.",
+)
+@click.option(
+    "--mychem-url",
+    type=str,
+    default="https://mychem.info/v1",
+    show_default=True,
+    help="Base URL of the MyChem.info API.",
+)
+@click.option(
+    "--external-timeout",
+    type=int,
+    default=30,
+    show_default=True,
+    help="HTTP request timeout (seconds) for external providers.",
+)
+@click.option(
+    "--ignore-known",
+    is_flag=True,
+    help="Drop candidates that already exist as a Concord edge in Babel.",
+)
+@click.option("--labels", is_flag=True, help="Resolve target labels via NodeNorm.")
+@click.option(
+    "--local-dir",
+    type=str,
+    default="data/2025nov19",
+    help="Local location to save Babel download files to",
+)
+@click.option(
+    "--babel-url",
+    type=str,
+    default="https://stars.renci.org:443/var/babel/2025nov19/",
+    help="Base URL of the Babel server",
+)
+@click.option(
+    "--nodenorm-url",
+    type=str,
+    default="https://nodenormalization-sri.renci.org/",
+    help="NodeNorm base URL (used for --labels and for MyChem InChIKey resolution).",
+)
+@click.option(
+    "--check-download",
+    type=str,
+    default="3h",
+    show_default=True,
+    help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never').",
+)
+@format_option
+def search_xrefs(
+    curies: tuple[str, ...],
+    providers_arg: str,
+    ols_url: str,
+    mychem_url: str,
+    external_timeout: int,
+    ignore_known: bool,
+    labels: bool,
+    local_dir: str,
+    babel_url: str,
+    nodenorm_url: str,
+    check_download: str,
+    fmt: str,
+    json_indent: int,
+):
+    """Search external mapping providers for cross-references and diff against Babel.
+
+    For each CURIE, query the selected providers (OLS4, MyChem.info, ...), then
+    annotate each candidate with whether it already exists as an edge in Babel's
+    local Concord.parquet. Use ``--ignore-known`` to filter the output to only
+    candidates Babel does not yet know about.
+    """
+    logging.basicConfig(level=logging.INFO)
+
+    selected = [n.strip() for n in providers_arg.split(",") if n.strip()] or list(
+        PROVIDERS.keys()
+    )
+    for name in selected:
+        if name not in PROVIDERS:
+            raise click.BadParameter(
+                f"Unknown provider {name!r}. Known: {', '.join(PROVIDERS)}."
+            )
+
+    freshness = parse_duration(check_download)
+    nodenorm = NodeNorm(nodenorm_url)
+    bxref = BabelXRefs(
+        BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness),
+        nodenorm,
+    )
+
+    provider_kwargs = {
+        "ols_url": ols_url,
+        "mychem_url": mychem_url,
+        "nodenorm": nodenorm,
+        "timeout": external_timeout,
+    }
+    providers = [PROVIDERS[name](**provider_kwargs) for name in selected]
+
+    candidates = []
+    for curie in curies:
+        known_pairs = {x.curies for x in bxref.get_curie_xref(curie)}
+        for provider in providers:
+            for cand in provider.fetch(curie):
+                in_babel = (
+                    frozenset({cand.query_curie, cand.target_curie}) in known_pairs
+                )
+                if ignore_known and in_babel:
+                    continue
+                target_label = ""
+                target_biolink_type: tuple[str, ...] = ()
+                if labels:
+                    ident = nodenorm.get_identifier(cand.target_curie)
+                    target_label = ident.label
+                    target_biolink_type = ident.biolink_type
+                candidates.append(
+                    dataclasses.replace(
+                        cand,
+                        in_babel=in_babel,
+                        target_label=target_label,
+                        target_biolink_type=target_biolink_type,
+                    )
+                )
+
+    candidates.sort()
+
+    if fmt == "console":
+        console = make_console()
+        query_set = set(curies)
+        for c in candidates:
+            query_str = hl_curie(c.query_curie, c.query_curie in query_set)
+            target_str = hl_curie(c.target_curie, c.target_curie in query_set)
+            if c.target_label:
+                target_str += f" ({escape(c.target_label)})"
+            marker = (
+                "[bold green]NEW[/bold green]" if not c.in_babel else "[dim]known[/dim]"
+            )
+            console.print(
+                f"{query_str}  [dim]→[/dim]  {target_str}  "
+                f"[dim]\\[{escape(c.provider)}][/dim]  "
+                f"[dim]{escape(c.predicate)}[/dim]  {marker}"
+            )
+    else:
+        write_records(candidates, fmt=fmt, indent=json_indent)
 
 
 if __name__ == "__main__":
