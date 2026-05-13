@@ -41,6 +41,10 @@ uv run babel-explorer ids MONDO:0004979
 # Test concordance changes with NodeNorm
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 
+# Search external providers (OLS4, MyChem.info) for candidate xrefs
+# and diff against Babel's Concord — finds xrefs worth importing into Babel.
+uv run babel-explorer search-xrefs CHEBI:31941 --ignore-known
+
 # Use custom Babel server or local directory
 uv run babel-explorer xrefs MONDO:0004979 --local-dir data/2025nov19 --babel-url https://stars.renci.org:443/var/babel_outputs/2025nov19/
 ```
@@ -91,7 +95,18 @@ uv run ruff format
 
 4. **CLI** (`src/babel_explorer/cli.py`):
    - Click-based command-line interface
-   - Three main commands: `xrefs`, `ids`, `test-concord`
+   - Four main commands: `xrefs`, `ids`, `test-concord`, `search-xrefs`
+   - Shared `@format_option` decorator adds `--format [console|json|tsv|csv]` and `--json-indent` to every command
+
+5. **XRef Providers** (`src/babel_explorer/core/providers/`):
+   - Pluggable external mapping sources used by `search-xrefs` (currently OLS4 and MyChem.info)
+   - `XRefProvider` `typing.Protocol` + module-level `PROVIDERS` registry dict (see `providers/__init__.py`)
+   - Each provider mirrors the `NodeNorm` pattern: `requests`, `@functools.lru_cache(maxsize=None)` on `fetch()`, empty-URL skip, frozen-dataclass results
+   - **Adding a new provider**: write a class with `name: str` and `fetch(curie) -> list[CandidateXRef]`, then append a factory to `PROVIDERS` in `providers/__init__.py`. No CLI changes needed — the registry drives `--providers` selection.
+
+6. **curie_utils** (`src/babel_explorer/core/curie_utils.py`):
+   - Shared CURIE↔IRI helpers (`split_curie`, `to_iri`, `from_iri`) and a `DEFAULT_PREFIX_MAP` of common Translator prefixes
+   - Used by providers that query external services by IRI (e.g. OLS4)
 
 ### Data Flow
 
@@ -123,6 +138,10 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 | `tests/test_babel_xrefs.py` | 23 | 20 | 3 | 46 |
 | `tests/test_nodenorm.py` | 20 | 13 | 0 | 33 |
 | `tests/test_cli.py` | 24 | 0 | 0 | 24 |
+| `tests/test_curie_utils.py` | 26 | 0 | 0 | 26 |
+| `tests/test_providers_ols.py` | 17 | 2 | 0 | 19 |
+| `tests/test_providers_mychem.py` | 21 | 3 | 0 | 24 |
+| `tests/test_search_xrefs_cli.py` | 15 | 0 | 0 | 15 |
 
 ### Test Infrastructure
 
@@ -136,6 +155,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - **`CrossReference`** — Frozen dataclass for Concord.parquet rows (filename, subj, pred, obj)
 - **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
 - **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields). Returned by `BabelXRefs.get_curie_ids()`.
+- **`CandidateXRef`** — Frozen dataclass for an xref candidate from an external provider (query_curie, target_curie, provider, predicate, confidence, evidence, in_babel, target_label, target_biolink_type). Returned by `XRefProvider.fetch()`.
 
 ## Important Notes
 
