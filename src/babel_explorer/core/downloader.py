@@ -47,11 +47,10 @@ class BabelDownloader:
         if local_path is None:
             local_path = tempfile.gettempdir()
 
-        # Make sure the local path is an existing directory or that we can create it.
         if not os.path.exists(local_path):
             os.makedirs(local_path, exist_ok=True)
             self.local_path = local_path
-        elif os.path.exists(local_path) and os.path.isdir(local_path):
+        elif os.path.isdir(local_path):
             self.local_path = local_path
         else:
             raise ValueError(
@@ -193,14 +192,12 @@ class BabelDownloader:
             resume_byte_pos: Starting byte position (for resume)
             chunk_size: Size of chunks to read/write
         """
-        # Get total size from Content-Length header (may not be present)
         content_length = response.headers.get("Content-Length")
         if content_length:
             total_size = int(content_length) + resume_byte_pos
         else:
             total_size = None
 
-        # Open file in append mode if resuming, write mode otherwise
         mode = "ab" if resume_byte_pos > 0 else "wb"
 
         with open(local_path, mode) as f:
@@ -234,48 +231,38 @@ class BabelDownloader:
         """
         for attempt in range(1, self.retries + 1):
             try:
-                # Check if we're resuming a partial download
                 resume_byte_pos = 0
                 if os.path.exists(local_path):
                     resume_byte_pos = os.path.getsize(local_path)
 
-                # Prepare headers for resume
                 headers = {}
                 if resume_byte_pos > 0:
                     headers["Range"] = f"bytes={resume_byte_pos}-"
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
-                # Make streaming request with timeout for connection (not total time)
+                # timeout applies to connection only, not total transfer time
                 with requests.get(
                     url, headers=headers, stream=True, timeout=self.timeout
                 ) as response:
-                    # Handle different response codes
                     if response.status_code == 416:
-                        # Range Not Satisfiable - file already complete
                         self.logger.info(f"File already complete: {local_path}")
                         return response.headers
                     elif response.status_code == 206:
-                        # Partial Content - resume successful
                         self.logger.info("Resuming download (HTTP 206)")
                     elif response.status_code == 200:
-                        # OK - server doesn't support resume or no Range header was sent
                         if resume_byte_pos > 0:
                             self.logger.warning(
                                 "Server doesn't support resume, restarting from beginning"
                             )
                             resume_byte_pos = 0
-                            # Remove partial file
                             if os.path.exists(local_path):
                                 os.remove(local_path)
                     else:
                         response.raise_for_status()
 
-                    # Stream download with progress bar
                     self._stream_download(
                         response, local_path, resume_byte_pos, chunk_size
                     )
-
-                    # Success - exit retry loop
                     return response.headers
 
             except (requests.RequestException, IOError) as e:
@@ -284,12 +271,10 @@ class BabelDownloader:
                 )
 
                 if attempt < self.retries:
-                    # Calculate exponential backoff with max of 60 seconds
                     wait_time = min(2**attempt, 60)
                     self.logger.info(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
                 else:
-                    # All retries exhausted
                     raise RuntimeError(
                         f"Failed to download {url} after {self.retries} attempts: {e}"
                     )
