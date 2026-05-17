@@ -1,4 +1,4 @@
-# Command line interface for babel-explorer
+"""Command-line interface for babel-explorer."""
 import click
 import logging
 from babel_explorer.core.downloader import BabelDownloader
@@ -7,6 +7,31 @@ from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.core.babel_xrefs import LabeledCrossReference
 from babel_explorer.formatting import write_records, _record_to_dict, make_console, hl_curie
 from rich.markup import escape
+
+
+def babel_options(f):
+    """Decorator adding --local-dir, --babel-url, and --check-download options to a command."""
+    f = click.option(
+        "--check-download",
+        type=str,
+        default="3h",
+        show_default=True,
+        help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
+        "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
+    )(f)
+    f = click.option(
+        "--babel-url",
+        type=str,
+        default="https://stars.renci.org:443/var/babel/2025nov19/",
+        help="Base URL of the Babel server",
+    )(f)
+    f = click.option(
+        "--local-dir",
+        type=str,
+        default="data/2025nov19",
+        help="Local location to save Babel download files to",
+    )(f)
+    return f
 
 
 def format_option(f):
@@ -72,23 +97,12 @@ def parse_duration(value: str) -> int | float:
 @click.group()
 def cli():
     """babel-explorer: query and explore Babel intermediate files."""
-    pass
+    logging.basicConfig(level=logging.INFO)
 
 
 @cli.command("xrefs")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option(
-    "--local-dir",
-    type=str,
-    default="data/2025nov19",
-    help="Local location to save Babel download files to",
-)
-@click.option(
-    "--babel-url",
-    type=str,
-    default="https://stars.renci.org:443/var/babel/2025nov19/",
-    help="Base URL of the Babel server",
-)
+@babel_options
 @click.option(
     "--nodenorm-url",
     type=str,
@@ -97,14 +111,6 @@ def cli():
 )
 @click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
-@click.option(
-    "--check-download",
-    type=str,
-    default="3h",
-    show_default=True,
-    help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-    "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
-)
 @format_option
 def xrefs(
     curies: list[str],
@@ -130,8 +136,6 @@ def xrefs(
 
     :return: None
     """
-    logging.basicConfig(level=logging.INFO)
-
     freshness = parse_duration(check_download)
     bxref = BabelXRefs(
         BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness),
@@ -160,26 +164,7 @@ def xrefs(
 
 @cli.command("ids")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option(
-    "--local-dir",
-    type=str,
-    default="data/2025nov19",
-    help="Local location to save Babel download files to",
-)
-@click.option(
-    "--babel-url",
-    type=str,
-    default="https://stars.renci.org:443/var/babel/2025nov19/",
-    help="Base URL of the Babel server",
-)
-@click.option(
-    "--check-download",
-    type=str,
-    default="3h",
-    show_default=True,
-    help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
-    "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
-)
+@babel_options
 @format_option
 def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, fmt: str, json_indent: int):
     """
@@ -195,8 +180,6 @@ def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, 
 
     :return: None
     """
-    logging.basicConfig(level=logging.INFO)
-
     freshness = parse_duration(check_download)
     bxref = BabelXRefs(
         BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness)
