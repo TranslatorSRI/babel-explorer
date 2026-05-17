@@ -75,15 +75,7 @@ class NodeNorm:
         return Identifier(curie=curie)
 
     @functools.lru_cache(maxsize=None)
-    def normalize_curie(
-        self,
-        curie: str,
-        conflate=True,
-        drug_chemical_conflate=True,
-        description=True,
-        individual_types=True,
-        include_taxa=True,
-    ):
+    def normalize_curie(self, curie: str):
         """Call ``get_normalized_nodes`` and return the per-CURIE result dict.
 
         :return: The normalisation dict for *curie* (contains ``id``, ``equivalent_identifiers``,
@@ -96,11 +88,11 @@ class NodeNorm:
             f"{self.nodenorm_url}get_normalized_nodes",
             params={
                 "curie": curie,
-                "conflate": conflate,
-                "drug_chemical_conflate": drug_chemical_conflate,
-                "description": description,
-                "individual_types": individual_types,
-                "include_taxa": include_taxa,
+                "conflate": True,
+                "drug_chemical_conflate": True,
+                "description": True,
+                "individual_types": True,
+                "include_taxa": True,
             },
             timeout=self.timeout,
         )
@@ -123,8 +115,6 @@ class NodeNorm:
             or an empty list if the CURIE is unknown or has no equivalents.
         """
         result = self.normalize_curie(curie)
-        if not result:
-            return []
-        if "equivalent_identifiers" not in result:
+        if not result or "equivalent_identifiers" not in result:
             return []
         return [Identifier.from_dict(x) for x in result["equivalent_identifiers"]]

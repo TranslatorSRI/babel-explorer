@@ -53,9 +53,6 @@ class LabeledCrossReference(CrossReference):
     obj_label: str
     obj_biolink_type: tuple[str, ...]
 
-    def __str__(self):
-        return f"""LabeledCrossReference(subj="{self.subj}", pred="{self.pred}", obj="{self.obj}", subj_label="{self.subj_label}", subj_biolink_type="{self.subj_biolink_type}", obj_label="{self.obj_label}", obj_biolink_type="{self.obj_biolink_type}")"""
-
 
 @dataclasses.dataclass(frozen=True)
 class IdentifierRecord:
@@ -99,6 +96,12 @@ class BabelXRefs:
         self.downloader = downloader
         self.nodenorm = nodenorm
 
+    def _require_nodenorm(self):
+        if self.nodenorm is None:
+            raise ValueError(
+                "label_curies=True requires a configured NodeNorm instance (nodenorm was None)."
+            )
+
     def get_curie_ids(self, curies: list[str]) -> list[IdentifierRecord]:
         """
         Search for all identifiers in the /ids/ files for a particular CURIE.
@@ -135,10 +138,8 @@ class BabelXRefs:
         :raises ValueError: If ``label_curies=True`` but no NodeNorm instance is available.
         :return: A list of ``CrossReference`` (or ``LabeledCrossReference``) objects.
         """
-        if label_curies and self.nodenorm is None:
-            raise ValueError(
-                "label_curies=True requires a configured NodeNorm instance (nodenorm was None)."
-            )
+        if label_curies:
+            self._require_nodenorm()
 
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
@@ -171,10 +172,8 @@ class BabelXRefs:
 
     def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
         """Traverse the cross-reference graph in one DuckDB WITH RECURSIVE query."""
-        if label_curies and self.nodenorm is None:
-            raise ValueError(
-                "label_curies=True requires a configured NodeNorm instance (nodenorm was None)."
-            )
+        if label_curies:
+            self._require_nodenorm()
         if not curies:
             return []
 
