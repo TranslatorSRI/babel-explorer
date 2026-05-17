@@ -8,9 +8,18 @@ import json
 import pytest
 from rich.console import Console
 
-from babel_explorer.core.babel_xrefs import CrossReference, LabeledCrossReference, IdentifierRecord
+from babel_explorer.core.babel_xrefs import (
+    CrossReference,
+    LabeledCrossReference,
+    IdentifierRecord,
+)
 from babel_explorer.core.nodenorm import Identifier
-from babel_explorer.formatting import _record_to_dict, write_records, make_console, hl_curie
+from babel_explorer.formatting import (
+    _record_to_dict,
+    write_records,
+    make_console,
+    hl_curie,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -20,7 +29,9 @@ from babel_explorer.formatting import _record_to_dict, write_records, make_conso
 
 @pytest.fixture
 def xref():
-    return CrossReference(filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2")
+    return CrossReference(
+        filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2"
+    )
 
 
 @pytest.fixture
@@ -108,13 +119,24 @@ class TestConsoleUtilities:
 class TestRecordToDict:
     def test_cross_reference(self, xref):
         d = _record_to_dict(xref)
-        assert d == {"filename": "Concord.parquet", "subj": "A:1", "pred": "skos:exactMatch", "obj": "B:2"}
+        assert d == {
+            "filename": "Concord.parquet",
+            "subj": "A:1",
+            "pred": "skos:exactMatch",
+            "obj": "B:2",
+        }
 
     def test_labeled_cross_reference_has_all_eight_fields(self, labeled_xref):
         d = _record_to_dict(labeled_xref)
         assert set(d.keys()) == {
-            "filename", "subj", "pred", "obj",
-            "subj_label", "subj_biolink_type", "obj_label", "obj_biolink_type",
+            "filename",
+            "subj",
+            "pred",
+            "obj",
+            "subj_label",
+            "subj_biolink_type",
+            "obj_label",
+            "obj_biolink_type",
         }
         # dataclasses.asdict() preserves tuple types
         assert d["subj_biolink_type"] == ("biolink:Disease",)
@@ -151,7 +173,6 @@ class TestRecordToDict:
 
 
 class TestWriteRecords:
-
     # -- json format --
 
     def test_json_is_valid_list(self, xref):

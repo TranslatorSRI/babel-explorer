@@ -32,7 +32,9 @@ def _record_to_dict(record) -> dict[str, Any]:
 
 def _flatten_for_tabular(row: dict) -> dict:
     """Convert list/tuple fields to pipe-joined strings for TSV/CSV output."""
-    return {k: "|".join(v) if isinstance(v, (list, tuple)) else v for k, v in row.items()}
+    return {
+        k: "|".join(v) if isinstance(v, (list, tuple)) else v for k, v in row.items()
+    }
 
 
 def make_console(file=None) -> Console:

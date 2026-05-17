@@ -210,11 +210,18 @@ class TestOutputFormats:
     """Tests for --format option on all commands."""
 
     # Shared real dataclass instances (no mocking needed for formatting logic)
-    _xref = CrossReference(filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2")
-    _id_record = IdentifierRecord(curie="A:1", extra_fields=(("type", "gene"), ("label", "Alpha")))
+    _xref = CrossReference(
+        filename="Concord.parquet", subj="A:1", pred="skos:exactMatch", obj="B:2"
+    )
+    _id_record = IdentifierRecord(
+        curie="A:1", extra_fields=(("type", "gene"), ("label", "Alpha"))
+    )
     _identifier = Identifier(
-        curie="MONDO:0004979", label="asthma",
-        biolink_type=("biolink:Disease",), taxa=(), description=(),
+        curie="MONDO:0004979",
+        label="asthma",
+        biolink_type=("biolink:Disease",),
+        taxa=(),
+        description=(),
     )
 
     # -- console format (default) --
@@ -252,8 +259,12 @@ class TestOutputFormats:
     def test_test_concord_console_format(self):
         runner = CliRunner()
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
-            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
-            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "console"])
+            mock_nn.return_value.get_clique_identifiers.return_value = [
+                self._identifier
+            ]
+            result = runner.invoke(
+                cli, ["test-concord", "MONDO:0004979", "--format", "console"]
+            )
 
         assert result.exit_code == 0
         assert "MONDO:0004979" in result.output
@@ -270,7 +281,9 @@ class TestOutputFormats:
 
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
             mock_nn.return_value.get_clique_identifiers.return_value = [mock_ident]
-            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "console"])
+            result = runner.invoke(
+                cli, ["test-concord", "MONDO:0004979", "--format", "console"]
+            )
 
         assert result.exit_code == 0
         assert "-" in result.output
@@ -361,8 +374,12 @@ class TestOutputFormats:
     def test_test_concord_format_json_includes_query_curie(self):
         runner = CliRunner()
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
-            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
-            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "json"])
+            mock_nn.return_value.get_clique_identifiers.return_value = [
+                self._identifier
+            ]
+            result = runner.invoke(
+                cli, ["test-concord", "MONDO:0004979", "--format", "json"]
+            )
 
         assert result.exit_code == 0
         data = json.loads(result.output)
@@ -374,8 +391,12 @@ class TestOutputFormats:
     def test_test_concord_format_tsv(self):
         runner = CliRunner()
         with patch("babel_explorer.cli.NodeNorm") as mock_nn:
-            mock_nn.return_value.get_clique_identifiers.return_value = [self._identifier]
-            result = runner.invoke(cli, ["test-concord", "MONDO:0004979", "--format", "tsv"])
+            mock_nn.return_value.get_clique_identifiers.return_value = [
+                self._identifier
+            ]
+            result = runner.invoke(
+                cli, ["test-concord", "MONDO:0004979", "--format", "tsv"]
+            )
 
         assert result.exit_code == 0
         lines = result.output.splitlines()

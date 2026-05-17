@@ -1,11 +1,17 @@
 """Command-line interface for babel-explorer."""
+
 import click
 import logging
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.core.babel_xrefs import LabeledCrossReference
-from babel_explorer.formatting import write_records, _record_to_dict, make_console, hl_curie
+from babel_explorer.formatting import (
+    write_records,
+    _record_to_dict,
+    make_console,
+    hl_curie,
+)
 from rich.markup import escape
 
 
@@ -166,7 +172,14 @@ def xrefs(
 @click.argument("curies", type=str, required=True, nargs=-1)
 @babel_options
 @format_option
-def ids(curies: list[str], babel_url: str, local_dir: str, check_download: str, fmt: str, json_indent: int):
+def ids(
+    curies: list[str],
+    babel_url: str,
+    local_dir: str,
+    check_download: str,
+    fmt: str,
+    json_indent: int,
+):
     """
     Fetches and prints the ID records for the given CURIEs, along with Biolink type if provided.
 
