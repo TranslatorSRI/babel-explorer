@@ -8,7 +8,6 @@ considered identical in a Babel build.
 import dataclasses
 import logging
 import duckdb
-import functools
 
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.nodenorm import NodeNorm
@@ -95,6 +94,7 @@ class BabelXRefs:
         """
         self.downloader = downloader
         self.nodenorm = nodenorm
+        self._xref_cache: dict = {}
 
     def _require_nodenorm(self):
         if self.nodenorm is None:
@@ -118,7 +118,8 @@ class BabelXRefs:
         with duckdb.connect() as db:
             identifier_table = db.read_parquet(identifier_parquet)  # noqa: F841 — DuckDB resolves 'identifier_table' by Python variable name in the SQL query
             result = db.execute(
-                "SELECT * FROM identifier_table WHERE curie IN $1", [curies]
+                "SELECT * FROM identifier_table WHERE curie IN (SELECT unnest($1::VARCHAR[]))",
+                [list(curies)],
             )
             column_names = [desc[0] for desc in result.description]
             return [
@@ -126,11 +127,10 @@ class BabelXRefs:
                 for row in result.fetchall()
             ]
 
-    @functools.lru_cache(maxsize=None)
     def get_curie_xref(self, curie: str, label_curies: bool = False):
         """Return all cross-references in Concord.parquet where *curie* is the subject or object.
 
-        Results are LRU-cached per ``(curie, label_curies)`` pair.
+        Results are cached per ``(curie, label_curies)`` pair on this instance.
 
         :param curie: The CURIE to look up.
         :param label_curies: If ``True``, annotate each result with NodeNorm labels and
@@ -138,6 +138,10 @@ class BabelXRefs:
         :raises ValueError: If ``label_curies=True`` but no NodeNorm instance is available.
         :return: A list of ``CrossReference`` (or ``LabeledCrossReference``) objects.
         """
+        cache_key = (curie, label_curies)
+        if cache_key in self._xref_cache:
+            return self._xref_cache[cache_key]
+
         if label_curies:
             self._require_nodenorm()
 
@@ -153,6 +157,7 @@ class BabelXRefs:
         xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
         if label_curies:
             xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
+        self._xref_cache[cache_key] = xrefs
         return xrefs
 
     def _to_labeled_xref(self, xref: CrossReference) -> LabeledCrossReference:

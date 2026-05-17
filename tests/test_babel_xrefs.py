@@ -230,7 +230,6 @@ class TestBabelXRefsMocked:
                     "babel_explorer.core.babel_xrefs.duckdb.connect",
                     return_value=mock_db,
                 ):
-                    bx.get_curie_xref.cache_clear()
                     result = bx.get_curie_xref("A:1")
                     # Downloader should be called for Concord only (Metadata unused here)
                     assert mock_dl.call_count == 1
@@ -242,7 +241,6 @@ class TestBabelXRefsMocked:
         bx = self._make_bx(tmp_path)
         xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
         with patch.object(bx, "get_curie_xref", return_value=[xr]):
-            bx.get_curie_xref.cache_clear()
             result = bx.get_curie_xrefs(["A:1"], recurse=False)
             assert len(result) == 1
             assert result[0] == xr
