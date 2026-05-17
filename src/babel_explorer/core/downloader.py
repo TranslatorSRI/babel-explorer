@@ -4,7 +4,6 @@ import functools
 import json
 import os
 import tempfile
-import urllib.parse
 import time
 import requests
 from datetime import datetime, timezone
@@ -299,7 +298,7 @@ class BabelDownloader:
         local_path_to_download_to = os.path.join(self.local_path, dirpath)
         os.makedirs(os.path.dirname(local_path_to_download_to), exist_ok=True)
 
-        url_to_download = urllib.parse.urljoin(self.url_base, dirpath)
+        url_to_download = self.url_base + dirpath
 
         if os.path.exists(local_path_to_download_to):
             meta = self._load_meta(local_path_to_download_to)
