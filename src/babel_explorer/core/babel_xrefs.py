@@ -25,9 +25,7 @@ class CrossReference:
     @staticmethod
     def from_tuple(row: tuple[str, str, str, str]):
         """Construct from a ``(filename, subj, pred, obj)`` database row tuple."""
-        return CrossReference(
-            filename=row[0], subj=row[1], pred=row[2], obj=row[3]
-        )
+        return CrossReference(filename=row[0], subj=row[1], pred=row[2], obj=row[3])
 
     @property
     def curies(self):
@@ -116,10 +114,9 @@ class BabelXRefs:
 
         # Query the Parquet files using DuckDB (in-memory; nothing is persisted).
         with duckdb.connect() as db:
-            identifier_table = db.read_parquet(identifier_parquet)  # noqa: F841 — DuckDB resolves 'identifier_table' by Python variable name in the SQL query
             result = db.execute(
-                "SELECT * FROM identifier_table WHERE curie IN (SELECT unnest($1::VARCHAR[]))",
-                [list(curies)],
+                "SELECT * FROM read_parquet($1) WHERE curie IN (SELECT unnest($2::VARCHAR[]))",
+                [identifier_parquet, list(curies)],
             )
             column_names = [desc[0] for desc in result.description]
             return [
@@ -148,10 +145,9 @@ class BabelXRefs:
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
         with duckdb.connect() as db:
-            concord_table = db.read_parquet(concord_parquet)  # noqa: F841 — DuckDB resolves 'concord_table' by Python variable name in the SQL query
             xref_tuples = db.execute(
-                "SELECT filename, subj, pred, obj FROM concord_table WHERE subj=$1 OR obj=$1",
-                [curie],
+                "SELECT filename, subj, pred, obj FROM read_parquet($1) WHERE subj=$2 OR obj=$2",
+                [concord_parquet, curie],
             ).fetchall()
 
         xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
@@ -185,29 +181,31 @@ class BabelXRefs:
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
         with duckdb.connect() as db:
-            concord_table = db.read_parquet(concord_parquet)  # noqa: F841 — DuckDB resolves 'concord_table' by Python variable name in the SQL query
             rows = db.execute(
                 """
             WITH RECURSIVE
+            concord AS MATERIALIZED (
+                SELECT filename, subj, pred, obj FROM read_parquet($1)
+            ),
             edges(a, b) AS (
-                SELECT subj, obj FROM concord_table
+                SELECT subj, obj FROM concord
                 UNION ALL
-                SELECT obj, subj FROM concord_table
+                SELECT obj, subj FROM concord
             ),
             frontier(curie) AS (
-                SELECT unnest($1::VARCHAR[])
+                SELECT unnest($2::VARCHAR[])
                 UNION
                 SELECT e.b
                 FROM   edges e
                 INNER JOIN frontier f ON e.a = f.curie
             )
             SELECT DISTINCT c.filename, c.subj, c.pred, c.obj
-            FROM concord_table c
+            FROM concord c
             WHERE c.subj IN (SELECT curie FROM frontier)
                OR c.obj  IN (SELECT curie FROM frontier)
             ORDER BY c.filename, c.subj, c.obj, c.pred
         """,
-                [curies],
+                [concord_parquet, curies],
             ).fetchall()
 
         xrefs = [CrossReference.from_tuple(row) for row in rows]
