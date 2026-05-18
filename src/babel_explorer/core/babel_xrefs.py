@@ -23,10 +23,10 @@ class CrossReference:
     obj: str
 
     @staticmethod
-    def from_tuple(tuple: tuple[str, str, str, str]):
+    def from_tuple(row: tuple[str, str, str, str]):
         """Construct from a ``(filename, subj, pred, obj)`` database row tuple."""
         return CrossReference(
-            filename=tuple[0], subj=tuple[1], pred=tuple[2], obj=tuple[3]
+            filename=row[0], subj=row[1], pred=row[2], obj=row[3]
         )
 
     @property
