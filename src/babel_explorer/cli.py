@@ -28,7 +28,7 @@ def babel_options(f):
     f = click.option(
         "--babel-url",
         type=str,
-        default="https://stars.renci.org:443/var/babel_outputs/2025nov19/",
+        default="https://stars.renci.org/var/babel_outputs/2025nov19/",
         help="Base URL of the Babel server",
     )(f)
     f = click.option(
