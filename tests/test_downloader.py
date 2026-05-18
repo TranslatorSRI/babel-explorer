@@ -317,7 +317,6 @@ class TestGetDownloadedFileTiers:
 
         with patch("babel_explorer.core.downloader.requests.head") as mock_head:
             with patch("babel_explorer.core.downloader.requests.get") as mock_get:
-                dl.get_downloaded_file.cache_clear()
                 result = dl.get_downloaded_file(test_file)
                 mock_head.assert_not_called()
                 mock_get.assert_not_called()
@@ -346,7 +345,6 @@ class TestGetDownloadedFileTiers:
             "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
         ):
             with patch("babel_explorer.core.downloader.requests.get") as mock_get:
-                dl.get_downloaded_file.cache_clear()
                 result = dl.get_downloaded_file(test_file)
                 mock_get.assert_not_called()
         assert result == str(local)
@@ -371,7 +369,6 @@ class TestGetDownloadedFileTiers:
         with patch(
             "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
         ):
-            dl.get_downloaded_file.cache_clear()
             dl.get_downloaded_file(test_file)
 
         with open(str(local) + ".meta") as f:
@@ -409,7 +406,6 @@ class TestGetDownloadedFileTiers:
             "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
         ):
             with patch.object(dl, "_download_with_retry", side_effect=fake_download):
-                dl.get_downloaded_file.cache_clear()
                 result = dl.get_downloaded_file(test_file)
 
         assert open(result, "rb").read() == new_content
@@ -431,7 +427,6 @@ class TestGetDownloadedFileTiers:
         with patch.object(
             dl, "_download_with_retry", side_effect=fake_download
         ) as mock_dl:
-            dl.get_downloaded_file.cache_clear()
             result = dl.get_downloaded_file(test_file)
             mock_dl.assert_called_once()
 
@@ -463,7 +458,6 @@ class TestGetDownloadedFileTiers:
         with patch.object(
             dl, "_download_with_retry", side_effect=fake_download
         ) as mock_dl:
-            dl.get_downloaded_file.cache_clear()
             result = dl.get_downloaded_file(test_file)
             mock_dl.assert_called_once()
 
@@ -471,9 +465,9 @@ class TestGetDownloadedFileTiers:
 
 
 class TestGetDownloadedFileCaching:
-    """Tests for get_downloaded_file LRU caching."""
+    """Tests that repeated calls within the freshness window avoid redundant downloads."""
 
-    def test_cache_returns_same_result(self, tmp_path):
+    def test_second_call_within_freshness_skips_download(self, tmp_path):
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
         content = b"cached content"
 
@@ -485,11 +479,10 @@ class TestGetDownloadedFileCaching:
         with patch.object(
             dl, "_download_with_retry", side_effect=fake_download
         ) as mock_dl:
-            dl.get_downloaded_file.cache_clear()
             r1 = dl.get_downloaded_file("cached.txt")
             r2 = dl.get_downloaded_file("cached.txt")
             assert r1 == r2
-            mock_dl.assert_called_once()  # only one actual download
+            mock_dl.assert_called_once()  # freshness window prevents second download
 
 
 class TestDownloadWithRetry:

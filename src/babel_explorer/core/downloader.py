@@ -239,7 +239,7 @@ class BabelDownloader:
                     headers["Range"] = f"bytes={resume_byte_pos}-"
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
-                # timeout applies to connection only, not total transfer time
+                # timeout is per-read (seconds without receiving bytes), not a total time limit.
                 with requests.get(
                     url, headers=headers, stream=True, timeout=self.timeout
                 ) as response:
@@ -278,7 +278,6 @@ class BabelDownloader:
                         f"Failed to download {url} after {self.retries} attempts: {e}"
                     )
 
-    @functools.lru_cache(maxsize=None)
     def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024 * 1024):
         """
         Download a file from the Babel server to local storage with ETag-based caching.
