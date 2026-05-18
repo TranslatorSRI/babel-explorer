@@ -1,7 +1,6 @@
 """NodeNorm API client for identifier normalisation and label enrichment."""
 
 import dataclasses
-import functools
 import requests
 import logging
 
@@ -37,7 +36,11 @@ class Identifier:
 
 
 class NodeNorm:
-    """Client for the NodeNormalization API (https://nodenormalization-sri.renci.org/)."""
+    """Client for the NodeNormalization API (https://nodenormalization-sri.renci.org/).
+
+    Results are cached per instance. To get uncached results, instantiate a new
+    NodeNorm object.
+    """
 
     def __init__(self, nodenorm_url: str = "", timeout: int = 30):
         """
@@ -49,8 +52,10 @@ class NodeNorm:
         self.timeout = timeout
         if self.nodenorm_url and not self.nodenorm_url.endswith("/"):
             self.nodenorm_url += "/"
+        self._normalize_cache: dict[str, dict | None] = {}
+        self._identifier_cache: dict[str, Identifier] = {}
+        self._clique_cache: dict[str, list[Identifier]] = {}
 
-    @functools.lru_cache(maxsize=None)
     def get_identifier(self, curie: str) -> "Identifier":
         """Return the ``Identifier`` for *curie* by looking it up in its NodeNorm clique.
 
@@ -58,32 +63,46 @@ class NodeNorm:
         *curie* exactly. Falls back to a bare ``Identifier(curie=curie)`` (empty label and
         type) if NodeNorm does not recognise the CURIE or it is not listed in the clique.
 
-        Results are LRU-cached so repeated calls for the same CURIE are free.
+        Results are cached per instance.
         """
+        if curie in self._identifier_cache:
+            return self._identifier_cache[curie]
+
         result = self.normalize_curie(curie)
         logging.debug(f"Normalizing {curie} with NodeNorm to result: {result}")
         if not result:
-            return Identifier(curie=curie)
-        for identifier in result.get("equivalent_identifiers", []):
-            if identifier["identifier"] == curie:
-                logging.debug(f"Found exact match for {curie}: {identifier}")
-                return Identifier.from_dict(identifier)
+            ident = Identifier(curie=curie)
+        else:
+            for identifier in result.get("equivalent_identifiers", []):
+                if identifier["identifier"] == curie:
+                    logging.debug(f"Found exact match for {curie}: {identifier}")
+                    ident = Identifier.from_dict(identifier)
+                    break
+            else:
+                logging.debug(
+                    f"No exact match for {curie!r} in equivalent_identifiers; returning bare Identifier"
+                )
+                ident = Identifier(curie=curie)
 
-        logging.debug(
-            f"No exact match for {curie!r} in equivalent_identifiers; returning bare Identifier"
-        )
-        return Identifier(curie=curie)
+        self._identifier_cache[curie] = ident
+        return ident
 
-    @functools.lru_cache(maxsize=None)
     def normalize_curie(self, curie: str):
         """Call ``get_normalized_nodes`` and return the per-CURIE result dict.
 
         :return: The normalisation dict for *curie* (contains ``id``, ``equivalent_identifiers``,
             ``type``, etc.), or ``None`` if the CURIE is not recognised by NodeNorm.
         :raises requests.HTTPError: If the API returns a non-2xx status code.
+
+        Results are cached per instance. HTTP errors are not cached.
         """
+        if curie in self._normalize_cache:
+            return self._normalize_cache[curie]
+
         if not self.nodenorm_url:
+            self._normalize_cache[curie] = None
             return None
+
         response = requests.get(
             f"{self.nodenorm_url}get_normalized_nodes",
             params={
@@ -100,21 +119,34 @@ class NodeNorm:
         result = response.json()
 
         try:
-            return result[curie]
+            value = result[curie]
         except KeyError:
             logging.debug(
                 f"NodeNorm response did not contain CURIE {curie!r}; returning None"
             )
-            return None
+            value = None
 
-    @functools.lru_cache(maxsize=None)
+        self._normalize_cache[curie] = value
+        return value
+
     def get_clique_identifiers(self, curie: str) -> list[Identifier]:
         """Return all ``Identifier`` objects in the NodeNorm clique for *curie*.
 
         :return: A list of ``Identifier`` objects (one per entry in ``equivalent_identifiers``),
             or an empty list if the CURIE is unknown or has no equivalents.
+
+        Results are cached per instance.
         """
+        if curie in self._clique_cache:
+            return self._clique_cache[curie]
+
         result = self.normalize_curie(curie)
         if not result or "equivalent_identifiers" not in result:
-            return []
-        return [Identifier.from_dict(x) for x in result["equivalent_identifiers"]]
+            identifiers = []
+        else:
+            identifiers = [
+                Identifier.from_dict(x) for x in result["equivalent_identifiers"]
+            ]
+
+        self._clique_cache[curie] = identifiers
+        return identifiers

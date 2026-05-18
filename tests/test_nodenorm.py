@@ -143,7 +143,6 @@ class TestNodeNormInit:
     def test_empty_url_normalize_curie_returns_none_without_network(self):
         """NodeNorm('') must not make any HTTP calls and must return None."""
         nn = NodeNorm("")
-        nn.normalize_curie.cache_clear()
         with patch("babel_explorer.core.nodenorm.requests.get") as mock_get:
             result = nn.normalize_curie("MONDO:0004979")
             mock_get.assert_not_called()
@@ -154,9 +153,7 @@ class TestNormalizeCurieMocked:
     """Unit tests for NodeNorm.normalize_curie() with mocked HTTP responses."""
 
     def _make_nn(self):
-        nn = NodeNorm(nodenorm_url="https://example.com/")
-        nn.normalize_curie.cache_clear()
-        return nn
+        return NodeNorm(nodenorm_url="https://example.com/")
 
     def test_correct_api_endpoint_and_params(self):
         nn = self._make_nn()
@@ -185,7 +182,7 @@ class TestNormalizeCurieMocked:
             result = nn.normalize_curie("X:1")
             assert result == expected
 
-    def test_lru_caching(self):
+    def test_caching(self):
         nn = self._make_nn()
         mock_resp = Mock()
         mock_resp.json.return_value = {"X:1": {"id": "X:1"}}
@@ -212,10 +209,7 @@ class TestGetIdentifierMocked:
     """Unit tests for NodeNorm.get_identifier() with mocked normalize_curie."""
 
     def _make_nn(self):
-        nn = NodeNorm(nodenorm_url="https://example.com/")
-        nn.normalize_curie.cache_clear()
-        nn.get_identifier.cache_clear()
-        return nn
+        return NodeNorm(nodenorm_url="https://example.com/")
 
     def test_exact_match_found(self):
         nn = self._make_nn()
@@ -266,10 +260,7 @@ class TestGetCliqueIdentifiersMocked:
     """Unit tests for NodeNorm.get_clique_identifiers() with mocked normalize_curie."""
 
     def _make_nn(self):
-        nn = NodeNorm(nodenorm_url="https://example.com/")
-        nn.normalize_curie.cache_clear()
-        nn.get_clique_identifiers.cache_clear()
-        return nn
+        return NodeNorm(nodenorm_url="https://example.com/")
 
     def test_success_returns_list(self):
         nn = self._make_nn()
@@ -311,7 +302,6 @@ class TestGetCliqueIdentifiersMocked:
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_normalize_curie_real_api(nodenorm, curie):
     """normalize_curie returns a dict with expected keys."""
-    nodenorm.normalize_curie.cache_clear()
     result = nodenorm.normalize_curie(curie)
     assert isinstance(result, dict)
     assert "id" in result
@@ -323,8 +313,6 @@ def test_normalize_curie_real_api(nodenorm, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_identifier_real_api(nodenorm, curie):
     """get_identifier returns an Identifier with non-empty label and biolink_type."""
-    nodenorm.normalize_curie.cache_clear()
-    nodenorm.get_identifier.cache_clear()
     ident = nodenorm.get_identifier(curie)
     assert isinstance(ident, Identifier)
     assert ident.curie == curie
@@ -335,8 +323,6 @@ def test_get_identifier_real_api(nodenorm, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_clique_identifiers_real_api(nodenorm, curie):
     """get_clique_identifiers returns a non-empty list of Identifiers."""
-    nodenorm.normalize_curie.cache_clear()
-    nodenorm.get_clique_identifiers.cache_clear()
     result = nodenorm.get_clique_identifiers(curie)
     assert result is not None
     assert len(result) > 0
@@ -347,8 +333,6 @@ def test_get_clique_identifiers_real_api(nodenorm, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_clique_identifiers_has_known_ids(nodenorm, curie):
     """At least one equivalent identifier is returned."""
-    nodenorm.normalize_curie.cache_clear()
-    nodenorm.get_clique_identifiers.cache_clear()
     result = nodenorm.get_clique_identifiers(curie)
     assert len(result) >= 1
 
@@ -356,6 +340,5 @@ def test_get_clique_identifiers_has_known_ids(nodenorm, curie):
 @pytest.mark.integration
 def test_normalize_curie_nonexistent(nodenorm):
     """A made-up CURIE returns None."""
-    nodenorm.normalize_curie.cache_clear()
     result = nodenorm.normalize_curie("FAKENS:9999999999")
     assert result is None
