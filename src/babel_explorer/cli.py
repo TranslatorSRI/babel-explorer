@@ -185,7 +185,7 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
             obj_str = _curie_str(obj_node, obj_node in query_set, i + 1, obj_label)
 
             console.print(
-                f"  {subj_str}  [dim]{escape(edge.pred)}[/dim]  "
+                f"  - {subj_str}  [dim]{escape(edge.pred)}[/dim]  "
                 f"{obj_str}  [dim italic]{escape(edge.filename)}[/dim italic]"
             )
 
