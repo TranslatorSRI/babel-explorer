@@ -2,8 +2,10 @@
 
 import click
 import logging
+from itertools import combinations
+
 from babel_explorer.core.downloader import BabelDownloader
-from babel_explorer.core.babel_xrefs import BabelXRefs
+from babel_explorer.core.babel_xrefs import BabelXRefs, build_depth_map, find_shortest_path
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.core.babel_xrefs import LabeledCrossReference
 from babel_explorer.formatting import (
@@ -11,6 +13,7 @@ from babel_explorer.formatting import (
     _record_to_dict,
     make_console,
     hl_curie,
+    hl_curie_at_depth,
 )
 from rich.markup import escape
 
@@ -100,6 +103,95 @@ def parse_duration(value: str) -> int | float:
     return result
 
 
+def _curie_str(curie: str, is_query: bool, depth: int | None, label: str | None) -> str:
+    """Build a Rich-marked-up CURIE string with optional label."""
+    if is_query:
+        s = hl_curie(curie, True)
+    else:
+        s = hl_curie_at_depth(curie, depth)
+    if label:
+        s += f" ({escape(label)})"
+    return s
+
+
+def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
+    """Print the shortest path between every pair of query CURIEs."""
+    curie_list = list(curies)
+    if len(curie_list) < 2:
+        console.print("[yellow]--paths requires at least two CURIEs.[/yellow]")
+        return
+
+    query_set = set(curie_list)
+
+    for from_c, to_c in combinations(curie_list, 2):
+        path = find_shortest_path(from_c, to_c, xrefs_list)
+        header_from = hl_curie(from_c, True)
+        header_to = hl_curie(to_c, True)
+
+        if path is None:
+            console.print(
+                f"[bold]Path:[/bold] {header_from} [dim]→[/dim] {header_to}"
+                f"  [red]no path found[/red]"
+            )
+            console.print()
+            continue
+
+        if len(path) == 0:
+            console.print(
+                f"[bold]Path:[/bold] {header_from} [dim]=[/dim] {header_to}"
+                f"  [dim](same node)[/dim]"
+            )
+            console.print()
+            continue
+
+        # Reconstruct ordered node list from the edge sequence.
+        nodes = [from_c]
+        for edge in path:
+            prev = nodes[-1]
+            nodes.append(edge.obj if edge.subj == prev else edge.subj)
+
+        # Header: node1 → node2 → … → nodeN
+        node_strs = []
+        for i, node in enumerate(nodes):
+            if node in query_set:
+                node_strs.append(hl_curie(node, True))
+            else:
+                depth = i  # position along path == depth from from_c
+                node_strs.append(hl_curie_at_depth(node, depth))
+        n_steps = len(path)
+        step_word = "step" if n_steps == 1 else "steps"
+        console.print(
+            f"[bold]Path ({n_steps} {step_word}):[/bold] "
+            + f" [dim]→[/dim] ".join(node_strs)
+        )
+
+        # Edge details, indented, oriented in traversal direction.
+        for i, edge in enumerate(path):
+            from_node = nodes[i]
+            to_node = nodes[i + 1]
+            subj_node = edge.subj if edge.subj == from_node else edge.obj
+            obj_node = edge.obj if edge.subj == from_node else edge.subj
+
+            subj_label = obj_label = None
+            if labels and isinstance(edge, LabeledCrossReference):
+                if edge.subj == subj_node:
+                    subj_label = edge.subj_label
+                    obj_label = edge.obj_label
+                else:
+                    subj_label = edge.obj_label
+                    obj_label = edge.subj_label
+
+            subj_str = _curie_str(subj_node, subj_node in query_set, i, subj_label)
+            obj_str = _curie_str(obj_node, obj_node in query_set, i + 1, obj_label)
+
+            console.print(
+                f"  {subj_str}  [dim]{escape(edge.pred)}[/dim]  "
+                f"{obj_str}  [dim italic]{escape(edge.filename)}[/dim italic]"
+            )
+
+        console.print()
+
+
 @click.group()
 def cli():
     """babel-explorer: query and explore Babel intermediate files."""
@@ -117,6 +209,11 @@ def cli():
 )
 @click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
+@click.option(
+    "--paths",
+    is_flag=True,
+    help="Show shortest path(s) connecting the given CURIEs (implies --recurse)",
+)
 @format_option
 def xrefs(
     curies: list[str],
@@ -125,6 +222,7 @@ def xrefs(
     local_dir: str,
     recurse: bool,
     labels: bool,
+    paths: bool,
     check_download: str,
     fmt: str,
     json_indent: int,
@@ -147,25 +245,35 @@ def xrefs(
         BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness),
         NodeNorm(nodenorm_url),
     )
-    xrefs = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
+    if paths:
+        recurse = True
+    xref_list = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
 
     if fmt == "console":
         console = make_console()
-        query_set = set(curies)
-        for xref in xrefs:
-            subj_str = hl_curie(xref.subj, xref.subj in query_set)
-            obj_str = hl_curie(xref.obj, xref.obj in query_set)
-            if isinstance(xref, LabeledCrossReference):
-                if xref.subj_label:
-                    subj_str += f" ({escape(xref.subj_label)})"
-                if xref.obj_label:
-                    obj_str += f" ({escape(xref.obj_label)})"
-            console.print(
-                f"{subj_str}  [dim]{escape(xref.pred)}[/dim]  "
-                f"{obj_str}  [dim italic]{escape(xref.filename)}[/dim italic]"
-            )
+        if paths:
+            _print_paths(console, curies, xref_list, labels)
+        else:
+            query_set = set(curies)
+            depth_map = build_depth_map(list(curies), xref_list) if recurse else None
+            for xref in xref_list:
+                if depth_map is not None:
+                    subj_str = hl_curie_at_depth(xref.subj, depth_map.get(xref.subj))
+                    obj_str = hl_curie_at_depth(xref.obj, depth_map.get(xref.obj))
+                else:
+                    subj_str = hl_curie(xref.subj, xref.subj in query_set)
+                    obj_str = hl_curie(xref.obj, xref.obj in query_set)
+                if isinstance(xref, LabeledCrossReference):
+                    if xref.subj_label:
+                        subj_str += f" ({escape(xref.subj_label)})"
+                    if xref.obj_label:
+                        obj_str += f" ({escape(xref.obj_label)})"
+                console.print(
+                    f"{subj_str}  [dim]{escape(xref.pred)}[/dim]  "
+                    f"{obj_str}  [dim italic]{escape(xref.filename)}[/dim italic]"
+                )
     else:
-        write_records(xrefs, fmt=fmt, indent=json_indent)
+        write_records(xref_list, fmt=fmt, indent=json_indent)
 
 
 @cli.command("ids")

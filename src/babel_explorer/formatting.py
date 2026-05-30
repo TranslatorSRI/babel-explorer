@@ -52,6 +52,29 @@ def hl_curie(curie: str, highlight: bool) -> str:
     return f"[bold cyan]{escaped}[/bold cyan]" if highlight else escaped
 
 
+# Styles indexed by BFS depth from the nearest query CURIE.
+# Depth 0 = the query term itself; higher = further away.
+_DEPTH_STYLES = [
+    "bold cyan",    # 0: query CURIE
+    "bold yellow",  # 1: one hop away
+    "yellow",       # 2: two hops
+    "green",        # 3: three hops
+    "dim",          # 4+: further
+]
+
+
+def hl_curie_at_depth(curie: str, depth: int | None) -> str:
+    """Return rich markup for a CURIE colored by its BFS depth from the nearest query CURIE.
+
+    Pass ``depth=None`` for CURIEs whose depth is unknown (rendered unstyled).
+    """
+    escaped = escape(curie)
+    if depth is None:
+        return escaped
+    style = _DEPTH_STYLES[min(depth, len(_DEPTH_STYLES) - 1)]
+    return f"[{style}]{escaped}[/{style}]"
+
+
 def write_records(records, fmt: str, indent: int = 2, file=None):
     """Write an iterable of dataclass records (or dicts) in the requested format.
 
