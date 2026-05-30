@@ -7,6 +7,7 @@ considered identical in a Babel build.
 
 import dataclasses
 import logging
+from collections import deque
 import duckdb
 
 from babel_explorer.core.downloader import BabelDownloader
@@ -73,6 +74,56 @@ class IdentifierRecord:
         for name, value in self.extra_fields:
             parts.append(f"{name}={value!r}")
         return f"IdentifierRecord({', '.join(parts)})"
+
+
+def build_depth_map(query_curies: list[str], xrefs: list) -> dict[str, int]:
+    """BFS from query_curies over xref edges; returns {curie: depth_from_nearest_query}."""
+    adj: dict[str, list[str]] = {}
+    for xref in xrefs:
+        adj.setdefault(xref.subj, []).append(xref.obj)
+        adj.setdefault(xref.obj, []).append(xref.subj)
+
+    depths: dict[str, int] = {c: 0 for c in query_curies}
+    frontier = list(query_curies)
+    while frontier:
+        next_frontier = []
+        for node in frontier:
+            for neighbor in adj.get(node, []):
+                if neighbor not in depths:
+                    depths[neighbor] = depths[node] + 1
+                    next_frontier.append(neighbor)
+        frontier = next_frontier
+    return depths
+
+
+def find_shortest_path(
+    from_curie: str, to_curie: str, xrefs: list
+) -> list | None:
+    """Return the shortest list of CrossReference edges from from_curie to to_curie.
+
+    Returns ``[]`` if from_curie == to_curie, or ``None`` if no path exists.
+    The returned edges may be stored in either direction; callers should check
+    ``edge.subj`` / ``edge.obj`` against the expected traversal direction.
+    """
+    if from_curie == to_curie:
+        return []
+
+    adj: dict[str, list] = {}
+    for xref in xrefs:
+        adj.setdefault(xref.subj, []).append((xref.obj, xref))
+        adj.setdefault(xref.obj, []).append((xref.subj, xref))
+
+    visited = {from_curie}
+    queue: deque = deque([(from_curie, [])])
+    while queue:
+        current, path = queue.popleft()
+        for neighbor, xref in adj.get(current, []):
+            if neighbor == to_curie:
+                return path + [xref]
+            if neighbor not in visited:
+                visited.add(neighbor)
+                queue.append((neighbor, path + [xref]))
+    return None
 
 
 class BabelXRefs:
