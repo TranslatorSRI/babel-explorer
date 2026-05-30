@@ -103,6 +103,11 @@ def parse_duration(value: str) -> int | float:
     return result
 
 
+def _fmt_label(label: str) -> str:
+    """Escape a label for double-quoted display: backslashes first, then double quotes."""
+    return escape(label.replace("\\", "\\\\").replace('"', '\\"'))
+
+
 def _curie_str(curie: str, is_query: bool, depth: int | None, label: str | None) -> str:
     """Build a Rich-marked-up CURIE string with optional label."""
     if is_query:
@@ -110,7 +115,7 @@ def _curie_str(curie: str, is_query: bool, depth: int | None, label: str | None)
     else:
         s = hl_curie_at_depth(curie, depth)
     if label:
-        s += f" ({escape(label)})"
+        s += f' "{_fmt_label(label)}"'
     return s
 
 
@@ -265,9 +270,9 @@ def xrefs(
                     obj_str = hl_curie(xref.obj, xref.obj in query_set)
                 if isinstance(xref, LabeledCrossReference):
                     if xref.subj_label:
-                        subj_str += f" ({escape(xref.subj_label)})"
+                        subj_str += f' "{_fmt_label(xref.subj_label)}"'
                     if xref.obj_label:
-                        obj_str += f" ({escape(xref.obj_label)})"
+                        obj_str += f' "{_fmt_label(xref.obj_label)}"'
                 console.print(
                     f"{subj_str}  [dim]{escape(xref.pred)}[/dim]  "
                     f"{obj_str}  [dim italic]{escape(xref.filename)}[/dim italic]"
@@ -340,7 +345,7 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
                 console.print(
                     f"{hl_curie(curie, True)}  "
                     f"{hl_curie(ident.curie, ident.curie in query_set)}  "
-                    f"{escape(ident.label or '-')}  "
+                    f'"{_fmt_label(ident.label or "")}"  '
                     f"[dim]{escape(biolink)}[/dim]"
                 )
     else:
