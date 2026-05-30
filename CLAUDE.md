@@ -67,6 +67,22 @@ uv run ruff check
 uv run ruff format
 ```
 
+## Console Output Format Conventions
+
+### Label display
+
+When a human-readable label is shown alongside a CURIE in console output, it always appears **immediately after the CURIE, in double quotes**:
+
+```
+MONDO:0004979 "asthma"  skos:exactMatch  EFO:0000270 "asthma"
+```
+
+This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels`, and `test-concord`.
+
+**Escaping:** embedded backslashes are escaped as `\\` and embedded double quotes as `\"`. Downstream tools can parse labels with the regex `"([^"\\]|\\.)*"`.
+
+**Do not** use parentheses `(label)` or any other delimiter — double quotes are the sole convention.
+
 ## Architecture
 
 ### Core Components

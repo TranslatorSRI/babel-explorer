@@ -22,6 +22,8 @@ uv run babel-explorer xrefs MONDO:0004979 --recurse
 
 # Get cross-references with labels from NodeNorm
 uv run babel-explorer xrefs MONDO:0004979 --labels
+# Labels appear in double quotes immediately after the CURIE:
+#   MONDO:0004979 "asthma"  skos:exactMatch  EFO:0000270 "asthma"
 
 # Get ID records for CURIEs
 uv run babel-explorer ids MONDO:0004979

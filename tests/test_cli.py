@@ -286,7 +286,7 @@ class TestOutputFormats:
             )
 
         assert result.exit_code == 0
-        assert "-" in result.output
+        assert '""' in result.output
 
     # -- json format --
 
