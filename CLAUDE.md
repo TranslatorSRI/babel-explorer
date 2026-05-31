@@ -79,6 +79,8 @@ MONDO:0004979 "asthma"  skos:exactMatch  EFO:0000270 "asthma"
 
 This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels`, and `test-concord`.
 
+**When a label is absent, omit it entirely** — do not substitute a placeholder like `-` or `""`. A CURIE with no label renders as just the bare CURIE.
+
 **Escaping:** embedded backslashes are escaped as `\\` and embedded double quotes as `\"`. Downstream tools can parse labels with the regex `"([^"\\]|\\.)*"`.
 
 **Do not** use parentheses `(label)` or any other delimiter — double quotes are the sole convention.

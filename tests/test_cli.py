@@ -271,8 +271,8 @@ class TestOutputFormats:
         assert "asthma" in result.output
         assert "biolink:Disease" in result.output
 
-    def test_test_concord_console_no_label_shows_dash(self):
-        """Identifiers with no label display '-' in console format."""
+    def test_test_concord_console_no_label_omits_label(self):
+        """Identifiers with no label omit the label field entirely in console format."""
         runner = CliRunner()
         mock_ident = MagicMock()
         mock_ident.curie = "MONDO:0004979"
@@ -286,7 +286,7 @@ class TestOutputFormats:
             )
 
         assert result.exit_code == 0
-        assert '""' in result.output
+        assert '"' not in result.output
 
     # -- json format --
 

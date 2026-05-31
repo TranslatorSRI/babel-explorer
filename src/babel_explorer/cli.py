@@ -342,10 +342,10 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
         for curie in curies:
             for ident in nodenorm.get_clique_identifiers(curie):
                 biolink = ", ".join(ident.biolink_type)
+                label_str = f' "{_fmt_label(ident.label)}"' if ident.label else ""
                 console.print(
                     f"{hl_curie(curie, True)}  "
-                    f"{hl_curie(ident.curie, ident.curie in query_set)}  "
-                    f'"{_fmt_label(ident.label or "")}"  '
+                    f"{hl_curie(ident.curie, ident.curie in query_set)}{label_str}  "
                     f"[dim]{escape(biolink)}[/dim]"
                 )
     else:
