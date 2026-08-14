@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 import requests
 
-from babel_explorer.core.nodenorm import Identifier, NodeNorm
+from babel_explorer.core.nodenorm import NORMALIZE_BATCH_SIZE, Identifier, NodeNorm
 from tests.constants import load_curies
 
 VALID_CURIES = load_curies()
@@ -168,7 +168,8 @@ class TestNormalizeCurieMocked:
             mock_get.assert_called_once()
             args, kwargs = mock_get.call_args
             assert args[0] == "https://example.com/get_normalized_nodes"
-            assert kwargs["params"]["curie"] == "X:1"
+            # CURIEs are always sent as a batch, even when there is only one.
+            assert kwargs["params"]["curie"] == ["X:1"]
 
     def test_returns_result_for_curie(self):
         nn = self._make_nn()
@@ -406,3 +407,81 @@ def test_normalize_curie_nonexistent(nodenorm):
     """A made-up CURIE returns None."""
     result = nodenorm.normalize_curie("FAKENS:9999999999")
     assert result is None
+
+
+class TestNormalizeCuriesBatching:
+    """Many CURIEs must cost a handful of requests, not one each."""
+
+    @staticmethod
+    def _resp(payload):
+        r = Mock()
+        r.json.return_value = payload
+        r.raise_for_status = Mock()
+        return r
+
+    def test_one_request_for_many_curies(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/")
+        curies = [f"X:{i}" for i in range(50)]
+        payload = {c: {"id": {"identifier": c}} for c in curies}
+
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._resp(payload),
+        ) as mock_get:
+            nn.normalize_curies(curies)
+            assert mock_get.call_count == 1
+            assert sorted(mock_get.call_args.kwargs["params"]["curie"]) == sorted(
+                curies
+            )
+
+    def test_chunks_above_the_batch_size(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/")
+        curies = [f"X:{i:04d}" for i in range(NORMALIZE_BATCH_SIZE * 2 + 1)]
+
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._resp({}),
+        ) as mock_get:
+            nn.normalize_curies(curies)
+            assert mock_get.call_count == 3
+            sizes = [len(c.kwargs["params"]["curie"]) for c in mock_get.call_args_list]
+            assert sizes == [NORMALIZE_BATCH_SIZE, NORMALIZE_BATCH_SIZE, 1]
+
+    def test_prefetched_curies_are_not_refetched(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/")
+        payload = {"X:1": {"id": {"identifier": "X:1"}}}
+
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._resp(payload),
+        ) as mock_get:
+            nn.normalize_curies(["X:1"])
+            nn.normalize_curie("X:1")
+            nn.get_identifier("X:1")
+            assert mock_get.call_count == 1
+
+    def test_unrecognised_curie_caches_none(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get", return_value=self._resp({})
+        ) as mock_get:
+            nn.normalize_curies(["MISSING:1"])
+            assert nn.normalize_curie("MISSING:1") is None
+            assert mock_get.call_count == 1
+
+    def test_offline_mode_makes_no_requests(self):
+        nn = NodeNorm(nodenorm_url="")
+        with patch("babel_explorer.core.nodenorm.requests.get") as mock_get:
+            nn.normalize_curies(["X:1", "X:2"])
+            assert nn.normalize_curie("X:1") is None
+            mock_get.assert_not_called()
+
+    def test_http_error_is_not_cached(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/")
+        bad = Mock()
+        bad.raise_for_status.side_effect = requests.HTTPError("500 Server Error")
+
+        with patch("babel_explorer.core.nodenorm.requests.get", return_value=bad):
+            with pytest.raises(requests.HTTPError):
+                nn.normalize_curies(["X:1"])
+        assert "X:1" not in nn._normalize_cache

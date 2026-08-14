@@ -5,6 +5,11 @@ import logging
 
 import requests
 
+#: Maximum CURIEs per get_normalized_nodes request. Keeps the query string well
+#: inside the usual 8 KB server limit while collapsing hundreds of lookups into
+#: a handful of round-trips.
+NORMALIZE_BATCH_SIZE = 100
+
 
 @dataclasses.dataclass(frozen=True)
 class Identifier:
@@ -113,26 +118,16 @@ class NodeNorm:
         self._identifier_cache[curie] = ident
         return ident
 
-    def normalize_curie(self, curie: str):
-        """Call ``get_normalized_nodes`` and return the per-CURIE result dict.
+    def _fetch_normalized(self, curies: list[str]) -> None:
+        """Fetch *curies* from ``get_normalized_nodes`` and populate the cache.
 
-        :return: The normalisation dict for *curie* (contains ``id``, ``equivalent_identifiers``,
-            ``type``, etc.), or ``None`` if the CURIE is not recognised by NodeNorm.
         :raises requests.HTTPError: If the API returns a non-2xx status code.
-
-        Results are cached per instance. HTTP errors are not cached.
+            Nothing is cached in that case, so the lookup is retried next time.
         """
-        if curie in self._normalize_cache:
-            return self._normalize_cache[curie]
-
-        if not self.nodenorm_url:
-            self._normalize_cache[curie] = None
-            return None
-
         response = requests.get(
             f"{self.nodenorm_url}get_normalized_nodes",
             params={
-                "curie": curie,
+                "curie": curies,
                 "conflate": True,
                 "drug_chemical_conflate": True,
                 "description": True,
@@ -144,16 +139,46 @@ class NodeNorm:
         response.raise_for_status()
         result = response.json()
 
-        try:
-            value = result[curie]
-        except KeyError:
-            logging.debug(
-                f"NodeNorm response did not contain CURIE {curie!r}; returning None"
-            )
-            value = None
+        for curie in curies:
+            if curie not in result:
+                logging.debug(
+                    f"NodeNorm response did not contain CURIE {curie!r}; caching None"
+                )
+            # NodeNorm reports an unrecognised CURIE as a null value, not a missing key.
+            self._normalize_cache[curie] = result.get(curie)
 
-        self._normalize_cache[curie] = value
-        return value
+    def normalize_curies(self, curies) -> None:
+        """Populate the normalisation cache for *curies* in as few requests as possible.
+
+        Callers that are about to look up many CURIEs should call this first: the
+        per-CURIE accessors then hit the cache instead of issuing one HTTPS
+        round-trip each, which dominates runtime on a large clique.
+
+        :raises requests.HTTPError: If the API returns a non-2xx status code.
+        """
+        missing = sorted({c for c in curies if c not in self._normalize_cache})
+        if not missing:
+            return
+
+        if not self.nodenorm_url:
+            self._normalize_cache.update(dict.fromkeys(missing))
+            return
+
+        for i in range(0, len(missing), NORMALIZE_BATCH_SIZE):
+            self._fetch_normalized(missing[i : i + NORMALIZE_BATCH_SIZE])
+
+    def normalize_curie(self, curie: str):
+        """Call ``get_normalized_nodes`` and return the per-CURIE result dict.
+
+        :return: The normalisation dict for *curie* (contains ``id``, ``equivalent_identifiers``,
+            ``type``, etc.), or ``None`` if the CURIE is not recognised by NodeNorm.
+        :raises requests.HTTPError: If the API returns a non-2xx status code.
+
+        Results are cached per instance. HTTP errors are not cached.
+        """
+        if curie not in self._normalize_cache:
+            self.normalize_curies([curie])
+        return self._normalize_cache[curie]
 
     def get_clique_identifiers(self, curie: str) -> list[Identifier]:
         """Return all ``Identifier`` objects in the NodeNorm clique for *curie*.

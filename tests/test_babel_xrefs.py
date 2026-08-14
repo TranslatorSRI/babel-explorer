@@ -13,6 +13,9 @@ from babel_explorer.core.babel_xrefs import (
     CrossReference,
     IdentifierRecord,
     LabeledCrossReference,
+    build_adjacency,
+    build_depth_map,
+    find_shortest_path,
 )
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.nodenorm import NodeNorm
@@ -237,7 +240,7 @@ class TestBabelXRefsMocked:
     def test_get_curie_xrefs_no_expand(self, tmp_path):
         bx = self._make_bx(tmp_path)
         xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
-        with patch.object(bx, "get_curie_xref", return_value=[xr]):
+        with patch.object(bx, "_query_xrefs", return_value=[xr]):
             result = bx.get_curie_xrefs(["A:1"], recurse=False)
             assert len(result) == 1
             assert result[0] == xr
@@ -300,9 +303,89 @@ class TestBabelXRefsMocked:
         xr_b = CrossReference(filename="b", subj="B:1", pred="p", obj="C:1")
         xr_a = CrossReference(filename="a", subj="A:1", pred="p", obj="B:1")
 
-        with patch.object(bx, "get_curie_xref", return_value=[xr_b, xr_a]):
+        with patch.object(bx, "_query_xrefs", return_value=[xr_b, xr_a]):
             result = bx.get_curie_xrefs(["X:1"], recurse=False)
             assert result == [xr_a, xr_b]
+
+
+class TestQueryXrefsBatching:
+    """Multi-CURIE lookups must cost one Parquet scan, not one per CURIE."""
+
+    @staticmethod
+    def _mock_db(rows):
+        result = MagicMock()
+        result.fetchall.return_value = rows
+        db = MagicMock()
+        db.__enter__.return_value = db
+        db.execute.return_value = result
+        return db
+
+    def _run(self, tmp_path, curies, rows):
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        bx = BabelXRefs(dl)
+        db = self._mock_db(rows)
+        with patch.object(bx.downloader, "get_downloaded_file", return_value="/fake"):
+            with patch(
+                "babel_explorer.core.babel_xrefs.duckdb.connect", return_value=db
+            ):
+                return bx, bx.get_curie_xrefs(curies), db
+
+    def test_one_scan_for_many_curies(self, tmp_path):
+        rows = [
+            ("f", "A:1", "p", "B:2"),
+            ("f", "C:3", "p", "D:4"),
+        ]
+        _, result, db = self._run(tmp_path, ["A:1", "C:3"], rows)
+        assert db.execute.call_count == 1
+        assert len(result) == 2
+
+    def test_results_are_bucketed_per_curie(self, tmp_path):
+        rows = [
+            ("f", "A:1", "p", "B:2"),
+            ("f", "C:3", "p", "D:4"),
+        ]
+        bx, _, _ = self._run(tmp_path, ["A:1", "C:3"], rows)
+        assert [x.obj for x in bx._xref_cache[("A:1", False)]] == ["B:2"]
+        assert [x.obj for x in bx._xref_cache[("C:3", False)]] == ["D:4"]
+
+    def test_curie_with_no_xrefs_caches_an_empty_list(self, tmp_path):
+        """An absent bucket would silently re-scan the whole Parquet file."""
+        bx, result, _ = self._run(
+            tmp_path, ["A:1", "LONELY:9"], [("f", "A:1", "p", "B:2")]
+        )
+        assert bx._xref_cache[("LONELY:9", False)] == []
+        assert len(result) == 1
+
+    def test_cached_curies_are_not_rescanned(self, tmp_path):
+        bx, _, db = self._run(tmp_path, ["A:1"], [("f", "A:1", "p", "B:2")])
+        with patch.object(bx.downloader, "get_downloaded_file", return_value="/fake"):
+            with patch(
+                "babel_explorer.core.babel_xrefs.duckdb.connect", return_value=db
+            ) as mock_connect:
+                again = bx.get_curie_xrefs(["A:1"])
+                mock_connect.assert_not_called()
+        assert [x.obj for x in again] == ["B:2"]
+
+
+class TestBuildAdjacency:
+    """The neighbour map is shared by the depth BFS and the path search."""
+
+    def test_edges_are_traversable_in_both_directions(self):
+        xr = CrossReference(filename="f", subj="A:1", pred="p", obj="B:2")
+        adj = build_adjacency([xr])
+        assert adj["A:1"] == [("B:2", xr)]
+        assert adj["B:2"] == [("A:1", xr)]
+
+    def test_shared_adjacency_matches_a_freshly_built_one(self):
+        xrefs = [
+            CrossReference(filename="f", subj="A:1", pred="p", obj="B:2"),
+            CrossReference(filename="f", subj="B:2", pred="p", obj="C:3"),
+        ]
+        adj = build_adjacency(xrefs)
+        assert find_shortest_path("A:1", "C:3", xrefs, adj) == find_shortest_path(
+            "A:1", "C:3", xrefs
+        )
+        assert build_depth_map(["A:1"], xrefs, adj) == build_depth_map(["A:1"], xrefs)
 
 
 # ==========================================================================
