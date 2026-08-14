@@ -71,6 +71,9 @@ uv run babel-explorer xrefs MONDO:0004979 --labels
 # Get ID records for CURIEs
 uv run babel-explorer ids MONDO:0004979
 
+# Get ID records with labels from NodeNorm
+uv run babel-explorer ids MONDO:0004979 --labels
+
 # Test concordance changes with NodeNorm
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 
@@ -125,7 +128,10 @@ When a human-readable label is shown alongside a CURIE in console output, it alw
 MONDO:0004979 "asthma"  skos:exactMatch  EFO:0000270 "asthma"
 ```
 
-This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels`, and `test-concord`.
+This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels`, `ids --labels`, and `test-concord`.
+
+`--paths` is console-only; combining it with `--format json`/`tsv`/`csv` is rejected up front rather
+than silently emitting the full cross-reference list.
 
 **When a label is absent, omit it entirely** — do not substitute a placeholder like `-` or `""`. A CURIE with no label renders as just the bare CURIE.
 
@@ -167,7 +173,7 @@ This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels
 1. User provides CURIEs via CLI; `BABEL_URL` / `NODENORM_URL` come from `.env` or the environment
 2. BabelDownloader resolves the Babel version, refreshes the cache if it changed, and ensures required Parquet files are downloaded
 3. BabelXRefs queries files using DuckDB
-4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata
+4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata (`ids` consults NodeNorm only for `--labels`)
 5. Results are printed to stdout
 
 ### Key Design Patterns
