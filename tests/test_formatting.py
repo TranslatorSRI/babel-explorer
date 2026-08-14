@@ -332,3 +332,48 @@ class TestLabelConvention:
     def test_identifier_record_omits_absent_label(self):
         rec = IdentifierRecord(curie="A:1", extra_fields=(("n", 1),))
         assert "label=" not in format_identifier_record(rec)
+
+
+class TestLabelOmissionInRecords:
+    """The omit-when-absent rule is keyed on the concept, not one field name."""
+
+    def test_empty_subj_and_obj_labels_are_dropped(self):
+        xref = LabeledCrossReference(
+            filename="f",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            subj_label="",
+            subj_biolink_type=(),
+            obj_label="",
+            obj_biolink_type=(),
+        )
+        d = record_to_dict(xref)
+        assert "subj_label" not in d and "obj_label" not in d
+
+    def test_present_labels_are_kept(self):
+        xref = LabeledCrossReference(
+            filename="f",
+            subj="A:1",
+            pred="p",
+            obj="B:2",
+            subj_label="asthma",
+            subj_biolink_type=(),
+            obj_label="",
+            obj_biolink_type=(),
+        )
+        d = record_to_dict(xref)
+        assert d["subj_label"] == "asthma" and "obj_label" not in d
+
+    def test_tabular_output_survives_rows_with_differing_keys(self):
+        """A labelled row after an unlabelled one must not blow up DictWriter."""
+        rows = [
+            IdentifierRecord(curie="A:1", extra_fields=()),
+            IdentifierRecord(curie="B:2", extra_fields=(), label="asthma"),
+        ]
+        out = io.StringIO()
+        write_records(rows, "csv", file=out)
+        lines = out.getvalue().splitlines()
+        assert lines[0] == "curie,label"
+        assert lines[1] == "A:1,"
+        assert lines[2] == "B:2,asthma"

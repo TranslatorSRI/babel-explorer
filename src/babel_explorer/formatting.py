@@ -29,8 +29,10 @@ def record_to_dict(record) -> dict[str, Any]:
             d[col] = val
     # An absent label is omitted rather than emitted as "", matching the console
     # convention and keeping TSV/CSV columns stable when labels were not requested.
-    if not d.get("label", True):
-        del d["label"]
+    # Keyed on the concept, not one field name: LabeledCrossReference spells it
+    # subj_label/obj_label, and those must follow the same rule.
+    for key in [k for k, v in d.items() if k.endswith("label") and not v]:
+        del d[key]
     return d
 
 
@@ -132,10 +134,14 @@ def write_records(records, fmt: str, indent: int = 2, file=None):
         if not records:
             return
         rows = [_flatten_for_tabular(record_to_dict(r)) for r in records]
+        # Union of keys, in first-seen order: records that omit an absent label have
+        # fewer keys than their neighbours, and DictWriter rejects any key not declared.
+        fieldnames = list(dict.fromkeys(k for row in rows for k in row))
         delimiter = "\t" if fmt == "tsv" else ","
         writer = csv.DictWriter(
             file,
-            fieldnames=list(rows[0].keys()),
+            fieldnames=fieldnames,
+            restval="",
             delimiter=delimiter,
             lineterminator="\n",
         )
