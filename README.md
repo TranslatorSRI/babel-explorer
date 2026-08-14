@@ -58,6 +58,9 @@ uv run babel-explorer xrefs MONDO:0004979 --labels
 # Get ID records for CURIEs
 uv run babel-explorer ids MONDO:0004979
 
+# Get ID records with labels from NodeNorm
+uv run babel-explorer ids MONDO:0004979 --labels
+
 # Test concordance changes with NodeNorm
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 ```
