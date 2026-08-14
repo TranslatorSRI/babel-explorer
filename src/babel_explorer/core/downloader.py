@@ -1,6 +1,5 @@
 """HTTP downloader for Babel Parquet files with ETag-based freshness checking."""
 
-import functools
 import glob
 import json
 import logging
@@ -143,13 +142,6 @@ class BabelDownloader:
         if cached_version != version:
             with open(marker_path, "w") as f:
                 f.write(version + "\n")
-
-    @functools.cache
-    def get_output_file(self, filename):
-        """Return (and create) the local filesystem path for a given relative filename."""
-        filepath = os.path.join(self.local_path, filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        return filepath
 
     def _get_meta_path(self, local_path):
         """Return the sidecar metadata file path for a given local file."""
