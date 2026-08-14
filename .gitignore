@@ -1,6 +1,10 @@
 # Ignore data files.
 /data
 
+# Node dependencies, wherever they are installed (e.g. web/node_modules).
+# Deliberately not /web, so frontend source under it is still tracked.
+node_modules/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
