@@ -71,19 +71,36 @@ class IdentifierRecord:
         return IdentifierRecord(curie=row[curie_idx], extra_fields=extra)
 
 
-def build_depth_map(query_curies: list[str], xrefs: list) -> dict[str, int]:
-    """BFS from query_curies over xref edges; returns {curie: depth_from_nearest_query}."""
-    adj: dict[str, list[str]] = {}
+def build_adjacency(xrefs: list) -> dict[str, list]:
+    """Build the undirected neighbour map ``{curie: [(neighbor, xref), ...]}``.
+
+    Cross-references are stored in one direction but traversed in both, so each
+    edge contributes an entry to both of its endpoints. Build this once and share
+    it: it is O(len(xrefs)) and the recursive expansion can return 10^5+ edges.
+    """
+    adj: dict[str, list] = {}
     for xref in xrefs:
-        adj.setdefault(xref.subj, []).append(xref.obj)
-        adj.setdefault(xref.obj, []).append(xref.subj)
+        adj.setdefault(xref.subj, []).append((xref.obj, xref))
+        adj.setdefault(xref.obj, []).append((xref.subj, xref))
+    return adj
+
+
+def build_depth_map(
+    query_curies: list[str], xrefs: list, adj: dict[str, list] | None = None
+) -> dict[str, int]:
+    """BFS from query_curies over xref edges; returns {curie: depth_from_nearest_query}.
+
+    Pass *adj* from ``build_adjacency`` to reuse an already-built neighbour map.
+    """
+    if adj is None:
+        adj = build_adjacency(xrefs)
 
     depths: dict[str, int] = {c: 0 for c in query_curies}
     frontier = list(query_curies)
     while frontier:
         next_frontier = []
         for node in frontier:
-            for neighbor in adj.get(node, []):
+            for neighbor, _ in adj.get(node, []):
                 if neighbor not in depths:
                     depths[neighbor] = depths[node] + 1
                     next_frontier.append(neighbor)
@@ -91,20 +108,23 @@ def build_depth_map(query_curies: list[str], xrefs: list) -> dict[str, int]:
     return depths
 
 
-def find_shortest_path(from_curie: str, to_curie: str, xrefs: list) -> list | None:
+def find_shortest_path(
+    from_curie: str, to_curie: str, xrefs: list, adj: dict[str, list] | None = None
+) -> list | None:
     """Return the shortest list of CrossReference edges from from_curie to to_curie.
 
     Returns ``[]`` if from_curie == to_curie, or ``None`` if no path exists.
     The returned edges may be stored in either direction; callers should check
     ``edge.subj`` / ``edge.obj`` against the expected traversal direction.
+
+    Pass *adj* from ``build_adjacency`` to reuse an already-built neighbour map;
+    callers resolving many pairs over one graph should always do so.
     """
     if from_curie == to_curie:
         return []
 
-    adj: dict[str, list] = {}
-    for xref in xrefs:
-        adj.setdefault(xref.subj, []).append((xref.obj, xref))
-        adj.setdefault(xref.obj, []).append((xref.subj, xref))
+    if adj is None:
+        adj = build_adjacency(xrefs)
 
     visited = {from_curie}
     queue: deque = deque([(from_curie, [])])
@@ -172,13 +192,15 @@ class BabelXRefs:
             column_names = [desc[0] for desc in result.description]
             rows = result.fetchall()
 
-        records = []
-        for row in rows:
-            record = IdentifierRecord.from_row(row, column_names)
-            if label_curies:
-                label = self.nodenorm.get_identifier(record.curie).label
-                record = dataclasses.replace(record, label=label)
-            records.append(record)
+        records = [IdentifierRecord.from_row(row, column_names) for row in rows]
+        if label_curies:
+            self.nodenorm.normalize_curies({r.curie for r in records})
+            records = [
+                dataclasses.replace(
+                    r, label=self.nodenorm.get_identifier(r.curie).label
+                )
+                for r in records
+            ]
         return records
 
     def get_curie_xref(self, curie: str, label_curies: bool = False):
@@ -193,40 +215,74 @@ class BabelXRefs:
         :return: A list of ``CrossReference`` (or ``LabeledCrossReference``) objects.
         """
         cache_key = (curie, label_curies)
-        if cache_key in self._xref_cache:
-            return self._xref_cache[cache_key]
+        if cache_key not in self._xref_cache:
+            self._query_xrefs([curie], label_curies)
+        return self._xref_cache[cache_key]
 
+    def _query_xrefs(self, curies: list[str], label_curies: bool = False) -> list:
+        """Fetch the direct cross-references for *curies* in a single Parquet scan.
+
+        Concord.parquet is multi-gigabyte, so one scan matching every CURIE at once
+        costs a fraction of one scan per CURIE. Results are bucketed back into the
+        per-CURIE cache that ``get_curie_xref`` reads.
+        """
         if label_curies:
             self._require_nodenorm()
+        if not curies:
+            return []
 
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
         with duckdb.connect() as db:
             xref_tuples = db.execute(
-                "SELECT filename, subj, pred, obj FROM read_parquet($1) WHERE subj=$2 OR obj=$2",
-                [concord_parquet, curie],
+                """
+                SELECT filename, subj, pred, obj FROM read_parquet($1)
+                WHERE subj IN (SELECT unnest($2::VARCHAR[]))
+                   OR obj  IN (SELECT unnest($2::VARCHAR[]))
+                """,
+                [concord_parquet, list(curies)],
             ).fetchall()
 
         xrefs = [CrossReference.from_tuple(rec) for rec in xref_tuples]
         if label_curies:
-            xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
-        self._xref_cache[cache_key] = xrefs
+            xrefs = self._to_labeled_xrefs(xrefs)
+
+        # Bucket per query CURIE so get_curie_xref's cache stays exact: a CURIE with
+        # no cross-references must cache an empty list, not stay absent.
+        wanted = set(curies)
+        buckets: dict[str, list] = {curie: [] for curie in wanted}
+        for xref in xrefs:
+            for curie in xref.curies & wanted:
+                buckets[curie].append(xref)
+        for curie, bucket in buckets.items():
+            self._xref_cache[(curie, label_curies)] = bucket
         return xrefs
 
-    def _to_labeled_xref(self, xref: CrossReference) -> LabeledCrossReference:
-        """Convert a CrossReference to a LabeledCrossReference using NodeNorm."""
-        subj_ident = self.nodenorm.get_identifier(xref.subj)
-        obj_ident = self.nodenorm.get_identifier(xref.obj)
-        return LabeledCrossReference(
-            subj=xref.subj,
-            obj=xref.obj,
-            filename=xref.filename,
-            pred=xref.pred,
-            subj_label=subj_ident.label,
-            subj_biolink_type=subj_ident.biolink_type,
-            obj_label=obj_ident.label,
-            obj_biolink_type=obj_ident.biolink_type,
-        )
+    def _to_labeled_xrefs(self, xrefs: list) -> list[LabeledCrossReference]:
+        """Annotate cross-references with NodeNorm labels and Biolink types.
+
+        Every CURIE in the batch is normalised up front in a handful of requests;
+        the per-edge ``get_identifier`` calls below are then served from cache.
+        """
+        self.nodenorm.normalize_curies({c for xref in xrefs for c in xref.curies})
+
+        labeled = []
+        for xref in xrefs:
+            subj = self.nodenorm.get_identifier(xref.subj)
+            obj = self.nodenorm.get_identifier(xref.obj)
+            labeled.append(
+                LabeledCrossReference(
+                    subj=xref.subj,
+                    obj=xref.obj,
+                    filename=xref.filename,
+                    pred=xref.pred,
+                    subj_label=subj.label,
+                    subj_biolink_type=subj.biolink_type,
+                    obj_label=obj.label,
+                    obj_biolink_type=obj.biolink_type,
+                )
+            )
+        return labeled
 
     def _get_curie_xrefs_recursive(self, curies: list[str], label_curies: bool = False):
         """Traverse the cross-reference graph in one DuckDB WITH RECURSIVE query."""
@@ -268,7 +324,7 @@ class BabelXRefs:
         xrefs = [CrossReference.from_tuple(row) for row in rows]
 
         if label_curies:
-            xrefs = [self._to_labeled_xref(xref) for xref in xrefs]
+            xrefs = self._to_labeled_xrefs(xrefs)
 
         return xrefs
 
@@ -287,9 +343,13 @@ class BabelXRefs:
         if recurse:
             return self._get_curie_xrefs_recursive(curies, label_curies)
 
-        xrefs = set()
-        for curie in curies:
-            logging.info(f"Searching for cross-references for {curie}")
-            xrefs.update(self.get_curie_xref(curie, label_curies))
+        logging.info(f"Searching for cross-references for {', '.join(curies)}")
+
+        # One Parquet scan covers every CURIE not already cached; the scan returns the
+        # union of their cross-references, so only cached CURIEs need adding separately.
+        uncached = [c for c in curies if (c, label_curies) not in self._xref_cache]
+        xrefs = set(self._query_xrefs(uncached, label_curies))
+        for curie in set(curies) - set(uncached):
+            xrefs.update(self._xref_cache[(curie, label_curies)])
 
         return sorted(xrefs)

@@ -10,6 +10,7 @@ from rich.markup import escape
 from babel_explorer.core.babel_xrefs import (
     BabelXRefs,
     LabeledCrossReference,
+    build_adjacency,
     build_depth_map,
     find_shortest_path,
 )
@@ -183,9 +184,12 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
         return
 
     query_set = set(curie_list)
+    # One neighbour map for every pair: rebuilding it per pair re-walks the whole
+    # recursive xref list C(n,2) times.
+    adj = build_adjacency(xrefs_list)
 
     for from_c, to_c in combinations(curie_list, 2):
-        path = find_shortest_path(from_c, to_c, xrefs_list)
+        path = find_shortest_path(from_c, to_c, xrefs_list, adj)
         header_from = hl_curie(from_c, 0)
         header_to = hl_curie(to_c, 0)
 
@@ -417,6 +421,7 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
     run before and after a Babel rebuild to see how cliques would shift.
     """
     nodenorm = NodeNorm(nodenorm_url)
+    nodenorm.normalize_curies(curies)
 
     # Resolved once, before the format branch, so console and JSON report the same rows.
     query_set = set(curies)
