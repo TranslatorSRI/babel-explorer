@@ -4,8 +4,14 @@ import click
 import logging
 from itertools import combinations
 
-from babel_explorer.core.downloader import BabelDownloader
-from babel_explorer.core.babel_xrefs import BabelXRefs, build_depth_map, find_shortest_path
+from dotenv import load_dotenv
+
+from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
+from babel_explorer.core.babel_xrefs import (
+    BabelXRefs,
+    build_depth_map,
+    find_shortest_path,
+)
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.core.babel_xrefs import LabeledCrossReference
 from babel_explorer.formatting import (
@@ -21,26 +27,86 @@ from rich.markup import escape
 def babel_options(f):
     """Decorator adding --local-dir, --babel-url, and --check-download options to a command."""
     f = click.option(
+        "--allow-version-mismatch",
+        is_flag=True,
+        envvar="BABEL_ALLOW_VERSION_MISMATCH",
+        help="Proceed even if NodeNorm was built from a different Babel release than --babel-url",
+    )(f)
+    f = click.option(
         "--check-download",
         type=str,
         default="3h",
         show_default=True,
+        envvar="BABEL_CHECK_DOWNLOAD",
         help="How often to re-check downloads (e.g. '3h', '30m', '1d', '0', 'never'). "
         "'never' disables re-checking and always uses cached files; '0' forces a re-check every time.",
     )(f)
     f = click.option(
         "--babel-url",
         type=str,
-        default="https://stars.renci.org/var/babel/2025nov19/",
+        default="https://stars.renci.org/var/babel/latest/",
+        show_default=True,
+        envvar="BABEL_URL",
         help="Base URL of the Babel server",
     )(f)
     f = click.option(
         "--local-dir",
         type=str,
-        default="data/2025nov19",
-        help="Local location to save Babel download files to",
+        default="data",
+        show_default=True,
+        envvar="BABEL_LOCAL_DIR",
+        help="Local location to save Babel download files to. Holds one Babel release at "
+        "a time; cached files are refreshed automatically when --babel-url points at a new one.",
     )(f)
     return f
+
+
+def nodenorm_options(f):
+    """Decorator adding --nodenorm-url to a command."""
+    return click.option(
+        "--nodenorm-url",
+        type=str,
+        default="https://nodenormalization-sri.renci.org/",
+        show_default=True,
+        envvar="NODENORM_URL",
+        help="NodeNorm base URL used for node normalization and label enrichment",
+    )(f)
+
+
+def make_downloader(babel_url: str, local_dir: str, check_download: str):
+    """Build a BabelDownloader and point its cache at the Babel release behind *babel_url*."""
+    downloader = BabelDownloader(
+        babel_url,
+        local_path=local_dir,
+        freshness_seconds=parse_duration(check_download),
+    )
+    downloader.sync_cache_version()
+    return downloader
+
+
+def check_babel_versions(
+    downloader: BabelDownloader, nodenorm: NodeNorm, allow_version_mismatch: bool
+):
+    """Fail if NodeNorm was built from a different Babel release than the one being queried.
+
+    Cross-release results are silently wrong rather than obviously wrong: labels and
+    cliques would come from one Babel while the cross-references come from another.
+    Skipped when either version is unavailable.
+    """
+    babel_version = downloader.babel_version
+    nodenorm_version = nodenorm.get_babel_version()
+    if (
+        babel_version
+        and nodenorm_version
+        and babel_version != nodenorm_version
+        and not allow_version_mismatch
+    ):
+        raise click.ClickException(
+            f"NodeNorm at {nodenorm.nodenorm_url} was built from Babel {nodenorm_version}, "
+            f"but {downloader.url_base} is Babel {babel_version}. Labels and cliques would "
+            f"not match the cross-references. Point --nodenorm-url at a matching NodeNorm, "
+            f"or pass --allow-version-mismatch to proceed anyway."
+        )
 
 
 def format_option(f):
@@ -167,13 +233,12 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
         step_word = "step" if n_steps == 1 else "steps"
         console.print(
             f"[bold]Path ({n_steps} {step_word}):[/bold] "
-            + f" [dim]→[/dim] ".join(node_strs)
+            + " [dim]→[/dim] ".join(node_strs)
         )
 
         # Edge details, indented, oriented in traversal direction.
         for i, edge in enumerate(path):
             from_node = nodes[i]
-            to_node = nodes[i + 1]
             subj_node = edge.subj if edge.subj == from_node else edge.obj
             obj_node = edge.obj if edge.subj == from_node else edge.subj
 
@@ -197,21 +262,28 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
         console.print()
 
 
-@click.group()
+class BabelExplorerGroup(click.Group):
+    """Group that reports missing Babel files as a plain error rather than a traceback."""
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except MissingBabelFileError as e:
+            raise click.ClickException(str(e)) from e
+
+
+@click.group(cls=BabelExplorerGroup)
 def cli():
     """babel-explorer: query and explore Babel intermediate files."""
     logging.basicConfig(level=logging.INFO)
+    # Runs before subcommand parameters are parsed, so .env feeds the envvar= defaults.
+    load_dotenv()
 
 
 @cli.command("xrefs")
 @click.argument("curies", type=str, required=True, nargs=-1)
 @babel_options
-@click.option(
-    "--nodenorm-url",
-    type=str,
-    default="https://nodenormalization-sri.renci.org/",
-    help="NodeNorm base URL used for node normalization and label enrichment",
-)
+@nodenorm_options
 @click.option("--recurse", is_flag=True, help="Recursively query returned xrefs")
 @click.option("--labels", is_flag=True, help="Include labels for CURIEs")
 @click.option(
@@ -229,6 +301,7 @@ def xrefs(
     labels: bool,
     paths: bool,
     check_download: str,
+    allow_version_mismatch: bool,
     fmt: str,
     json_indent: int,
 ):
@@ -245,13 +318,16 @@ def xrefs(
 
     :return: None
     """
-    freshness = parse_duration(check_download)
-    bxref = BabelXRefs(
-        BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness),
-        NodeNorm(nodenorm_url),
-    )
     if paths:
         recurse = True
+
+    downloader = make_downloader(babel_url, local_dir, check_download)
+    nodenorm = NodeNorm(nodenorm_url)
+    # NodeNorm is only consulted when labels or the recursive expansion need it.
+    if labels or recurse:
+        check_babel_versions(downloader, nodenorm, allow_version_mismatch)
+
+    bxref = BabelXRefs(downloader, nodenorm)
     xref_list = bxref.get_curie_xrefs(curies, recurse, label_curies=labels)
 
     if fmt == "console":
@@ -290,6 +366,7 @@ def ids(
     babel_url: str,
     local_dir: str,
     check_download: str,
+    allow_version_mismatch: bool,
     fmt: str,
     json_indent: int,
 ):
@@ -306,10 +383,8 @@ def ids(
 
     :return: None
     """
-    freshness = parse_duration(check_download)
-    bxref = BabelXRefs(
-        BabelDownloader(babel_url, local_path=local_dir, freshness_seconds=freshness)
-    )
+    # No NodeNorm here, so there is no version to check against.
+    bxref = BabelXRefs(make_downloader(babel_url, local_dir, check_download))
     xrefs = bxref.get_curie_ids(curies)
 
     if fmt == "console":
@@ -322,12 +397,7 @@ def ids(
 
 @cli.command("test-concord")
 @click.argument("curies", type=str, required=True, nargs=-1)
-@click.option(
-    "--nodenorm-url",
-    type=str,
-    default="https://nodenormalization-sri.renci.org/",
-    help="NodeNorm URL to check for concord changes",
-)
+@nodenorm_options
 @format_option
 def test_concord(curies, nodenorm_url, fmt, json_indent):
     """For each CURIE, print the current NodeNorm clique (all equivalent identifiers, labels, and Biolink types).

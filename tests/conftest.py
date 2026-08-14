@@ -9,6 +9,7 @@ import os
 import shutil
 
 import pytest
+import requests
 from filelock import FileLock
 
 from babel_explorer.core.downloader import BabelDownloader
@@ -66,7 +67,14 @@ def test_data_dir(request):
 
 @pytest.fixture(scope="session")
 def shared_downloader(test_data_dir) -> BabelDownloader:
-    """A BabelDownloader pointed at the test data directory."""
+    """A BabelDownloader pointed at the test data directory.
+
+    Skips the whole session when BABEL_URL points at a Babel release that does not
+    publish the DuckDB Parquet files (as the public releases currently do not).
+    """
+    response = requests.head(BABEL_URL + CONCORD_FILE, timeout=30)
+    if response.status_code == 404:
+        pytest.skip(f"{BABEL_URL} does not publish {CONCORD_FILE}")
     return BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
 
 

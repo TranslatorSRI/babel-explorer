@@ -94,10 +94,12 @@ class TestCliCommands:
         mock_xref.filename = "test.parquet"
 
         with (
-            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
             patch("babel_explorer.cli.BabelXRefs") as mock_bx,
-            patch("babel_explorer.cli.NodeNorm"),
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
         ):
+            mock_dl.return_value.babel_version = "2026jul22"
+            mock_nn.return_value.get_babel_version.return_value = "2026jul22"
             mock_bx.return_value.get_curie_xrefs.return_value = [mock_xref]
             result = runner.invoke(
                 cli, ["xrefs", "MONDO:0004979", "--recurse", "--labels"]
@@ -427,3 +429,109 @@ class TestOutputFormats:
             result = runner.invoke(cli, ["xrefs", "A:1", "--format", "text"])
 
         assert result.exit_code != 0
+
+
+class TestVersionChecking:
+    """The Babel release behind --babel-url must match the one NodeNorm was built from."""
+
+    @staticmethod
+    def _run(args, babel_version="2026jul22", nodenorm_version="2026jul22", env=None):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_dl.return_value.babel_version = babel_version
+            mock_nn.return_value.get_babel_version.return_value = nodenorm_version
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            mock_bx.return_value.get_curie_ids.return_value = []
+            result = runner.invoke(cli, args, env=env)
+        return result, mock_dl, mock_nn
+
+    def test_mismatch_fails(self):
+        result, _, _ = self._run(
+            ["xrefs", "A:1", "--labels"], nodenorm_version="2025sep1"
+        )
+        assert result.exit_code != 0
+        assert "2025sep1" in result.output and "2026jul22" in result.output
+
+    def test_mismatch_allowed_with_flag(self):
+        result, _, _ = self._run(
+            ["xrefs", "A:1", "--labels", "--allow-version-mismatch"],
+            nodenorm_version="2025sep1",
+        )
+        assert result.exit_code == 0
+
+    def test_mismatch_allowed_via_env(self):
+        result, _, _ = self._run(
+            ["xrefs", "A:1", "--labels"],
+            nodenorm_version="2025sep1",
+            env={"BABEL_ALLOW_VERSION_MISMATCH": "1"},
+        )
+        assert result.exit_code == 0
+
+    def test_unknown_version_skips_check(self):
+        """Nothing to compare means nothing to complain about."""
+        result, _, _ = self._run(["xrefs", "A:1", "--labels"], babel_version=None)
+        assert result.exit_code == 0
+
+    def test_plain_xrefs_skips_check(self):
+        """Plain xrefs builds a NodeNorm but never queries it, so skew is irrelevant."""
+        result, _, mock_nn = self._run(["xrefs", "A:1"], nodenorm_version="2025sep1")
+        assert result.exit_code == 0
+        mock_nn.return_value.get_babel_version.assert_not_called()
+
+    def test_ids_skips_check(self):
+        """ids uses no NodeNorm at all."""
+        result, _, mock_nn = self._run(["ids", "A:1"], nodenorm_version="2025sep1")
+        assert result.exit_code == 0
+        mock_nn.return_value.get_babel_version.assert_not_called()
+
+    def test_cache_is_synced_to_the_babel_release(self):
+        _, mock_dl, _ = self._run(["ids", "A:1"])
+        mock_dl.return_value.sync_cache_version.assert_called_once()
+
+
+class TestUrlConfiguration:
+    """URLs come from the environment (and hence .env), overridable per-run."""
+
+    @staticmethod
+    def _invoke(args, env):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            result = runner.invoke(cli, args, env=env)
+        assert result.exit_code == 0, result.output
+        return mock_dl, mock_nn
+
+    def test_defaults_are_public(self):
+        mock_dl, mock_nn = self._invoke(
+            ["xrefs", "A:1"], env={"BABEL_URL": None, "NODENORM_URL": None}
+        )
+        assert mock_dl.call_args[0][0] == "https://stars.renci.org/var/babel/latest/"
+        assert mock_nn.call_args[0][0] == "https://nodenormalization-sri.renci.org/"
+
+    def test_env_overrides_defaults(self):
+        mock_dl, mock_nn = self._invoke(
+            ["xrefs", "A:1"],
+            env={
+                "BABEL_URL": "https://example.com/babel/",
+                "BABEL_LOCAL_DIR": "/tmp/babel-cache",
+                "NODENORM_URL": "https://example.com/nn/",
+            },
+        )
+        assert mock_dl.call_args[0][0] == "https://example.com/babel/"
+        assert mock_dl.call_args.kwargs["local_path"] == "/tmp/babel-cache"
+        assert mock_nn.call_args[0][0] == "https://example.com/nn/"
+
+    def test_flag_beats_env(self):
+        mock_dl, _ = self._invoke(
+            ["xrefs", "A:1", "--babel-url", "https://flag.example.com/"],
+            env={"BABEL_URL": "https://env.example.com/"},
+        )
+        assert mock_dl.call_args[0][0] == "https://flag.example.com/"
