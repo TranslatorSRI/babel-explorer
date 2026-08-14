@@ -1,6 +1,7 @@
 """Command-line interface for babel-explorer."""
 
 import logging
+import re
 from itertools import combinations
 
 import click
@@ -27,7 +28,8 @@ from babel_explorer.formatting import (
 
 
 def babel_options(f):
-    """Decorator adding --local-dir, --babel-url, and --check-download options to a command."""
+    """Decorator adding the Babel source options: --local-dir, --babel-url,
+    --check-download and --allow-version-mismatch."""
     f = click.option(
         "--allow-version-mismatch",
         is_flag=True,
@@ -130,45 +132,24 @@ def format_option(f):
     return f
 
 
+#: Duration suffixes accepted by --check-download; no suffix means seconds.
+_DURATION_UNITS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+
+
 def parse_duration(value: str) -> int | float:
     """Parse a duration string like '3h', '30m', '1d', '7200', or 'never' → seconds."""
-    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
     lower = (value or "").strip().lower()
-    if not lower:
-        raise click.BadParameter(
-            "Invalid duration: value cannot be empty. "
-            "Use an integer number of seconds, optionally followed by 's', 'm', 'h', or 'd', "
-            "or 'never'."
-        )
     if lower == "never":
         return float("inf")
-    # Value with unit suffix (e.g. '3h', '30m')
-    if lower[-1] in units:
-        try:
-            amount = int(lower[:-1])
-        except ValueError:
-            raise click.BadParameter(
-                f"Invalid duration {value!r}: expected an integer followed by an optional unit "
-                "('s', 'm', 'h', or 'd'), or 'never'."
-            )
-        if amount < 0:
-            raise click.BadParameter(
-                f"Invalid duration {value!r}: duration must be non-negative."
-            )
-        return amount * units[lower[-1]]
-    # Bare integer seconds
-    try:
-        result = int(lower)
-    except ValueError:
+    # The pattern rejects empty, negative and non-integer values in one go, so there
+    # is a single wording of the error rather than one per rejected shape.
+    match = re.fullmatch(r"(\d+)([smhd]?)", lower)
+    if not match:
         raise click.BadParameter(
-            f"Invalid duration {value!r}: expected an integer number of seconds, optionally "
-            "followed by 's', 'm', 'h', or 'd', or 'never'."
+            f"Invalid duration {value!r}: expected a non-negative integer number of "
+            "seconds, optionally followed by 's', 'm', 'h', or 'd', or 'never'."
         )
-    if result < 0:
-        raise click.BadParameter(
-            f"Invalid duration {value!r}: duration must be non-negative."
-        )
-    return result
+    return int(match[1]) * _DURATION_UNITS[match[2]]
 
 
 def _depth_of(curie: str, query_set: set, depth: int | None) -> int | None:
