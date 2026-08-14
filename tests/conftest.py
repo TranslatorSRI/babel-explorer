@@ -12,20 +12,18 @@ import pytest
 import requests
 from filelock import FileLock
 
-from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.babel_xrefs import BabelXRefs
+from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.nodenorm import NodeNorm
-
 from tests.constants import (
     BABEL_URL,
+    CONCORD_FILE,
+    IDENTIFIERS_FILE,
+    METADATA_FILE,
     NODENORM_URL,
     TEST_DATA_DIR,
-    CONCORD_FILE,
-    METADATA_FILE,
-    IDENTIFIERS_FILE,
     load_curies,
 )
-
 
 # ---------------------------------------------------------------------------
 # Session-scoped fixtures

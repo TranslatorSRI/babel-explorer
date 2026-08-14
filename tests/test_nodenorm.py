@@ -4,13 +4,12 @@ Tests for NodeNorm and Identifier classes.
 Unit tests use mocks; integration tests call the real NodeNorm API.
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
-from babel_explorer.core.nodenorm import NodeNorm, Identifier
-
+from babel_explorer.core.nodenorm import Identifier, NodeNorm
 from tests.constants import load_curies
 
 VALID_CURIES = load_curies()

@@ -1,8 +1,9 @@
 """NodeNorm API client for identifier normalisation and label enrichment."""
 
 import dataclasses
-import requests
 import logging
+
+import requests
 
 
 @dataclasses.dataclass(frozen=True)

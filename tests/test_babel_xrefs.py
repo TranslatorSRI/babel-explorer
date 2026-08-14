@@ -4,18 +4,18 @@ Tests for BabelXRefs, CrossReference, LabeledCrossReference, and IdentifierRecor
 Unit tests use mocks; integration tests query real Parquet files via DuckDB.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from babel_explorer.core.babel_xrefs import (
     BabelXRefs,
     CrossReference,
-    LabeledCrossReference,
     IdentifierRecord,
+    LabeledCrossReference,
 )
 from babel_explorer.core.downloader import BabelDownloader
 from babel_explorer.core.nodenorm import NodeNorm
-
 from tests.constants import load_curies
 
 VALID_CURIES = load_curies()

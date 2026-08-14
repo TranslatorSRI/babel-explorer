@@ -8,6 +8,7 @@ considered identical in a Babel build.
 import dataclasses
 import logging
 from collections import deque
+
 import duckdb
 
 from babel_explorer.core.downloader import BabelDownloader
