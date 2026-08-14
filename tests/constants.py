@@ -1,9 +1,19 @@
 """Shared constants for babel-explorer tests."""
 
+import os
 import pathlib
 
-BABEL_URL = "https://stars.renci.org/var/babel_outputs/2025nov19/"
-NODENORM_URL = "https://nodenormalization-sri.renci.org/"
+from dotenv import load_dotenv
+
+# Integration tests run against whatever BABEL_URL points at, so a Translator developer
+# with a .env exercises them while public contributors and CI fall back to the public
+# release (which does not yet publish the DuckDB Parquet files, so those tests skip).
+load_dotenv()
+
+BABEL_URL = os.environ.get("BABEL_URL", "https://stars.renci.org/var/babel/latest/")
+NODENORM_URL = os.environ.get(
+    "NODENORM_URL", "https://nodenormalization-sri.renci.org/"
+)
 TEST_DATA_DIR = "data/test"
 
 # Parquet file paths (relative to the Babel server / local data dir)
