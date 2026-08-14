@@ -292,6 +292,71 @@ class TestGetCliqueIdentifiersMocked:
             mock_norm.assert_called_once()
 
 
+class TestGetBabelVersionMocked:
+    """Tests for get_babel_version()."""
+
+    @staticmethod
+    def _status_response(payload):
+        response = Mock()
+        response.json = Mock(return_value=payload)
+        response.raise_for_status = Mock()
+        return response
+
+    def test_reads_babel_version_from_status(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/nn")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._status_response({"babel_version": "2026jul22"}),
+        ) as mock_get:
+            assert nn.get_babel_version() == "2026jul22"
+        assert mock_get.call_args[0][0] == "https://example.com/nn/status"
+
+    def test_offline_mode_makes_no_request(self):
+        """An empty URL short-circuits every lookup, including this one."""
+        nn = NodeNorm(nodenorm_url="")
+        with patch("babel_explorer.core.nodenorm.requests.get") as mock_get:
+            assert nn.get_babel_version() is None
+            mock_get.assert_not_called()
+
+    def test_unreachable_status_returns_none(self):
+        """A version check must never take down the command that called it."""
+        nn = NodeNorm(nodenorm_url="https://example.com/nn")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            side_effect=requests.ConnectionError("boom"),
+        ):
+            assert nn.get_babel_version() is None
+
+    def test_status_without_babel_version_returns_none(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/nn")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._status_response({"biolink_model": {"tag": "v4.2.6"}}),
+        ):
+            assert nn.get_babel_version() is None
+
+    def test_result_is_cached(self):
+        nn = NodeNorm(nodenorm_url="https://example.com/nn")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            return_value=self._status_response({"babel_version": "2026jul22"}),
+        ) as mock_get:
+            nn.get_babel_version()
+            nn.get_babel_version()
+            mock_get.assert_called_once()
+
+    def test_failure_is_cached_too(self):
+        """A failed lookup must not be retried on every subsequent call."""
+        nn = NodeNorm(nodenorm_url="https://example.com/nn")
+        with patch(
+            "babel_explorer.core.nodenorm.requests.get",
+            side_effect=requests.ConnectionError("boom"),
+        ) as mock_get:
+            nn.get_babel_version()
+            nn.get_babel_version()
+            mock_get.assert_called_once()
+
+
 # ==========================================================================
 # Integration Tests — require real NodeNorm API
 # ==========================================================================

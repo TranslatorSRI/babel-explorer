@@ -186,16 +186,21 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 - **`@pytest.mark.integration`** — requires network access (downloads Parquet files or calls NodeNorm API)
 - **`@pytest.mark.slow`** — downloads very large files (2 GB+)
 
-| File | Unit | Integration | Slow | Total |
-|------|------|-------------|------|-------|
-| `tests/test_downloader.py` | 41 | 4 | 1 | 46 |
-| `tests/test_babel_xrefs.py` | 23 | 20 | 3 | 46 |
-| `tests/test_nodenorm.py` | 20 | 13 | 0 | 33 |
-| `tests/test_cli.py` | 24 | 0 | 0 | 24 |
+Do not record per-file test counts here — they drift silently and then mislead. Get them on demand:
+
+```bash
+uv run pytest --collect-only -q -m "not integration"   # unit test count
+uv run pytest --collect-only -q                        # full count
+```
+
+**Integration tests skip when `BABEL_URL` points at a Babel release that does not publish
+`duckdb/Concord.parquet`**, which is the case for every public release right now. A run reporting
+a couple of dozen skips is the expected result without a Translator `BABEL_URL` in `.env`, not a
+broken test environment.
 
 ### Test Infrastructure
 
-- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. Teardown removes the `data/test/` directory so the next run starts fresh.
+- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. The `shared_downloader` fixture HEADs `duckdb/Concord.parquet` first and skips the session on 404. Teardown removes the `data/test/` directory so the next run starts fresh.
 - **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
 - **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
 

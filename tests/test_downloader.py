@@ -133,6 +133,21 @@ class TestSyncCacheVersion:
         assert parquet.exists(), "the Parquet file itself must never be deleted"
         assert (tmp_path / VERSION_MARKER).read_text().strip() == "2026jul22"
 
+    def test_refresh_does_not_reach_into_sibling_directories(self, tmp_path):
+        """local_path may hold other Babel releases; only our own duckdb/ is cleared."""
+        self._seed_cache(tmp_path)
+        sibling = tmp_path / "2025nov19" / "duckdb"
+        sibling.mkdir(parents=True)
+        sibling_meta = sibling / "Concord.parquet.meta"
+        sibling_meta.write_text("{}")
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert sibling_meta.exists(), (
+            "a nested release directory must not be swept up in the refresh"
+        )
+
     def test_unknown_version_leaves_cache_untouched(self, tmp_path):
         """An unresolvable version must not trigger a multi-gigabyte re-download."""
         _, meta = self._seed_cache(tmp_path)
