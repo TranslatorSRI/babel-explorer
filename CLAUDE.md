@@ -17,9 +17,42 @@ uv sync
 # Install with dev dependencies
 uv sync --group dev
 
+# Configure the Babel and NodeNorm endpoints
+cp .env.example .env
+
 # Run the CLI
 uv run babel-explorer --help
 ```
+
+## Configuration
+
+`BABEL_URL`, `BABEL_LOCAL_DIR`, `BABEL_CHECK_DOWNLOAD`, `NODENORM_URL`, and
+`BABEL_ALLOW_VERSION_MISMATCH` are read from `.env` (via `python-dotenv`, loaded in the `cli()`
+group) or the environment. Each is also a command-line option, and precedence runs
+**flag > environment variable > `.env` > built-in default**.
+
+`.env.example` ships with the **public** Babel URL only. Public Babel releases do not currently
+publish the DuckDB Parquet files this tool needs, so Translator team members must contact the
+Babel developers for the Translator-specific URL and set `BABEL_URL` to it. Never commit that URL
+to this repository.
+
+## Babel versions
+
+The Babel version behind `--babel-url` is resolved by `resolve_babel_version()`
+(`core/downloader.py`), which reads `VERSION.txt` (`Babel 2026jul22`) and falls back to the final
+path segment for older trees that predate it. `latest/` resolves to whatever release it currently
+points at.
+
+`BABEL_LOCAL_DIR` holds **one Babel release at a time**, recorded in a `.babel-version` marker.
+When the release changes, `BabelDownloader.sync_cache_version()` deletes the `.meta` sidecars in
+`<local_dir>/duckdb/` — never the Parquet files — so the existing ETag path re-checks each cached
+file and re-downloads only what actually changed. This keeps `Concord.parquet` and
+`Identifiers.parquet` from being read together across two different Babel releases.
+
+`xrefs` fails when NodeNorm's `status` endpoint reports a different `babel_version` than the Babel
+being queried, since labels and cliques would not match the cross-references. Pass
+`--allow-version-mismatch` to proceed anyway. The check is skipped when NodeNorm is not consulted
+(plain `xrefs`, `ids`) or when either version is unavailable.
 
 ## Commands
 
@@ -41,8 +74,8 @@ uv run babel-explorer ids MONDO:0004979
 # Test concordance changes with NodeNorm
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 
-# Use custom Babel server or local directory
-uv run babel-explorer xrefs MONDO:0004979 --local-dir data/2025nov19 --babel-url https://stars.renci.org:443/var/babel_outputs/2025nov19/
+# Use a custom Babel server or local directory (overrides .env)
+uv run babel-explorer xrefs MONDO:0004979 --local-dir data --babel-url https://stars.renci.org/var/babel/latest/
 ```
 
 ### Development Commands
@@ -91,8 +124,10 @@ This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels
 
 1. **BabelDownloader** (`src/babel_explorer/core/downloader.py`):
    - Downloads Babel intermediate files from a remote HTTP(S) server using Python's `requests` library (streaming downloads)
-   - Caches files locally in configurable directory (default: `data/2025nov19/`)
+   - Caches files locally in a configurable directory (default: `data/`), one Babel release at a time
    - Uses `@functools.lru_cache` to avoid re-downloading
+   - Resolves the Babel version (`resolve_babel_version`) and refreshes the cache when it changes (`sync_cache_version`)
+   - Raises `MissingBabelFileError` on a 404 for a `duckdb/` file, since public releases do not publish them
    - **Important**: Requires network access but no external tools like `wget`
 
 2. **BabelXRefs** (`src/babel_explorer/core/babel_xrefs.py`):
@@ -105,6 +140,7 @@ This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels
    - Integration with NodeNormalization API (https://nodenormalization-sri.renci.org/)
    - Fetches labels, biolink types, and equivalent identifiers for CURIEs
    - Uses `@functools.lru_cache` for performance
+   - `get_babel_version()` reads the `status` endpoint to report which Babel release it was built from
    - Optional component for label enrichment
 
 4. **CLI** (`src/babel_explorer/cli.py`):
@@ -113,8 +149,8 @@ This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels
 
 ### Data Flow
 
-1. User provides CURIEs via CLI
-2. BabelDownloader ensures required Parquet files are downloaded
+1. User provides CURIEs via CLI; `BABEL_URL` / `NODENORM_URL` come from `.env` or the environment
+2. BabelDownloader resolves the Babel version, refreshes the cache if it changed, and ensures required Parquet files are downloaded
 3. BabelXRefs queries files using DuckDB
 4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata
 5. Results are printed to stdout
@@ -158,12 +194,14 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 ## Important Notes
 
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
-- **Babel versions**: The default Babel version is `2025nov19`, but this can be customized via `--local-dir` and `--babel-url`
+- **Babel versions**: The Babel release comes from whatever `--babel-url` / `BABEL_URL` points at; see [Babel versions](#babel-versions) above
+- **`.env`**: gitignored. Only `.env.example` is committed, and it must never contain the Translator-specific Babel URL
 
 ## File Locations
 
 - Source code: `src/babel_explorer/`
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
-- Downloaded Babel files: `data/<version>/duckdb/*.parquet`
+- Downloaded Babel files: `<BABEL_LOCAL_DIR>/duckdb/*.parquet` (default `data/duckdb/`)
+- Endpoint configuration: `.env` (gitignored), template in `.env.example`
 - Entry point: `src/babel_explorer/cli.py`
