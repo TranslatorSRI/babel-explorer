@@ -55,6 +55,31 @@ class NodeNorm:
         self._normalize_cache: dict[str, dict | None] = {}
         self._identifier_cache: dict[str, Identifier] = {}
         self._clique_cache: dict[str, list[Identifier]] = {}
+        self._babel_version: str | None = None
+        self._babel_version_resolved = False
+
+    def get_babel_version(self) -> str | None:
+        """Return the Babel release this NodeNorm instance was built from.
+
+        :return: The version reported by the ``status`` endpoint, or ``None`` in offline
+            mode or if the endpoint cannot be reached or does not report one.
+
+        The result is cached per instance.
+        """
+        if self._babel_version_resolved:
+            return self._babel_version
+
+        self._babel_version_resolved = True
+        if self.nodenorm_url:
+            try:
+                response = requests.get(
+                    f"{self.nodenorm_url}status", timeout=self.timeout
+                )
+                response.raise_for_status()
+                self._babel_version = response.json().get("babel_version")
+            except (requests.RequestException, ValueError) as e:
+                logging.warning(f"Could not read the Babel version from NodeNorm: {e}")
+        return self._babel_version
 
     def get_identifier(self, curie: str) -> "Identifier":
         """Return the ``Identifier`` for *curie* by looking it up in its NodeNorm clique.
