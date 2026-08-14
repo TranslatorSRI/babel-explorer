@@ -1,14 +1,46 @@
 """HTTP downloader for Babel Parquet files with ETag-based freshness checking."""
 
 import functools
+import glob
 import json
 import os
+import re
 import tempfile
 import time
 import requests
 from datetime import datetime, timezone
 from tqdm import tqdm
 import logging
+
+#: Name of the file recording which Babel release the local cache holds.
+VERSION_MARKER = ".babel-version"
+
+
+class MissingBabelFileError(RuntimeError):
+    """Raised when a Babel release does not publish a file this tool needs."""
+
+
+def resolve_babel_version(url_base: str, timeout: int = 30) -> str | None:
+    """
+    Resolve the Babel version behind a Babel base URL.
+
+    Reads ``VERSION.txt`` (present on all full Babel releases, e.g. ``Babel 2026jul22``),
+    falling back to the final path segment for older trees that predate it.
+
+    :return: The version string, or ``None`` if it cannot be determined.
+    """
+    try:
+        response = requests.get(url_base + "VERSION.txt", timeout=timeout)
+        response.raise_for_status()
+        match = re.search(r"Babel\s+(\S+)", response.text)
+        if match:
+            return match.group(1)
+    except requests.RequestException:
+        pass
+
+    # Legacy trees (e.g. the 2025nov19 development directory) have no VERSION.txt.
+    segment = url_base.rstrip("/").rsplit("/", 1)[-1]
+    return None if segment == "latest" else segment
 
 
 class BabelDownloader:
@@ -42,6 +74,8 @@ class BabelDownloader:
         self.freshness_seconds = freshness_seconds
         self.timeout = timeout
         self.logger = logging.getLogger(BabelDownloader.__name__)
+        self._babel_version: str | None = None
+        self._babel_version_resolved = False
 
         if local_path is None:
             local_path = tempfile.gettempdir()
@@ -55,6 +89,59 @@ class BabelDownloader:
             raise ValueError(
                 f"Invalid local_path (must be an existing directory): '{local_path}'"
             )
+
+    @property
+    def babel_version(self) -> str | None:
+        """The Babel release behind ``url_base``, resolved once and cached."""
+        if not self._babel_version_resolved:
+            self._babel_version = resolve_babel_version(self.url_base, self.timeout)
+            self._babel_version_resolved = True
+        return self._babel_version
+
+    def sync_cache_version(self):
+        """
+        Point the local cache at the Babel release behind ``url_base``.
+
+        The cache holds one release at a time. When the release changes, the ``.meta``
+        sidecars are removed so the existing ETag path re-checks every cached file on
+        next use — whatever actually changed is re-downloaded, and files that are
+        unchanged cost one HEAD instead of a fresh multi-gigabyte download.
+
+        Deleting the sidecars rather than the Parquet files also means nothing large is
+        destroyed if the version cannot be trusted, and an interrupted refresh self-heals:
+        a ``.meta`` file is only written after a successful download.
+        """
+        version = self.babel_version
+        if version is None:
+            self.logger.warning(
+                f"Could not determine the Babel version at {self.url_base}; "
+                f"using cached files in {self.local_path} as-is"
+            )
+            return
+
+        marker_path = os.path.join(self.local_path, VERSION_MARKER)
+        try:
+            with open(marker_path) as f:
+                cached_version = f.read().strip()
+        except OSError:
+            cached_version = None
+
+        if cached_version and cached_version != version:
+            self.logger.warning(
+                f"Babel version changed: {cached_version} → {version}; "
+                f"refreshing cached files in {self.local_path}"
+            )
+            # Only ever touch sidecars this downloader wrote. Not recursive: local_path
+            # may be a directory the user pointed us at (or one holding other Babel
+            # releases in sibling subdirectories), and must not be cleared wholesale.
+            for meta_path in glob.glob(
+                os.path.join(self.local_path, "duckdb", "*.meta")
+            ):
+                os.remove(meta_path)
+
+        if cached_version != version:
+            with open(marker_path, "w") as f:
+                f.write(version + "\n")
 
     @functools.lru_cache(maxsize=None)
     def get_output_file(self, filename):
@@ -256,6 +343,15 @@ class BabelDownloader:
                             resume_byte_pos = 0
                             if os.path.exists(local_path):
                                 os.remove(local_path)
+                    elif response.status_code == 404:
+                        # Not worth retrying, and worth explaining: public Babel releases
+                        # do not currently publish the DuckDB Parquet files.
+                        raise MissingBabelFileError(
+                            f"This Babel release ({self.babel_version or self.url_base}) does not "
+                            f"publish {url[len(self.url_base) :]}. Translator team members should "
+                            f"contact the Babel developers for the Translator-specific URL and set "
+                            f"BABEL_URL in .env."
+                        )
                     else:
                         response.raise_for_status()
 

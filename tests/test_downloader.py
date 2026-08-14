@@ -14,9 +14,159 @@ import pytest
 import requests
 from unittest.mock import Mock, patch, MagicMock
 
-from babel_explorer.core.downloader import BabelDownloader
+from babel_explorer.core.downloader import (
+    BabelDownloader,
+    MissingBabelFileError,
+    VERSION_MARKER,
+    resolve_babel_version,
+)
 
 from tests.constants import CONCORD_FILE
+
+
+def _version_response(text):
+    """A mock requests response serving *text* as the body of VERSION.txt."""
+    response = Mock()
+    response.text = text
+    response.raise_for_status = Mock()
+    return response
+
+
+class TestResolveBabelVersion:
+    """Unit tests for resolve_babel_version()."""
+
+    def test_reads_version_txt(self):
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            return_value=_version_response(
+                "Babel 2026jul22\nhttps://github.com/NCATSTranslator/Babel\n"
+            ),
+        ) as mock_get:
+            assert (
+                resolve_babel_version("https://example.com/babel/latest/")
+                == "2026jul22"
+            )
+        assert (
+            mock_get.call_args[0][0] == "https://example.com/babel/latest/VERSION.txt"
+        )
+
+    def test_version_txt_wins_over_path_segment(self):
+        """VERSION.txt is authoritative even when the URL names a version."""
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            return_value=_version_response("Babel 2026jul22\n"),
+        ):
+            assert (
+                resolve_babel_version("https://example.com/babel/2025nov19/")
+                == "2026jul22"
+            )
+
+    def test_falls_back_to_path_segment(self):
+        """Trees predating VERSION.txt fall back to the final path segment."""
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            side_effect=requests.HTTPError("404"),
+        ):
+            assert (
+                resolve_babel_version("https://example.com/babel/2025nov19/")
+                == "2025nov19"
+            )
+
+    def test_unresolvable_latest_returns_none(self):
+        """'latest' is not a version, so an unreachable VERSION.txt means unknown."""
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            side_effect=requests.ConnectionError("boom"),
+        ):
+            assert resolve_babel_version("https://example.com/babel/latest/") is None
+
+    def test_unparseable_version_txt_falls_back(self):
+        with patch(
+            "babel_explorer.core.downloader.requests.get",
+            return_value=_version_response("something else entirely"),
+        ):
+            assert (
+                resolve_babel_version("https://example.com/babel/2025nov19/")
+                == "2025nov19"
+            )
+
+
+class TestSyncCacheVersion:
+    """Unit tests for BabelDownloader.sync_cache_version()."""
+
+    @staticmethod
+    def _downloader(tmp_path, version):
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        dl._babel_version = version
+        dl._babel_version_resolved = True
+        return dl
+
+    @staticmethod
+    def _seed_cache(tmp_path):
+        """Create a cached parquet file with its .meta sidecar."""
+        duckdb_dir = tmp_path / "duckdb"
+        duckdb_dir.mkdir()
+        parquet = duckdb_dir / "Concord.parquet"
+        parquet.write_text("data")
+        meta = duckdb_dir / "Concord.parquet.meta"
+        meta.write_text("{}")
+        return parquet, meta
+
+    def test_writes_marker_when_absent(self, tmp_path):
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+        assert (tmp_path / VERSION_MARKER).read_text().strip() == "2026jul22"
+
+    def test_matching_version_keeps_meta(self, tmp_path):
+        _, meta = self._seed_cache(tmp_path)
+        (tmp_path / VERSION_MARKER).write_text("2026jul22\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert meta.exists()
+
+    def test_changed_version_removes_meta_but_keeps_parquet(self, tmp_path):
+        parquet, meta = self._seed_cache(tmp_path)
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert not meta.exists(), "stale .meta sidecar should be removed"
+        assert parquet.exists(), "the Parquet file itself must never be deleted"
+        assert (tmp_path / VERSION_MARKER).read_text().strip() == "2026jul22"
+
+    def test_unknown_version_leaves_cache_untouched(self, tmp_path):
+        """An unresolvable version must not trigger a multi-gigabyte re-download."""
+        _, meta = self._seed_cache(tmp_path)
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, None).sync_cache_version()
+
+        assert meta.exists()
+        assert (tmp_path / VERSION_MARKER).read_text().strip() == "2025nov19"
+
+
+class TestMissingBabelFile:
+    """A 404 should explain itself and not be retried."""
+
+    def test_404_raises_immediately(self, tmp_path):
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=10
+        )
+        dl._babel_version = "2025dec11"
+        dl._babel_version_resolved = True
+
+        response = MagicMock()
+        response.status_code = 404
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=response
+        ) as mock_get:
+            with pytest.raises(MissingBabelFileError, match="2025dec11"):
+                dl.get_downloaded_file(CONCORD_FILE)
+
+        assert mock_get.call_count == 1, "a 404 must not be retried"
 
 
 # ==========================================================================
