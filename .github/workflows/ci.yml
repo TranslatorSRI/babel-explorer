@@ -15,8 +15,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --group dev
-      - run: uv run ruff check src/ tests/
-      - run: uv run ruff format --check src/ tests/
+      # `uv run` uses the ruff pinned in uv.lock, so CI lints with the same version
+      # developers have locally. --output-format github annotates the PR diff inline.
+      # Paths come from [tool.ruff] in pyproject.toml rather than being repeated here.
+      - run: uv run ruff check --output-format github
+      - run: uv run ruff format --check
 
   test:
     runs-on: ubuntu-latest
