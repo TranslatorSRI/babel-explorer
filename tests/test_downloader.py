@@ -234,26 +234,6 @@ class TestBabelDownloaderInit:
                 os.unlink(f.name)
 
 
-class TestGetOutputFile:
-    """Tests for get_output_file."""
-
-    def test_returns_correct_path(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
-        result = dl.get_output_file("output/duckdbs/test.duckdb")
-        assert result == os.path.join(str(tmp_path), "output/duckdbs/test.duckdb")
-
-    def test_creates_parent_directories(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
-        result = dl.get_output_file("deep/nested/dir/file.txt")
-        assert os.path.isdir(os.path.dirname(result))
-
-    def test_lru_caching(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
-        result1 = dl.get_output_file("some/file.txt")
-        result2 = dl.get_output_file("some/file.txt")
-        assert result1 is result2  # identity check — same cached object
-
-
 class TestSaveMeta:
     """Tests for _save_meta."""
 

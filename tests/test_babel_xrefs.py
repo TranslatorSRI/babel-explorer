@@ -223,19 +223,16 @@ class TestBabelXRefsMocked:
         with patch.object(
             bx.downloader, "get_downloaded_file", return_value="/fake/path"
         ) as mock_dl:
-            with patch.object(
-                bx.downloader, "get_output_file", return_value="/fake/db"
+            with patch(
+                "babel_explorer.core.babel_xrefs.duckdb.connect",
+                return_value=mock_db,
             ):
-                with patch(
-                    "babel_explorer.core.babel_xrefs.duckdb.connect",
-                    return_value=mock_db,
-                ):
-                    result = bx.get_curie_xref("A:1")
-                    # Downloader should be called for Concord only (Metadata unused here)
-                    assert mock_dl.call_count == 1
-                    result_list = list(result)
-                    assert len(result_list) == 1
-                    assert isinstance(result_list[0], CrossReference)
+                result = bx.get_curie_xref("A:1")
+                # Downloader should be called for Concord only (Metadata unused here)
+                assert mock_dl.call_count == 1
+                result_list = list(result)
+                assert len(result_list) == 1
+                assert isinstance(result_list[0], CrossReference)
 
     def test_get_curie_xrefs_no_expand(self, tmp_path):
         bx = self._make_bx(tmp_path)
