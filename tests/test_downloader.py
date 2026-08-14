@@ -8,19 +8,18 @@ Integration tests download real files from the Babel server.
 import json
 import os
 import tempfile
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import requests
-from unittest.mock import Mock, patch, MagicMock
 
 from babel_explorer.core.downloader import (
+    VERSION_MARKER,
     BabelDownloader,
     MissingBabelFileError,
-    VERSION_MARKER,
     resolve_babel_version,
 )
-
 from tests.constants import CONCORD_FILE
 
 
@@ -297,7 +296,7 @@ class TestSaveMeta:
             meta = json.load(f)
 
         last_checked = datetime.fromisoformat(meta["last_checked"])
-        age = (datetime.now(timezone.utc) - last_checked).total_seconds()
+        age = (datetime.now(UTC) - last_checked).total_seconds()
         assert age < 5  # written less than 5 seconds ago
 
     def test_missing_headers_not_written(self, tmp_path):
@@ -360,13 +359,13 @@ class TestIsWithinFreshness:
 
     def test_returns_true_when_recent(self, tmp_path):
         dl = self._make_dl(tmp_path)
-        recent = datetime.now(timezone.utc).isoformat()
+        recent = datetime.now(UTC).isoformat()
         meta = {"last_checked": recent}
         assert dl._is_within_freshness(meta, 3600) is True
 
     def test_returns_false_when_stale(self, tmp_path):
         dl = self._make_dl(tmp_path)
-        old = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        old = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         meta = {"last_checked": old}
         assert dl._is_within_freshness(meta, 3600) is False
 
@@ -376,13 +375,13 @@ class TestIsWithinFreshness:
 
     def test_returns_true_when_freshness_is_inf(self, tmp_path):
         dl = self._make_dl(tmp_path)
-        old = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat()
+        old = (datetime.now(UTC) - timedelta(days=365)).isoformat()
         meta = {"last_checked": old}
         assert dl._is_within_freshness(meta, float("inf")) is True
 
     def test_returns_false_when_freshness_is_zero(self, tmp_path):
         dl = self._make_dl(tmp_path)
-        just_now = datetime.now(timezone.utc).isoformat()
+        just_now = datetime.now(UTC).isoformat()
         meta = {"last_checked": just_now}
         # Even with freshness=0, age >= 0 so it's not < 0
         assert dl._is_within_freshness(meta, 0) is False
@@ -461,7 +460,7 @@ class TestGetDownloadedFileTiers:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"data")
 
-        meta = {"etag": '"abc"', "last_checked": datetime.now(timezone.utc).isoformat()}
+        meta = {"etag": '"abc"', "last_checked": datetime.now(UTC).isoformat()}
         with open(str(local) + ".meta", "w") as f:
             json.dump(meta, f)
 
@@ -482,7 +481,7 @@ class TestGetDownloadedFileTiers:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"data")
 
-        old_ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        old_ts = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         meta = {"etag": '"abc"', "last_checked": old_ts}
         with open(str(local) + ".meta", "w") as f:
             json.dump(meta, f)
@@ -507,7 +506,7 @@ class TestGetDownloadedFileTiers:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"data")
 
-        old_ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        old_ts = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         meta = {"etag": '"abc"', "last_checked": old_ts}
         with open(str(local) + ".meta", "w") as f:
             json.dump(meta, f)
@@ -524,7 +523,7 @@ class TestGetDownloadedFileTiers:
         with open(str(local) + ".meta") as f:
             updated_meta = json.load(f)
         updated_ts = datetime.fromisoformat(updated_meta["last_checked"])
-        assert (datetime.now(timezone.utc) - updated_ts).total_seconds() < 5
+        assert (datetime.now(UTC) - updated_ts).total_seconds() < 5
 
     # --- Tier 3: ETag changed, re-download ---
 
@@ -536,7 +535,7 @@ class TestGetDownloadedFileTiers:
         local.parent.mkdir(parents=True)
         local.write_bytes(b"old data")
 
-        old_ts = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        old_ts = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         meta = {"etag": '"old"', "last_checked": old_ts}
         with open(str(local) + ".meta", "w") as f:
             json.dump(meta, f)

@@ -3,14 +3,15 @@
 import functools
 import glob
 import json
+import logging
 import os
 import re
 import tempfile
 import time
+from datetime import UTC, datetime
+
 import requests
-from datetime import datetime, timezone
 from tqdm import tqdm
-import logging
 
 #: Name of the file recording which Babel release the local cache holds.
 VERSION_MARKER = ".babel-version"
@@ -143,7 +144,7 @@ class BabelDownloader:
             with open(marker_path, "w") as f:
                 f.write(version + "\n")
 
-    @functools.lru_cache(maxsize=None)
+    @functools.cache
     def get_output_file(self, filename):
         """Return (and create) the local filesystem path for a given relative filename."""
         filepath = os.path.join(self.local_path, filename)
@@ -160,7 +161,7 @@ class BabelDownloader:
         if not os.path.exists(meta_path):
             return None
         try:
-            with open(meta_path, "r") as f:
+            with open(meta_path) as f:
                 return json.load(f)
         except (json.JSONDecodeError, OSError):
             return None
@@ -182,7 +183,7 @@ class BabelDownloader:
         if "Content-Length" in headers:
             meta["content_length"] = int(headers["Content-Length"])
         if update_last_checked:
-            meta["last_checked"] = datetime.now(timezone.utc).isoformat()
+            meta["last_checked"] = datetime.now(UTC).isoformat()
 
         meta_path = self._get_meta_path(local_path)
         with open(meta_path, "w") as f:
@@ -206,7 +207,7 @@ class BabelDownloader:
             return False
         try:
             last_checked = datetime.fromisoformat(last_checked_str)
-            age = (datetime.now(timezone.utc) - last_checked).total_seconds()
+            age = (datetime.now(UTC) - last_checked).total_seconds()
             return age < freshness_seconds
         except (ValueError, TypeError):
             return False
@@ -360,7 +361,7 @@ class BabelDownloader:
                     )
                     return response.headers
 
-            except (requests.RequestException, IOError) as e:
+            except (OSError, requests.RequestException) as e:
                 self.logger.warning(
                     f"Download attempt {attempt}/{self.retries} failed: {e}"
                 )
@@ -408,7 +409,7 @@ class BabelDownloader:
                 # Tier 2: stale but maybe unchanged — HEAD request
                 if self._etag_matches(url_to_download, meta):
                     # Update last_checked timestamp
-                    meta["last_checked"] = datetime.now(timezone.utc).isoformat()
+                    meta["last_checked"] = datetime.now(UTC).isoformat()
                     meta_path = self._get_meta_path(local_path_to_download_to)
                     with open(meta_path, "w") as f:
                         json.dump(meta, f, indent=2)

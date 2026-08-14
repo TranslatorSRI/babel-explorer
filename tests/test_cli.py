@@ -5,16 +5,15 @@ Unit tests — no network required.
 """
 
 import json
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
 from click.testing import CliRunner
-from unittest.mock import patch, MagicMock
 
-from babel_explorer.cli import parse_duration, cli
+from babel_explorer.cli import cli, parse_duration
 from babel_explorer.core.babel_xrefs import CrossReference, IdentifierRecord
 from babel_explorer.core.nodenorm import Identifier
-
 
 # ==========================================================================
 # Unit Tests — no network required

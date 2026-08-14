@@ -1,27 +1,27 @@
 """Command-line interface for babel-explorer."""
 
-import click
 import logging
 from itertools import combinations
 
+import click
 from dotenv import load_dotenv
+from rich.markup import escape
 
-from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
 from babel_explorer.core.babel_xrefs import (
     BabelXRefs,
+    LabeledCrossReference,
     build_depth_map,
     find_shortest_path,
 )
+from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
 from babel_explorer.core.nodenorm import NodeNorm
-from babel_explorer.core.babel_xrefs import LabeledCrossReference
 from babel_explorer.formatting import (
-    write_records,
     _record_to_dict,
-    make_console,
     hl_curie,
     hl_curie_at_depth,
+    make_console,
+    write_records,
 )
-from rich.markup import escape
 
 
 def babel_options(f):

@@ -28,6 +28,23 @@ dev = [
 [project.scripts]
 babel-explorer = "babel_explorer.cli:cli"
 
+[tool.ruff]
+# ruff 0.16 began formatting Python inside Markdown code blocks. Our snippets are
+# illustrative fragments rather than runnable modules, so keep ruff out of them.
+# Line length is left at ruff's default of 88.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # let the formatter handle wrapping consistently
+]
+
 [tool.pytest.ini_options]
 addopts = "-n auto"
 markers = [

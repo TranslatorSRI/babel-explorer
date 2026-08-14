@@ -10,17 +10,16 @@ from rich.console import Console
 
 from babel_explorer.core.babel_xrefs import (
     CrossReference,
-    LabeledCrossReference,
     IdentifierRecord,
+    LabeledCrossReference,
 )
 from babel_explorer.core.nodenorm import Identifier
 from babel_explorer.formatting import (
     _record_to_dict,
-    write_records,
-    make_console,
     hl_curie,
+    make_console,
+    write_records,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
