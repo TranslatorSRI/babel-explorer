@@ -16,10 +16,11 @@ from babel_explorer.core.babel_xrefs import (
 from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.formatting import (
-    _record_to_dict,
+    curie_with_label,
+    format_identifier_record,
     hl_curie,
-    hl_curie_at_depth,
     make_console,
+    record_to_dict,
     write_records,
 )
 
@@ -169,20 +170,9 @@ def parse_duration(value: str) -> int | float:
     return result
 
 
-def _fmt_label(label: str) -> str:
-    """Escape a label for double-quoted display: backslashes first, then double quotes."""
-    return escape(label.replace("\\", "\\\\").replace('"', '\\"'))
-
-
-def _curie_str(curie: str, is_query: bool, depth: int | None, label: str | None) -> str:
-    """Build a Rich-marked-up CURIE string with optional label."""
-    if is_query:
-        s = hl_curie(curie, True)
-    else:
-        s = hl_curie_at_depth(curie, depth)
-    if label:
-        s += f' "{_fmt_label(label)}"'
-    return s
+def _depth_of(curie: str, query_set: set, depth: int | None) -> int | None:
+    """Depth to render a CURIE at: query CURIEs are always depth 0."""
+    return 0 if curie in query_set else depth
 
 
 def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
@@ -196,8 +186,8 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
 
     for from_c, to_c in combinations(curie_list, 2):
         path = find_shortest_path(from_c, to_c, xrefs_list)
-        header_from = hl_curie(from_c, True)
-        header_to = hl_curie(to_c, True)
+        header_from = hl_curie(from_c, 0)
+        header_to = hl_curie(to_c, 0)
 
         if path is None:
             console.print(
@@ -221,14 +211,12 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
             prev = nodes[-1]
             nodes.append(edge.obj if edge.subj == prev else edge.subj)
 
-        # Header: node1 → node2 → … → nodeN
-        node_strs = []
-        for i, node in enumerate(nodes):
-            if node in query_set:
-                node_strs.append(hl_curie(node, True))
-            else:
-                depth = i  # position along path == depth from from_c
-                node_strs.append(hl_curie_at_depth(node, depth))
+        # Header: node1 → node2 → … → nodeN. Position along the path is the depth
+        # from from_c, except for query CURIEs, which always render as depth 0.
+        node_strs = [
+            hl_curie(node, _depth_of(node, query_set, i))
+            for i, node in enumerate(nodes)
+        ]
         n_steps = len(path)
         step_word = "step" if n_steps == 1 else "steps"
         console.print(
@@ -251,8 +239,12 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
                     subj_label = edge.obj_label
                     obj_label = edge.subj_label
 
-            subj_str = _curie_str(subj_node, subj_node in query_set, i, subj_label)
-            obj_str = _curie_str(obj_node, obj_node in query_set, i + 1, obj_label)
+            subj_str = curie_with_label(
+                subj_node, _depth_of(subj_node, query_set, i), subj_label
+            )
+            obj_str = curie_with_label(
+                obj_node, _depth_of(obj_node, query_set, i + 1), obj_label
+            )
 
             console.print(
                 f"  - {subj_str}  [dim]{escape(edge.pred)}[/dim]  "
@@ -344,19 +336,21 @@ def xrefs(
             _print_paths(console, curies, xref_list, labels)
         else:
             query_set = set(curies)
-            depth_map = build_depth_map(list(curies), xref_list) if recurse else None
+            # Without --recurse every result is one hop from a query CURIE, so there
+            # is no depth to show: only the query CURIEs themselves are highlighted.
+            depth_map = build_depth_map(list(curies), xref_list) if recurse else {}
             for xref in xref_list:
-                if depth_map is not None:
-                    subj_str = hl_curie_at_depth(xref.subj, depth_map.get(xref.subj))
-                    obj_str = hl_curie_at_depth(xref.obj, depth_map.get(xref.obj))
-                else:
-                    subj_str = hl_curie(xref.subj, xref.subj in query_set)
-                    obj_str = hl_curie(xref.obj, xref.obj in query_set)
-                if isinstance(xref, LabeledCrossReference):
-                    if xref.subj_label:
-                        subj_str += f' "{_fmt_label(xref.subj_label)}"'
-                    if xref.obj_label:
-                        obj_str += f' "{_fmt_label(xref.obj_label)}"'
+                labeled = isinstance(xref, LabeledCrossReference)
+                subj_str = curie_with_label(
+                    xref.subj,
+                    _depth_of(xref.subj, query_set, depth_map.get(xref.subj)),
+                    xref.subj_label if labeled else None,
+                )
+                obj_str = curie_with_label(
+                    xref.obj,
+                    _depth_of(xref.obj, query_set, depth_map.get(xref.obj)),
+                    xref.obj_label if labeled else None,
+                )
                 console.print(
                     f"{subj_str}  [dim]{escape(xref.pred)}[/dim]  "
                     f"{obj_str}  [dim italic]{escape(xref.filename)}[/dim italic]"
@@ -407,8 +401,7 @@ def ids(
     if fmt == "console":
         console = make_console()
         for record in xrefs:
-            # Parquet values are arbitrary text; escape so they are not read as markup.
-            console.print(escape(str(record)))
+            console.print(format_identifier_record(record))
     else:
         write_records(xrefs, fmt=fmt, indent=json_indent)
 
@@ -424,25 +417,32 @@ def test_concord(curies, nodenorm_url, fmt, json_indent):
     run before and after a Babel rebuild to see how cliques would shift.
     """
     nodenorm = NodeNorm(nodenorm_url)
+
+    # Resolved once, before the format branch, so console and JSON report the same rows.
+    query_set = set(curies)
+    cliques = [
+        (curie, ident)
+        for curie in curies
+        for ident in nodenorm.get_clique_identifiers(curie)
+    ]
+
     if fmt == "console":
         console = make_console()
-        query_set = set(curies)
-        for curie in curies:
-            for ident in nodenorm.get_clique_identifiers(curie):
-                biolink = ", ".join(ident.biolink_type)
-                label_str = f' "{_fmt_label(ident.label)}"' if ident.label else ""
-                console.print(
-                    f"{hl_curie(curie, True)}  "
-                    f"{hl_curie(ident.curie, ident.curie in query_set)}{label_str}  "
-                    f"[dim]{escape(biolink)}[/dim]"
-                )
+        for curie, ident in cliques:
+            member = curie_with_label(
+                ident.curie, _depth_of(ident.curie, query_set, None), ident.label
+            )
+            biolink = escape(", ".join(ident.biolink_type))
+            console.print(f"{hl_curie(curie, 0)}  {member}  [dim]{biolink}[/dim]")
     else:
-        rows = [
-            {"query_curie": curie, **_record_to_dict(ident)}
-            for curie in curies
-            for ident in nodenorm.get_clique_identifiers(curie)
-        ]
-        write_records(rows, fmt=fmt, indent=json_indent)
+        write_records(
+            [
+                {"query_curie": curie, **record_to_dict(ident)}
+                for curie, ident in cliques
+            ],
+            fmt=fmt,
+            indent=json_indent,
+        )
 
 
 if __name__ == "__main__":

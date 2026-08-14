@@ -2,7 +2,7 @@
 
 Provides:
 - write_records() for machine-readable output (json, tsv, csv)
-- make_console() and hl_curie() for rich console output
+- make_console(), hl_curie() and curie_with_label() for rich console output
 """
 
 import csv
@@ -15,7 +15,7 @@ from rich.console import Console
 from rich.markup import escape
 
 
-def _record_to_dict(record) -> dict[str, Any]:
+def record_to_dict(record) -> dict[str, Any]:
     """Convert a dataclass (or plain dict) to a flat dict.
 
     Handles IdentifierRecord's extra_fields, which asdict() returns as a
@@ -50,12 +50,6 @@ def make_console(file=None) -> Console:
     return Console(file=file, highlight=False)
 
 
-def hl_curie(curie: str, highlight: bool) -> str:
-    """Return rich markup for a CURIE — bold cyan if it is a query CURIE."""
-    escaped = escape(curie)
-    return f"[bold cyan]{escaped}[/bold cyan]" if highlight else escaped
-
-
 # Styles indexed by BFS depth from the nearest query CURIE.
 # Depth 0 = the query term itself; higher = further away.
 _DEPTH_STYLES = [
@@ -67,16 +61,52 @@ _DEPTH_STYLES = [
 ]
 
 
-def hl_curie_at_depth(curie: str, depth: int | None) -> str:
+def hl_curie(curie: str, depth: int | None) -> str:
     """Return rich markup for a CURIE colored by its BFS depth from the nearest query CURIE.
 
-    Pass ``depth=None`` for CURIEs whose depth is unknown (rendered unstyled).
+    Depth 0 is a query CURIE itself. Pass ``depth=None`` for CURIEs whose depth is
+    unknown or irrelevant (rendered unstyled).
     """
     escaped = escape(curie)
     if depth is None:
         return escaped
     style = _DEPTH_STYLES[min(depth, len(_DEPTH_STYLES) - 1)]
     return f"[{style}]{escaped}[/{style}]"
+
+
+def escape_label(label: str) -> str:
+    """Escape a label for display inside double quotes: backslashes first, then quotes.
+
+    Downstream tools can parse the result with the regex ``"([^"\\\\]|\\\\.)*"``.
+    """
+    return label.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def curie_with_label(curie: str, depth: int | None, label: str | None = None) -> str:
+    """Render a CURIE as rich markup, followed by its label in double quotes.
+
+    The sole implementation of the console label convention: the label sits
+    immediately after the CURIE in double quotes, and is omitted entirely when
+    absent rather than rendered as a placeholder.
+    """
+    markup = hl_curie(curie, depth)
+    if label:
+        markup += f' "{escape(escape_label(label))}"'
+    return markup
+
+
+def format_identifier_record(record) -> str:
+    """Render an IdentifierRecord as a ``key=value`` line of rich markup.
+
+    The label sits immediately after the CURIE in double quotes and is omitted
+    entirely when absent, per the console convention.
+    """
+    parts = [f"curie={record.curie!r}"]
+    if record.label:
+        parts.append(f'label="{escape_label(record.label)}"')
+    parts.extend(f"{name}={value!r}" for name, value in record.extra_fields)
+    # Parquet values are arbitrary text; escape so they are not read as markup.
+    return escape(f"IdentifierRecord({', '.join(parts)})")
 
 
 def write_records(records, fmt: str, indent: int = 2, file=None):
@@ -94,14 +124,14 @@ def write_records(records, fmt: str, indent: int = 2, file=None):
     records = list(records)
 
     if fmt == "json":
-        rows = [_record_to_dict(r) for r in records]
+        rows = [record_to_dict(r) for r in records]
         json.dump(rows, file, indent=indent, default=str)
         print(file=file)  # trailing newline
 
     elif fmt in ("tsv", "csv"):
         if not records:
             return
-        rows = [_flatten_for_tabular(_record_to_dict(r)) for r in records]
+        rows = [_flatten_for_tabular(record_to_dict(r)) for r in records]
         delimiter = "\t" if fmt == "tsv" else ","
         writer = csv.DictWriter(
             file,

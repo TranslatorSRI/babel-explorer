@@ -15,9 +15,12 @@ from babel_explorer.core.babel_xrefs import (
 )
 from babel_explorer.core.nodenorm import Identifier
 from babel_explorer.formatting import (
-    _record_to_dict,
+    curie_with_label,
+    escape_label,
+    format_identifier_record,
     hl_curie,
     make_console,
+    record_to_dict,
     write_records,
 )
 
@@ -84,12 +87,12 @@ class TestConsoleUtilities:
         assert "hello" in out.getvalue()
 
     def test_hl_curie_highlighted_contains_markup(self):
-        result = hl_curie("HGNC:1100", highlight=True)
+        result = hl_curie("HGNC:1100", 0)
         assert "bold cyan" in result
         assert "HGNC:1100" in result
 
     def test_hl_curie_not_highlighted_is_plain(self):
-        result = hl_curie("HGNC:1100", highlight=False)
+        result = hl_curie("HGNC:1100", None)
         assert result == "HGNC:1100"
         assert "[" not in result
 
@@ -97,27 +100,27 @@ class TestConsoleUtilities:
         """Markup renders to plain text on a non-TTY console."""
         out = io.StringIO()
         console = Console(file=out, highlight=False, no_color=True)
-        console.print(hl_curie("HGNC:1100", highlight=True))
+        console.print(hl_curie("HGNC:1100", 0))
         assert "HGNC:1100" in out.getvalue()
 
     def test_hl_curie_highlighted_renders_with_color(self):
         """On a forced-TTY console, ANSI codes are emitted."""
         out = io.StringIO()
         console = Console(file=out, highlight=False, force_terminal=True)
-        console.print(hl_curie("HGNC:1100", highlight=True))
+        console.print(hl_curie("HGNC:1100", 0))
         output = out.getvalue()
         assert "HGNC:1100" in output
         assert "\x1b[" in output  # ANSI escape present
 
 
 # ---------------------------------------------------------------------------
-# Tests for _record_to_dict
+# Tests for record_to_dict
 # ---------------------------------------------------------------------------
 
 
 class TestRecordToDict:
     def test_cross_reference(self, xref):
-        d = _record_to_dict(xref)
+        d = record_to_dict(xref)
         assert d == {
             "filename": "Concord.parquet",
             "subj": "A:1",
@@ -126,7 +129,7 @@ class TestRecordToDict:
         }
 
     def test_labeled_cross_reference_has_all_eight_fields(self, labeled_xref):
-        d = _record_to_dict(labeled_xref)
+        d = record_to_dict(labeled_xref)
         assert set(d.keys()) == {
             "filename",
             "subj",
@@ -142,7 +145,7 @@ class TestRecordToDict:
         assert d["obj_biolink_type"] == ("biolink:Gene", "biolink:NamedThing")
 
     def test_identifier_record_extra_fields_expanded(self, id_record):
-        d = _record_to_dict(id_record)
+        d = record_to_dict(id_record)
         assert "extra_fields" not in d
         assert d["curie"] == "A:1"
         assert d["type"] == "gene"
@@ -150,15 +153,15 @@ class TestRecordToDict:
 
     def test_identifier_record_no_extra_fields(self):
         rec = IdentifierRecord(curie="X:1")
-        d = _record_to_dict(rec)
+        d = record_to_dict(rec)
         assert d == {"curie": "X:1"}
 
     def test_plain_dict_passthrough(self):
         data = {"a": 1, "b": "hello"}
-        assert _record_to_dict(data) is data
+        assert record_to_dict(data) is data
 
     def test_identifier_dataclass(self, identifier):
-        d = _record_to_dict(identifier)
+        d = record_to_dict(identifier)
         assert d["curie"] == "MONDO:0004979"
         assert d["label"] == "asthma"
         # dataclasses.asdict() preserves tuple types
@@ -289,3 +292,43 @@ class TestWriteRecords:
         out = io.StringIO()
         with pytest.raises(ValueError, match="Unknown format"):
             write_records([xref], "xml", file=out)
+
+
+# ---------------------------------------------------------------------------
+# Tests for the label convention (escape_label / curie_with_label)
+# ---------------------------------------------------------------------------
+
+
+class TestLabelConvention:
+    """CLAUDE.md: a label follows its CURIE in double quotes, or is omitted."""
+
+    def test_label_follows_curie_in_double_quotes(self):
+        assert curie_with_label("MONDO:1", None, "asthma") == 'MONDO:1 "asthma"'
+
+    @pytest.mark.parametrize("label", [None, ""])
+    def test_absent_label_is_omitted_entirely(self, label):
+        """No placeholder — a CURIE with no label renders as the bare CURIE."""
+        assert curie_with_label("MONDO:1", None, label) == "MONDO:1"
+
+    def test_backslashes_escape_before_quotes(self):
+        assert escape_label(r'a\b"c') == r"a\\b\"c"
+
+    def test_escaped_label_matches_the_documented_regex(self):
+        import re
+
+        rendered = curie_with_label("MONDO:1", None, r'say "hi" \ bye')
+        assert re.search(r'"([^"\\]|\\.)*"', rendered).group(0) == (
+            r'"say \"hi\" \\ bye"'
+        )
+
+    def test_query_curie_is_highlighted_at_depth_zero(self):
+        assert curie_with_label("MONDO:1", 0, "asthma").startswith("[bold cyan]")
+
+    def test_identifier_record_uses_the_same_convention(self):
+        rec = IdentifierRecord(curie="A:1", extra_fields=(("n", 1),), label='a"b')
+        rendered = format_identifier_record(rec)
+        assert r'label="a\"b"' in rendered
+
+    def test_identifier_record_omits_absent_label(self):
+        rec = IdentifierRecord(curie="A:1", extra_fields=(("n", 1),))
+        assert "label=" not in format_identifier_record(rec)
