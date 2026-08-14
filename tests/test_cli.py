@@ -13,6 +13,7 @@ from click.testing import CliRunner
 
 from babel_explorer.cli import cli, parse_duration
 from babel_explorer.core.babel_xrefs import CrossReference, IdentifierRecord
+from babel_explorer.core.downloader import MissingBabelFileError
 from babel_explorer.core.nodenorm import Identifier
 
 # ==========================================================================
@@ -534,3 +535,43 @@ class TestUrlConfiguration:
             env={"BABEL_URL": "https://env.example.com/"},
         )
         assert mock_dl.call_args[0][0] == "https://flag.example.com/"
+
+
+class TestMissingBabelFileReporting:
+    """A missing Parquet file should read as an error, not a traceback."""
+
+    def test_reported_without_traceback(self):
+        runner = CliRunner()
+        message = (
+            "This Babel release (2025dec11) does not publish duckdb/Concord.parquet."
+        )
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.side_effect = MissingBabelFileError(
+                message
+            )
+            result = runner.invoke(cli, ["xrefs", "A:1"])
+
+        assert result.exit_code == 1
+        assert message in result.output
+        assert "Traceback" not in result.output
+        assert isinstance(result.exception, SystemExit)
+
+    def test_also_wrapped_for_ids(self):
+        """The conversion lives on the group, so every command inherits it."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+        ):
+            mock_bx.return_value.get_curie_ids.side_effect = MissingBabelFileError(
+                "nope"
+            )
+            result = runner.invoke(cli, ["ids", "A:1"])
+
+        assert result.exit_code == 1
+        assert "nope" in result.output
+        assert "Traceback" not in result.output
