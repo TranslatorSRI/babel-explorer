@@ -96,8 +96,7 @@ class TestSyncCacheVersion:
     @staticmethod
     def _downloader(tmp_path, version):
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
-        dl._babel_version = version
-        dl._babel_version_resolved = True
+        dl.babel_version = version
         return dl
 
     @staticmethod
@@ -166,8 +165,7 @@ class TestMissingBabelFile:
         dl = BabelDownloader(
             url_base="https://example.com/", local_path=str(tmp_path), retries=10
         )
-        dl._babel_version = "2025dec11"
-        dl._babel_version_resolved = True
+        dl.babel_version = "2025dec11"
 
         response = MagicMock()
         response.status_code = 404

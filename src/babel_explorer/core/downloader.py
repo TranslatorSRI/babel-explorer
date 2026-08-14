@@ -1,5 +1,6 @@
 """HTTP downloader for Babel Parquet files with ETag-based freshness checking."""
 
+import functools
 import glob
 import json
 import logging
@@ -74,8 +75,6 @@ class BabelDownloader:
         self.freshness_seconds = freshness_seconds
         self.timeout = timeout
         self.logger = logging.getLogger(BabelDownloader.__name__)
-        self._babel_version: str | None = None
-        self._babel_version_resolved = False
 
         if local_path is None:
             local_path = tempfile.gettempdir()
@@ -90,13 +89,14 @@ class BabelDownloader:
                 f"Invalid local_path (must be an existing directory): '{local_path}'"
             )
 
-    @property
+    @functools.cached_property
     def babel_version(self) -> str | None:
-        """The Babel release behind ``url_base``, resolved once and cached."""
-        if not self._babel_version_resolved:
-            self._babel_version = resolve_babel_version(self.url_base, self.timeout)
-            self._babel_version_resolved = True
-        return self._babel_version
+        """The Babel release behind ``url_base``, resolved once and cached.
+
+        ``cached_property`` caches a ``None`` result too, so a tree without a
+        readable version is not re-fetched on every access.
+        """
+        return resolve_babel_version(self.url_base, self.timeout)
 
     def sync_cache_version(self):
         """
@@ -158,14 +158,19 @@ class BabelDownloader:
         except (json.JSONDecodeError, OSError):
             return None
 
-    def _save_meta(self, local_path, headers, update_last_checked=True):
+    def _write_meta(self, local_path, meta):
+        """Write the sidecar .meta JSON file for local_path, stamping last_checked as now."""
+        meta = meta | {"last_checked": datetime.now(UTC).isoformat()}
+        with open(self._get_meta_path(local_path), "w") as f:
+            json.dump(meta, f, indent=2)
+
+    def _save_meta(self, local_path, headers):
         """
-        Write a sidecar .meta JSON file next to local_path.
+        Write a sidecar .meta JSON file next to local_path from response headers.
 
         Args:
             local_path: Path to the downloaded file
             headers: Response headers dict (or requests.structures.CaseInsensitiveDict)
-            update_last_checked: If True, set last_checked to now
         """
         meta = {}
         if "ETag" in headers:
@@ -174,12 +179,8 @@ class BabelDownloader:
             meta["last_modified"] = headers["Last-Modified"]
         if "Content-Length" in headers:
             meta["content_length"] = int(headers["Content-Length"])
-        if update_last_checked:
-            meta["last_checked"] = datetime.now(UTC).isoformat()
 
-        meta_path = self._get_meta_path(local_path)
-        with open(meta_path, "w") as f:
-            json.dump(meta, f, indent=2)
+        self._write_meta(local_path, meta)
 
     def _is_within_freshness(self, meta, freshness_seconds):
         """
@@ -400,11 +401,7 @@ class BabelDownloader:
 
                 # Tier 2: stale but maybe unchanged — HEAD request
                 if self._etag_matches(url_to_download, meta):
-                    # Update last_checked timestamp
-                    meta["last_checked"] = datetime.now(UTC).isoformat()
-                    meta_path = self._get_meta_path(local_path_to_download_to)
-                    with open(meta_path, "w") as f:
-                        json.dump(meta, f, indent=2)
+                    self._write_meta(local_path_to_download_to, meta)
                     self.logger.info(
                         f"ETag matches, using existing file: {local_path_to_download_to}"
                     )
