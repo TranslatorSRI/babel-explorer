@@ -59,19 +59,27 @@ class IdentifierRecord:
 
     curie: str
     extra_fields: tuple = ()
+    label: str = ""
 
     @staticmethod
-    def from_row(row: tuple, column_names: list[str]):
+    def from_row(row: tuple, column_names: list[str], label: str = ""):
         """Create an IdentifierRecord from a DuckDB result row and its column names."""
         curie_idx = column_names.index("curie")
         extra = tuple(
             (col, row[i]) for i, col in enumerate(column_names) if i != curie_idx
         )
-        return IdentifierRecord(curie=row[curie_idx], extra_fields=extra)
+        return IdentifierRecord(curie=row[curie_idx], extra_fields=extra, label=label)
 
     def __str__(self):
-        """Return a ``key=value`` string of the CURIE and all extra fields."""
+        """Return a ``key=value`` string of the CURIE, its label and all extra fields.
+
+        The label sits immediately after the CURIE in double quotes, per the console
+        output convention, and is omitted entirely when absent.
+        """
         parts = [f"curie={self.curie!r}"]
+        if self.label:
+            escaped = self.label.replace("\\", "\\\\").replace('"', '\\"')
+            parts.append(f'label="{escaped}"')
         for name, value in self.extra_fields:
             parts.append(f"{name}={value!r}")
         return f"IdentifierRecord({', '.join(parts)})"
@@ -150,13 +158,20 @@ class BabelXRefs:
                 "label_curies=True requires a configured NodeNorm instance (nodenorm was None)."
             )
 
-    def get_curie_ids(self, curies: list[str]) -> list[IdentifierRecord]:
+    def get_curie_ids(
+        self, curies: list[str], label_curies: bool = False
+    ) -> list[IdentifierRecord]:
         """
         Search for all identifiers in the /ids/ files for a particular CURIE.
 
         :param curies: A list of CURIEs to search for.
+        :param label_curies: If ``True``, annotate each record with its NodeNorm label.
+            Requires a NodeNorm instance to have been passed to ``__init__``.
+        :raises ValueError: If ``label_curies=True`` but no NodeNorm instance is available.
         :return: A list of IdentifierRecords containing those CURIEs.
         """
+        if label_curies:
+            self._require_nodenorm()
 
         identifier_parquet = self.downloader.get_downloaded_file(
             "duckdb/Identifiers.parquet"
@@ -169,10 +184,16 @@ class BabelXRefs:
                 [identifier_parquet, list(curies)],
             )
             column_names = [desc[0] for desc in result.description]
-            return [
-                IdentifierRecord.from_row(row, column_names)
-                for row in result.fetchall()
-            ]
+            rows = result.fetchall()
+
+        records = []
+        for row in rows:
+            record = IdentifierRecord.from_row(row, column_names)
+            if label_curies:
+                label = self.nodenorm.get_identifier(record.curie).label
+                record = dataclasses.replace(record, label=label)
+            records.append(record)
+        return records
 
     def get_curie_xref(self, curie: str, label_curies: bool = False):
         """Return all cross-references in Concord.parquet where *curie* is the subject or object.

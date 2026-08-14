@@ -27,6 +27,10 @@ def _record_to_dict(record) -> dict[str, Any]:
     if "extra_fields" in d:
         for col, val in d.pop("extra_fields"):
             d[col] = val
+    # An absent label is omitted rather than emitted as "", matching the console
+    # convention and keeping TSV/CSV columns stable when labels were not requested.
+    if not d.get("label", True):
+        del d["label"]
     return d
 
 
