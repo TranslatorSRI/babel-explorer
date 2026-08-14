@@ -319,6 +319,14 @@ def xrefs(
     :return: None
     """
     if paths:
+        # Checked before anything is downloaded. Only the console renderer knows how to
+        # lay out paths; the other formats would silently emit the full recursive xref
+        # list instead, which looks like a successful --paths run but is not one.
+        if fmt != "console":
+            raise click.UsageError(
+                f"--paths is only supported with --format console, not --format {fmt}. "
+                f"Drop --paths to emit the full cross-reference list as {fmt}."
+            )
         recurse = True
 
     downloader = make_downloader(babel_url, local_dir, check_download)
@@ -360,11 +368,15 @@ def xrefs(
 @cli.command("ids")
 @click.argument("curies", type=str, required=True, nargs=-1)
 @babel_options
+@nodenorm_options
+@click.option("--labels", is_flag=True, help="Include labels for CURIEs")
 @format_option
 def ids(
     curies: list[str],
     babel_url: str,
+    nodenorm_url: str,
     local_dir: str,
+    labels: bool,
     check_download: str,
     allow_version_mismatch: bool,
     fmt: str,
@@ -383,14 +395,20 @@ def ids(
 
     :return: None
     """
-    # No NodeNorm here, so there is no version to check against.
-    bxref = BabelXRefs(make_downloader(babel_url, local_dir, check_download))
-    xrefs = bxref.get_curie_ids(curies)
+    downloader = make_downloader(babel_url, local_dir, check_download)
+    nodenorm = NodeNorm(nodenorm_url)
+    # NodeNorm is only consulted for labels, so only then can its Babel release differ.
+    if labels:
+        check_babel_versions(downloader, nodenorm, allow_version_mismatch)
+
+    bxref = BabelXRefs(downloader, nodenorm)
+    xrefs = bxref.get_curie_ids(curies, label_curies=labels)
 
     if fmt == "console":
         console = make_console()
         for record in xrefs:
-            console.print(str(record))
+            # Parquet values are arbitrary text; escape so they are not read as markup.
+            console.print(escape(str(record)))
     else:
         write_records(xrefs, fmt=fmt, indent=json_indent)
 

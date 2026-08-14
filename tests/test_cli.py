@@ -140,7 +140,9 @@ class TestCliCommands:
             result = runner.invoke(cli, ["ids", "MONDO:0004979"])
 
         assert result.exit_code == 0
-        mock_bx.return_value.get_curie_ids.assert_called_once_with(("MONDO:0004979",))
+        mock_bx.return_value.get_curie_ids.assert_called_once_with(
+            ("MONDO:0004979",), label_curies=False
+        )
 
     def test_test_concord_happy_path(self):
         runner = CliRunner()
@@ -575,3 +577,80 @@ class TestMissingBabelFileReporting:
         assert result.exit_code == 1
         assert "nope" in result.output
         assert "Traceback" not in result.output
+
+
+class TestPathsFormatGuard:
+    """--paths only has a renderer for the console format."""
+
+    @pytest.mark.parametrize("fmt", ["json", "tsv", "csv"])
+    def test_rejected_for_non_console_formats(self, fmt):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs"),
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            result = runner.invoke(
+                cli, ["xrefs", "A:1", "B:2", "--paths", "--format", fmt]
+            )
+
+        assert result.exit_code != 0
+        assert "--paths is only supported with --format console" in result.output
+        # Rejected before anything is downloaded.
+        mock_dl.assert_not_called()
+
+    def test_allowed_for_console(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_dl.return_value.babel_version = "2026jul22"
+            mock_nn.return_value.get_babel_version.return_value = "2026jul22"
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            result = runner.invoke(cli, ["xrefs", "A:1", "B:2", "--paths"])
+
+        assert result.exit_code == 0
+
+
+class TestIdsLabels:
+    """`ids --labels` enriches records via NodeNorm."""
+
+    @staticmethod
+    def _run(args, babel_version="2026jul22", nodenorm_version="2026jul22"):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_dl.return_value.babel_version = babel_version
+            mock_nn.return_value.get_babel_version.return_value = nodenorm_version
+            mock_bx.return_value.get_curie_ids.return_value = [
+                IdentifierRecord(curie="MONDO:0004979", label="asthma")
+            ]
+            result = runner.invoke(cli, args)
+        return result, mock_bx, mock_nn
+
+    def test_labels_flag_is_passed_through(self):
+        result, mock_bx, _ = self._run(["ids", "MONDO:0004979", "--labels"])
+        assert result.exit_code == 0
+        mock_bx.return_value.get_curie_ids.assert_called_once_with(
+            ("MONDO:0004979",), label_curies=True
+        )
+
+    def test_label_rendered_in_double_quotes(self):
+        result, _, _ = self._run(["ids", "MONDO:0004979", "--labels"])
+        assert '"asthma"' in result.output
+
+    def test_version_checked_only_with_labels(self):
+        _, _, mock_nn = self._run(["ids", "MONDO:0004979"], nodenorm_version="2025sep1")
+        mock_nn.return_value.get_babel_version.assert_not_called()
+
+    def test_version_mismatch_fails_with_labels(self):
+        result, _, _ = self._run(
+            ["ids", "MONDO:0004979", "--labels"], nodenorm_version="2025sep1"
+        )
+        assert result.exit_code != 0
+        assert "2025sep1" in result.output
