@@ -96,9 +96,7 @@ def build_depth_map(query_curies: list[str], xrefs: list) -> dict[str, int]:
     return depths
 
 
-def find_shortest_path(
-    from_curie: str, to_curie: str, xrefs: list
-) -> list | None:
+def find_shortest_path(from_curie: str, to_curie: str, xrefs: list) -> list | None:
     """Return the shortest list of CrossReference edges from from_curie to to_curie.
 
     Returns ``[]`` if from_curie == to_curie, or ``None`` if no path exists.

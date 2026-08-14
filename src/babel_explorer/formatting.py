@@ -55,11 +55,11 @@ def hl_curie(curie: str, highlight: bool) -> str:
 # Styles indexed by BFS depth from the nearest query CURIE.
 # Depth 0 = the query term itself; higher = further away.
 _DEPTH_STYLES = [
-    "bold cyan",    # 0: query CURIE
+    "bold cyan",  # 0: query CURIE
     "bold yellow",  # 1: one hop away
-    "yellow",       # 2: two hops
-    "green",        # 3: three hops
-    "dim",          # 4+: further
+    "yellow",  # 2: two hops
+    "green",  # 3: three hops
+    "dim",  # 4+: further
 ]
 
 
