@@ -38,29 +38,34 @@ def valid_curies() -> list[str]:
     return curies
 
 
+def pytest_sessionfinish(session, exitstatus):
+    """Remove the shared test data directory once every worker has finished.
+
+    This runs in the xdist controller, which finishes only after all workers do.
+    Workers are identified by having a ``workerinput`` attribute; a plain
+    non-parallel run has none either, so cleanup happens there too.
+
+    Cleaning up from a session fixture's teardown instead does not work: with
+    ``-n auto`` in ``addopts`` every run is parallel, so each worker would tear
+    down at an unpredictable time and gw0 could delete Concord.parquet while gw5
+    is still reading it. Guarding that teardown on the worker id, as this used to,
+    meant the directory was simply never removed.
+    """
+    if hasattr(session.config, "workerinput"):
+        return
+    if os.path.exists(TEST_DATA_DIR):
+        shutil.rmtree(TEST_DATA_DIR, ignore_errors=True)
+
+
 @pytest.fixture(scope="session")
-def test_data_dir(request):
-    """
-    Provide a test data directory for the entire session.
+def test_data_dir():
+    """Provide a test data directory for the entire session.
 
-    Creates the directory before tests, removes it after all tests complete.
-    When running under pytest-xdist, cleanup is skipped: worker sessions end at
-    unpredictable times and deleting the shared directory from one worker while
-    others are still reading the same files causes flaky IO errors.  The files
-    are re-used (or re-validated) on the next run via the freshness-window logic
-    in BabelDownloader.get_downloaded_file.
+    Removed by ``pytest_sessionfinish`` once all workers are done, so the next
+    run starts fresh.
     """
-    worker_id = getattr(request.config, "workerinput", {}).get("workerid", "master")
     os.makedirs(TEST_DATA_DIR, exist_ok=True)
-
-    yield TEST_DATA_DIR
-
-    # Only clean up when running without xdist (sequential run).  In a parallel
-    # run each worker session may finish at a different time; gw0 cleaning up
-    # while gw5 is still reading Concord.parquet causes spurious failures.
-    if worker_id == "master":
-        if os.path.exists(TEST_DATA_DIR):
-            shutil.rmtree(TEST_DATA_DIR)
+    return TEST_DATA_DIR
 
 
 @pytest.fixture(scope="session")
