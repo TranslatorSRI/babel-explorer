@@ -92,13 +92,28 @@ uv run pytest -v -m "integration and not slow"
 
 # Run a single test file
 uv run pytest -v tests/test_nodenorm.py
-
-# Run linter
-uv run ruff check
-
-# Format code
-uv run ruff format
 ```
+
+### Linting
+
+**Run both of these before committing or pushing.** CI checks them on every PR, and a push
+that skips them turns the PR red for reasons unrelated to the change under review.
+
+```bash
+uv run ruff check          # Python lint
+uv run ruff check --fix    # Python auto-fix
+uv run ruff format --check # Python format check
+uv run ruff format         # Python auto-format
+```
+
+Run them over the whole repository, not just the files you touched — `[tool.ruff]` in
+`pyproject.toml` sets the scope. If `ruff format` reports files you did not edit, the repository
+had drifted; commit that reformatting separately from your change so review stays readable, and
+do not silently revert it.
+
+Rules are `E`, `F`, `I` (import sorting) and `UP` (pyupgrade), with `E501` left to the formatter.
+Line length is ruff's default of 88. `*.md` is excluded, because ruff 0.16+ reformats Python
+inside Markdown code blocks and this repository's snippets are illustrative fragments.
 
 ## Console Output Format Conventions
 

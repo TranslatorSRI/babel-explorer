@@ -80,6 +80,15 @@ uv run pytest -v -m "integration and not slow"
 uv run pytest -v
 ```
 
+## Linting
+
+Run both checks before committing; CI enforces them on every pull request:
+
+```bash
+uv run ruff check --fix    # lint, with auto-fix
+uv run ruff format         # format
+```
+
 ### Adding Test CURIEs
 
 Integration tests are parametrized over the CURIEs listed in `tests/data/valid_curies.txt`. Add a new CURIE on its own line to automatically expand test coverage:
