@@ -62,27 +62,13 @@ class IdentifierRecord:
     label: str = ""
 
     @staticmethod
-    def from_row(row: tuple, column_names: list[str], label: str = ""):
+    def from_row(row: tuple, column_names: list[str]):
         """Create an IdentifierRecord from a DuckDB result row and its column names."""
         curie_idx = column_names.index("curie")
         extra = tuple(
             (col, row[i]) for i, col in enumerate(column_names) if i != curie_idx
         )
-        return IdentifierRecord(curie=row[curie_idx], extra_fields=extra, label=label)
-
-    def __str__(self):
-        """Return a ``key=value`` string of the CURIE, its label and all extra fields.
-
-        The label sits immediately after the CURIE in double quotes, per the console
-        output convention, and is omitted entirely when absent.
-        """
-        parts = [f"curie={self.curie!r}"]
-        if self.label:
-            escaped = self.label.replace("\\", "\\\\").replace('"', '\\"')
-            parts.append(f'label="{escaped}"')
-        for name, value in self.extra_fields:
-            parts.append(f"{name}={value!r}")
-        return f"IdentifierRecord({', '.join(parts)})"
+        return IdentifierRecord(curie=row[curie_idx], extra_fields=extra)
 
 
 def build_depth_map(query_curies: list[str], xrefs: list) -> dict[str, int]:
