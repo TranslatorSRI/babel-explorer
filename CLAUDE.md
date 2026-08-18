@@ -44,15 +44,20 @@ path segment for older trees that predate it. `latest/` resolves to whatever rel
 points at.
 
 `BABEL_LOCAL_DIR` holds **one Babel release at a time**, recorded in a `.babel-version` marker.
-When the release changes, `BabelDownloader.sync_cache_version()` deletes the `.meta` sidecars in
-`<local_dir>/duckdb/` — never the Parquet files — so the existing ETag path re-checks each cached
-file and re-downloads only what actually changed. This keeps `Concord.parquet` and
-`Identifiers.parquet` from being read together across two different Babel releases.
+When the release changes, `BabelDownloader.sync_cache_version()` clears `last_checked` from the
+`.meta` sidecars in `<local_dir>/duckdb/` — never the Parquet files — so the existing ETag path
+re-checks each cached file and re-downloads only what actually changed. The stored ETag is kept
+deliberately: deleting the sidecar outright skips the HEAD and forces an unconditional
+multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, because they resume by byte
+offset with no ETag validation and would otherwise splice two releases into one corrupt Parquet.
+This keeps `Concord.parquet` and `Identifiers.parquet` from being read together across two
+different Babel releases.
 
 `xrefs` fails when NodeNorm's `status` endpoint reports a different `babel_version` than the Babel
 being queried, since labels and cliques would not match the cross-references. Pass
 `--allow-version-mismatch` to proceed anyway. The check is skipped when NodeNorm is not consulted
-(plain `xrefs`, `ids`) or when either version is unavailable.
+(`xrefs` without `--labels`, including `--recurse`, which is served entirely by DuckDB; and `ids`
+without `--labels`) or when either version is unavailable.
 
 ## Commands
 
@@ -173,7 +178,7 @@ than silently emitting the full cross-reference list.
 1. User provides CURIEs via CLI; `BABEL_URL` / `NODENORM_URL` come from `.env` or the environment
 2. BabelDownloader resolves the Babel version, refreshes the cache if it changed, and ensures required Parquet files are downloaded
 3. BabelXRefs queries files using DuckDB
-4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata (`ids` consults NodeNorm only for `--labels`)
+4. If `--labels` is set, NodeNorm is queried for additional metadata (`--recurse` alone does not consult NodeNorm — the recursive expansion is a single DuckDB query)
 5. Results are printed to stdout
 
 ### Key Design Patterns
@@ -215,7 +220,7 @@ broken test environment.
 - **`Identifier`** — Frozen dataclass for a normalized NodeNorm entry (curie, label, biolink_type, taxa, description). Returned by `NodeNorm.get_identifier()` and `get_clique_identifiers()`.
 - **`CrossReference`** — Frozen dataclass for Concord.parquet rows (filename, subj, pred, obj)
 - **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
-- **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields). Returned by `BabelXRefs.get_curie_ids()`.
+- **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields, plus `nodenorm_label` under `--labels`). Returned by `BabelXRefs.get_curie_ids()`. The NodeNorm label is *not* called `label`: Identifiers.parquet has its own `label` column, which lands in `extra_fields` and would collide with it once the record is flattened for json/tsv/csv.
 
 ## Important Notes
 
