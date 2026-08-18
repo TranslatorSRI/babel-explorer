@@ -104,8 +104,8 @@ def format_identifier_record(record) -> str:
     entirely when absent, per the console convention.
     """
     parts = [f"curie={record.curie!r}"]
-    if record.label:
-        parts.append(f'label="{escape_label(record.label)}"')
+    if record.nodenorm_label:
+        parts.append(f'nodenorm_label="{escape_label(record.nodenorm_label)}"')
     parts.extend(f"{name}={value!r}" for name, value in record.extra_fields)
     # Parquet values are arbitrary text; escape so they are not read as markup.
     return escape(f"IdentifierRecord({', '.join(parts)})")
