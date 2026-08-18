@@ -10,7 +10,12 @@ from dotenv import load_dotenv
 # release (which does not yet publish the DuckDB Parquet files, so those tests skip).
 load_dotenv()
 
-BABEL_URL = os.environ.get("BABEL_URL", "https://stars.renci.org/var/babel/latest/")
+# Normalised the same way BabelDownloader does, so tests that join paths onto it
+# directly agree with the downloader instead of quietly requesting ".../latestduckdb/".
+BABEL_URL = (
+    os.environ.get("BABEL_URL", "https://stars.renci.org/var/babel/latest/").rstrip("/")
+    + "/"
+)
 NODENORM_URL = os.environ.get(
     "NODENORM_URL", "https://nodenormalization-sri.renci.org/"
 )
