@@ -308,8 +308,9 @@ def xrefs(
 
     downloader = make_downloader(babel_url, local_dir, check_download)
     nodenorm = NodeNorm(nodenorm_url)
-    # NodeNorm is only consulted when labels or the recursive expansion need it.
-    if labels or recurse:
+    # NodeNorm is only consulted for labels; --recurse is served entirely by the
+    # recursive DuckDB query, so its results cannot disagree with NodeNorm's release.
+    if labels:
         check_babel_versions(downloader, nodenorm, allow_version_mismatch)
 
     bxref = BabelXRefs(downloader, nodenorm)

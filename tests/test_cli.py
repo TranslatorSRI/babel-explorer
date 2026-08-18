@@ -110,6 +110,22 @@ class TestCliCommands:
             ("MONDO:0004979",), True, label_curies=True
         )
 
+    def test_recurse_alone_does_not_consult_nodenorm_for_its_version(self):
+        """--recurse is served entirely by DuckDB, so a NodeNorm skew is irrelevant."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_dl.return_value.babel_version = "2026jul22"
+            mock_nn.return_value.get_babel_version.return_value = "2025sep1"
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            result = runner.invoke(cli, ["xrefs", "MONDO:0004979", "--recurse"])
+
+        assert result.exit_code == 0, result.output
+        mock_nn.return_value.get_babel_version.assert_not_called()
+
     def test_xrefs_check_download_option(self):
         runner = CliRunner()
 
@@ -628,7 +644,7 @@ class TestIdsLabels:
             mock_dl.return_value.babel_version = babel_version
             mock_nn.return_value.get_babel_version.return_value = nodenorm_version
             mock_bx.return_value.get_curie_ids.return_value = [
-                IdentifierRecord(curie="MONDO:0004979", label="asthma")
+                IdentifierRecord(curie="MONDO:0004979", nodenorm_label="asthma")
             ]
             result = runner.invoke(cli, args)
         return result, mock_bx, mock_nn
