@@ -102,14 +102,20 @@ class BabelDownloader:
         """
         Point the local cache at the Babel release behind ``url_base``.
 
-        The cache holds one release at a time. When the release changes, the ``.meta``
-        sidecars are removed so the existing ETag path re-checks every cached file on
-        next use — whatever actually changed is re-downloaded, and files that are
-        unchanged cost one HEAD instead of a fresh multi-gigabyte download.
+        The cache holds one release at a time. When the release changes, ``last_checked``
+        is cleared from every ``.meta`` sidecar so the existing ETag path re-checks each
+        cached file on next use — whatever actually changed is re-downloaded, and files
+        that are unchanged cost one HEAD instead of a fresh multi-gigabyte download. The
+        ETag itself is deliberately kept: deleting the sidecar outright would skip the
+        HEAD entirely and force an unconditional re-download of every file.
 
-        Deleting the sidecars rather than the Parquet files also means nothing large is
+        Editing the sidecars rather than the Parquet files also means nothing large is
         destroyed if the version cannot be trusted, and an interrupted refresh self-heals:
         a ``.meta`` file is only written after a successful download.
+
+        Partial ``.tmp`` downloads are removed, because they are resumed by byte offset
+        with no ETag validation — appending the new release's bytes onto a prefix of the
+        old one would produce a corrupt Parquet that then passes every freshness check.
         """
         version = self.babel_version
         if version is None:
@@ -131,13 +137,20 @@ class BabelDownloader:
                 f"Babel version changed: {cached_version} → {version}; "
                 f"refreshing cached files in {self.local_path}"
             )
-            # Only ever touch sidecars this downloader wrote. Not recursive: local_path
+            # Only ever touch files this downloader wrote. Not recursive: local_path
             # may be a directory the user pointed us at (or one holding other Babel
             # releases in sibling subdirectories), and must not be cleared wholesale.
-            for meta_path in glob.glob(
-                os.path.join(self.local_path, "duckdb", "*.meta")
-            ):
-                os.remove(meta_path)
+            duckdb_dir = os.path.join(self.local_path, "duckdb")
+            for meta_path in glob.glob(os.path.join(duckdb_dir, "*.meta")):
+                meta = self._load_meta(meta_path.removesuffix(".meta"))
+                if meta is None:
+                    os.remove(meta_path)
+                    continue
+                meta.pop("last_checked", None)
+                with open(meta_path, "w") as f:
+                    json.dump(meta, f, indent=2)
+            for tmp_path in glob.glob(os.path.join(duckdb_dir, "*.tmp")):
+                os.remove(tmp_path)
 
         if cached_version != version:
             with open(marker_path, "w") as f:
@@ -326,7 +339,12 @@ class BabelDownloader:
                 ) as response:
                     if response.status_code == 416:
                         self.logger.info(f"File already complete: {local_path}")
-                        return response.headers
+                        # The 416 headers describe the error body, not the file; saving
+                        # them as this file's metadata would record a bogus
+                        # content_length and force a full re-download on the next check.
+                        head = requests.head(url, timeout=self.timeout)
+                        head.raise_for_status()
+                        return head.headers
                     elif response.status_code == 206:
                         self.logger.info("Resuming download (HTTP 206)")
                     elif response.status_code == 200:

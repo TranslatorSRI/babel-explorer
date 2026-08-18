@@ -20,7 +20,12 @@ from babel_explorer.core.downloader import (
     MissingBabelFileError,
     resolve_babel_version,
 )
-from tests.constants import CONCORD_FILE
+from tests.constants import BABEL_URL, CONCORD_FILE
+
+
+def test_babel_url_is_normalised_for_direct_path_joins():
+    """A slashless BABEL_URL would probe ".../latestduckdb/..." and 404-skip everything."""
+    assert BABEL_URL.endswith("/")
 
 
 def _version_response(text):
@@ -107,7 +112,9 @@ class TestSyncCacheVersion:
         parquet = duckdb_dir / "Concord.parquet"
         parquet.write_text("data")
         meta = duckdb_dir / "Concord.parquet.meta"
-        meta.write_text("{}")
+        meta.write_text(
+            json.dumps({"etag": '"abc"', "last_checked": "2026-07-22T00:00:00+00:00"})
+        )
         return parquet, meta
 
     def test_writes_marker_when_absent(self, tmp_path):
@@ -121,16 +128,42 @@ class TestSyncCacheVersion:
         self._downloader(tmp_path, "2026jul22").sync_cache_version()
 
         assert meta.exists()
+        assert "last_checked" in json.loads(meta.read_text())
 
-    def test_changed_version_removes_meta_but_keeps_parquet(self, tmp_path):
+    def test_changed_version_expires_meta_but_keeps_etag_and_parquet(self, tmp_path):
+        """The ETag must survive so the refresh costs a HEAD, not a full re-download."""
         parquet, meta = self._seed_cache(tmp_path)
         (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
 
         self._downloader(tmp_path, "2026jul22").sync_cache_version()
 
-        assert not meta.exists(), "stale .meta sidecar should be removed"
+        remaining = json.loads(meta.read_text())
+        assert "last_checked" not in remaining, "sidecar should no longer look fresh"
+        assert remaining["etag"] == '"abc"', (
+            "dropping the ETag would force an unconditional multi-gigabyte re-download"
+        )
         assert parquet.exists(), "the Parquet file itself must never be deleted"
         assert (tmp_path / VERSION_MARKER).read_text().strip() == "2026jul22"
+
+    def test_changed_version_removes_partial_downloads(self, tmp_path):
+        """A .tmp from the previous release must not be resumed against the new one."""
+        self._seed_cache(tmp_path)
+        partial = tmp_path / "duckdb" / "Concord.parquet.tmp"
+        partial.write_text("half of the previous release")
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert not partial.exists()
+
+    def test_changed_version_drops_unreadable_meta(self, tmp_path):
+        _, meta = self._seed_cache(tmp_path)
+        meta.write_text("not json")
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert not meta.exists()
 
     def test_refresh_does_not_reach_into_sibling_directories(self, tmp_path):
         """local_path may hold other Babel releases; only our own duckdb/ is cleared."""
@@ -150,11 +183,12 @@ class TestSyncCacheVersion:
     def test_unknown_version_leaves_cache_untouched(self, tmp_path):
         """An unresolvable version must not trigger a multi-gigabyte re-download."""
         _, meta = self._seed_cache(tmp_path)
+        before = meta.read_text()
         (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
 
         self._downloader(tmp_path, None).sync_cache_version()
 
-        assert meta.exists()
+        assert meta.read_text() == before
         assert (tmp_path / VERSION_MARKER).read_text().strip() == "2025nov19"
 
 
@@ -689,12 +723,21 @@ class TestDownloadWithRetry:
         out_path.write_bytes(b"full file")
 
         mock_response = self._make_response(416)
-        with patch(
-            "babel_explorer.core.downloader.requests.get", return_value=mock_response
+        head = MagicMock(status_code=200, headers={"Content-Length": "9"})
+        with (
+            patch(
+                "babel_explorer.core.downloader.requests.get",
+                return_value=mock_response,
+            ),
+            patch("babel_explorer.core.downloader.requests.head", return_value=head),
         ):
-            dl._download_with_retry("https://example.com/file", str(out_path), 1024)
-        # Should return without error
+            headers = dl._download_with_retry(
+                "https://example.com/file", str(out_path), 1024
+            )
         assert out_path.read_bytes() == b"full file"
+        # The 416 response describes the error body; saving its length as the file's
+        # metadata would fail every later freshness check and re-download the file.
+        assert headers == {"Content-Length": "9"}
 
     def test_server_no_resume_restarts_download(self, tmp_path):
         """When server responds 200 (instead of 206), partial file is removed and download restarts."""
