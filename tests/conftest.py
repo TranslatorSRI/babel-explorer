@@ -75,7 +75,11 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
     Skips the whole session when BABEL_URL points at a Babel release that does not
     publish the DuckDB Parquet files (as the public releases currently do not).
     """
-    response = requests.head(BABEL_URL + CONCORD_FILE, timeout=30)
+    probe_url = BABEL_URL + CONCORD_FILE
+    try:
+        response = requests.head(probe_url, timeout=30)
+    except requests.RequestException as e:
+        pytest.skip(f"Babel server unreachable at {probe_url}: {e}")
     if response.status_code == 404:
         pytest.skip(f"{BABEL_URL} does not publish {CONCORD_FILE}")
     return BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
