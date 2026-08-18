@@ -325,13 +325,26 @@ class TestLabelConvention:
         assert curie_with_label("MONDO:1", 0, "asthma").startswith("[bold cyan]")
 
     def test_identifier_record_uses_the_same_convention(self):
-        rec = IdentifierRecord(curie="A:1", extra_fields=(("n", 1),), label='a"b')
+        rec = IdentifierRecord(
+            curie="A:1", extra_fields=(("n", 1),), nodenorm_label='a"b'
+        )
         rendered = format_identifier_record(rec)
-        assert r'label="a\"b"' in rendered
+        assert r'nodenorm_label="a\"b"' in rendered
 
     def test_identifier_record_omits_absent_label(self):
         rec = IdentifierRecord(curie="A:1", extra_fields=(("n", 1),))
         assert "label=" not in format_identifier_record(rec)
+
+    def test_nodenorm_label_does_not_collide_with_the_parquet_label_column(self):
+        """Identifiers.parquet carries its own label column; both must survive."""
+        rec = IdentifierRecord(
+            curie="MONDO:0004979",
+            extra_fields=(("label", "asthma (Babel)"),),
+            nodenorm_label="asthma (NodeNorm)",
+        )
+        d = record_to_dict(rec)
+        assert d["nodenorm_label"] == "asthma (NodeNorm)"
+        assert d["label"] == "asthma (Babel)"
 
 
 class TestLabelOmissionInRecords:
@@ -369,11 +382,11 @@ class TestLabelOmissionInRecords:
         """A labelled row after an unlabelled one must not blow up DictWriter."""
         rows = [
             IdentifierRecord(curie="A:1", extra_fields=()),
-            IdentifierRecord(curie="B:2", extra_fields=(), label="asthma"),
+            IdentifierRecord(curie="B:2", extra_fields=(), nodenorm_label="asthma"),
         ]
         out = io.StringIO()
         write_records(rows, "csv", file=out)
         lines = out.getvalue().splitlines()
-        assert lines[0] == "curie,label"
+        assert lines[0] == "curie,nodenorm_label"
         assert lines[1] == "A:1,"
         assert lines[2] == "B:2,asthma"

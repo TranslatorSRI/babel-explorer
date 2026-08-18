@@ -59,7 +59,10 @@ class IdentifierRecord:
 
     curie: str
     extra_fields: tuple = ()
-    label: str = ""
+    # Not "label": Identifiers.parquet has its own label column, which lands in
+    # extra_fields and would otherwise collide with (and silently win over) this one
+    # once record_to_dict() flattens the record for json/tsv/csv output.
+    nodenorm_label: str = ""
 
     @staticmethod
     def from_row(row: tuple, column_names: list[str]):
@@ -197,7 +200,7 @@ class BabelXRefs:
             self.nodenorm.normalize_curies({r.curie for r in records})
             records = [
                 dataclasses.replace(
-                    r, label=self.nodenorm.get_identifier(r.curie).label
+                    r, nodenorm_label=self.nodenorm.get_identifier(r.curie).label
                 )
                 for r in records
             ]
