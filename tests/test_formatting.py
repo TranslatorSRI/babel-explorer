@@ -348,7 +348,31 @@ class TestLabelConvention:
 
 
 class TestLabelOmissionInRecords:
-    """The omit-when-absent rule is keyed on the concept, not one field name."""
+    """The omit-when-absent rule covers the NodeNorm label fields, and only those."""
+
+    def test_an_empty_parquet_label_column_is_kept(self):
+        """Identifiers.parquet's own `label` column is data, not an absent lookup.
+
+        Dropping it when empty would give some rows of a json/tsv/csv run a `label`
+        key and others none, so `row["label"]` raises KeyError downstream.
+        """
+        rec = IdentifierRecord(curie="A:1", extra_fields=(("label", ""),))
+        d = record_to_dict(rec)
+        assert d["label"] == ""
+        assert "nodenorm_label" not in d
+
+    def test_json_rows_all_carry_the_parquet_label_column(self):
+        out = io.StringIO()
+        write_records(
+            [
+                IdentifierRecord(curie="A:1", extra_fields=(("label", ""),)),
+                IdentifierRecord(curie="B:2", extra_fields=(("label", "asthma"),)),
+            ],
+            "json",
+            file=out,
+        )
+        rows = json.loads(out.getvalue())
+        assert [r["label"] for r in rows] == ["", "asthma"]
 
     def test_empty_subj_and_obj_labels_are_dropped(self):
         xref = LabeledCrossReference(
