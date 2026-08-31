@@ -14,6 +14,11 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
+#: Label fields populated from NodeNorm, which are omitted from machine-readable
+#: output when empty. IdentifierRecord spells it nodenorm_label;
+#: LabeledCrossReference spells it subj_label/obj_label.
+_NODENORM_LABEL_FIELDS = ("nodenorm_label", "subj_label", "obj_label")
+
 
 def record_to_dict(record) -> dict[str, Any]:
     """Convert a dataclass (or plain dict) to a flat dict.
@@ -29,9 +34,12 @@ def record_to_dict(record) -> dict[str, Any]:
             d[col] = val
     # An absent label is omitted rather than emitted as "", matching the console
     # convention and keeping TSV/CSV columns stable when labels were not requested.
-    # Keyed on the concept, not one field name: LabeledCrossReference spells it
-    # subj_label/obj_label, and those must follow the same rule.
-    for key in [k for k, v in d.items() if k.endswith("label") and not v]:
+    # Listed explicitly rather than matched on a "label" suffix: extra_fields has
+    # already been flattened in above, and Identifiers.parquet has its own `label`
+    # column (Babel may add more) whose empty values are real data, not an absent
+    # NodeNorm lookup. Dropping those would make `label` present on some rows of a
+    # json/tsv/csv run and missing on others.
+    for key in [k for k in _NODENORM_LABEL_FIELDS if k in d and not d[k]]:
         del d[key]
     return d
 
