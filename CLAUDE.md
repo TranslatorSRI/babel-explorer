@@ -48,16 +48,45 @@ When the release changes, `BabelDownloader.sync_cache_version()` clears `last_ch
 `.meta` sidecars in `<local_dir>/duckdb/` — never the Parquet files — so the existing ETag path
 re-checks each cached file and re-downloads only what actually changed. The stored ETag is kept
 deliberately: deleting the sidecar outright skips the HEAD and forces an unconditional
-multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, because they resume by byte
-offset with no ETag validation and would otherwise splice two releases into one corrupt Parquet.
-This keeps `Concord.parquet` and `Identifiers.parquet` from being read together across two
-different Babel releases.
+multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, so no prefix from the previous
+release survives into the next one. This keeps `Concord.parquet` and `Identifiers.parquet` from
+being read together across two different Babel releases.
+
+If a HEAD request fails, `_remote_unchanged()` returns `None` — "could not check", distinct from
+`True`/"confirmed unchanged". The cached file is still used, but `last_checked` is deliberately
+**not** refreshed, so the next run checks again. Restamping it there would let one flaky HEAD pin
+the previous release's Parquet as freshly validated for the whole freshness window, immediately
+after `sync_cache_version()` cleared `last_checked` for a new release.
 
 `xrefs` fails when NodeNorm's `status` endpoint reports a different `babel_version` than the Babel
 being queried, since labels and cliques would not match the cross-references. Pass
 `--allow-version-mismatch` to proceed anyway. The check is skipped when NodeNorm is not consulted
 (`xrefs` without `--labels`, including `--recurse`, which is served entirely by DuckDB; and `ids`
 without `--labels`) or when either version is unavailable.
+
+## Partial downloads
+
+Downloads land in a sibling `.tmp` file and are promoted with `os.replace`. Three rules keep a
+`.tmp` from becoming a corrupt Parquet that then passes every freshness check — a failure that is
+permanent, because the file gets stamped with the *correct* ETag:
+
+- **A `.tmp` is never resumed across runs.** `get_downloaded_file()` deletes any it finds before
+  starting, and cleans up on `BaseException` so a Ctrl-C leaves nothing behind. Resume is by byte
+  offset, the only way to reach the download at all is that the remote bytes *changed*, and an
+  orphaned `.tmp` carries no record of which version its bytes came from. Restarting costs a
+  re-download; splicing costs silent data corruption. Do not "optimise" this back into a
+  cross-run resume without persisting the validator alongside the `.tmp`.
+- **In-run resumes send `If-Range`** with the validator from the response they started writing
+  from, so a file rebuilt mid-download restarts (HTTP 200) instead of splicing.
+- **Sizes are checked, twice.** A stream that ends short of `Content-Length` raises
+  `IncompleteDownloadError` and is retried, rather than being promoted as complete; and an HTTP
+  416 is only treated as "already complete" once the local size matches the remote
+  `Content-Length`, since 416 also means the remote file *shrank* below the resume offset.
+
+`_save_meta()` records the length of the whole file, taken from `Content-Range` rather than a 206
+response's `Content-Length` (which is only the range's length). Storing the partial length would
+make the Last-Modified fallback in `_remote_unchanged()` compare it against the full remote length
+forever, re-downloading an unchanged multi-gigabyte file on every freshness expiry.
 
 ## Commands
 
