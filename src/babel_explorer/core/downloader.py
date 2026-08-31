@@ -21,6 +21,16 @@ class MissingBabelFileError(RuntimeError):
     """Raised when a Babel release does not publish a file this tool needs."""
 
 
+class IncompleteDownloadError(RuntimeError):
+    """Raised when a download ends before the whole advertised file arrived.
+
+    A stream that stops early without raising (a proxy or CDN closing the
+    connection cleanly, say) would otherwise be promoted to the final path and
+    stamped with the correct ETag, leaving a truncated Parquet that passes every
+    later freshness check. Raising instead lets the retry loop resume it.
+    """
+
+
 def resolve_babel_version(url_base: str, timeout: int = 30) -> str | None:
     """
     Resolve the Babel version behind a Babel base URL.
@@ -114,8 +124,10 @@ class BabelDownloader:
         a ``.meta`` file is only written after a successful download.
 
         Partial ``.tmp`` downloads are removed, because they are resumed by byte offset
-        with no ETag validation — appending the new release's bytes onto a prefix of the
-        old one would produce a corrupt Parquet that then passes every freshness check.
+        and the bytes already on disk belong to the previous release. ``get_downloaded_file``
+        also discards any ``.tmp`` it finds before starting a download, which covers the
+        cases this sweep cannot see (a content change within one release, or a file that is
+        never re-downloaded); clearing them here keeps stale gigabytes off disk as well.
         """
         version = self.babel_version
         if version is None:
@@ -177,6 +189,32 @@ class BabelDownloader:
         with open(self._get_meta_path(local_path), "w") as f:
             json.dump(meta, f, indent=2)
 
+    @staticmethod
+    def _full_content_length(headers, local_path):
+        """
+        Return the length of the *whole* remote file, or None if it is not known.
+
+        A partial (HTTP 206) response's ``Content-Length`` is the length of the
+        returned range, not of the file. Recording that as the file's length would
+        make the Last-Modified + Content-Length fallback in ``_remote_unchanged``
+        compare a partial length against the full remote one forever, re-downloading
+        a multi-gigabyte file on every freshness expiry. ``Content-Range`` carries
+        the total (``bytes 100-999/1000``); when it is present but the total is
+        unknown (``/*``), the file on disk is the better answer.
+        """
+        content_range = headers.get("Content-Range")
+        if content_range:
+            total = content_range.rsplit("/", 1)[-1].strip()
+            if total.isdigit():
+                return int(total)
+            try:
+                return os.path.getsize(local_path)
+            except OSError:
+                return None
+        if "Content-Length" in headers:
+            return int(headers["Content-Length"])
+        return None
+
     def _save_meta(self, local_path, headers):
         """
         Write a sidecar .meta JSON file next to local_path from response headers.
@@ -190,8 +228,9 @@ class BabelDownloader:
             meta["etag"] = headers["ETag"]
         if "Last-Modified" in headers:
             meta["last_modified"] = headers["Last-Modified"]
-        if "Content-Length" in headers:
-            meta["content_length"] = int(headers["Content-Length"])
+        content_length = self._full_content_length(headers, local_path)
+        if content_length is not None:
+            meta["content_length"] = content_length
 
         self._write_meta(local_path, meta)
 
@@ -218,29 +257,38 @@ class BabelDownloader:
         except (ValueError, TypeError):
             return False
 
-    def _etag_matches(self, url, meta):
+    def _remote_unchanged(self, url, meta):
         """
         Do a HEAD request and check if the ETag (or Last-Modified + Content-Length)
         matches the stored metadata.
 
         Does not write to disk — the caller is responsible for updating last_checked
-        when this returns True.
+        when this returns ``True``.
 
         Args:
             url: URL to HEAD
             meta: dict loaded from .meta file (may have etag, last_modified, content_length)
 
         Returns:
-            bool: True if remote matches local meta (file is still current)
+            True if the remote file is confirmed to match the local metadata,
+            False if it is confirmed to have changed, and ``None`` if the check
+            could not be made (the HEAD request failed). ``None`` is *not* the
+            same as ``True``: the cached file is still usable, but the caller must
+            not refresh ``last_checked`` on the strength of a check that never
+            happened. Doing so would let one flaky HEAD pin the previous release's
+            Parquet as "freshly validated" for the whole freshness window, right
+            after ``sync_cache_version`` cleared ``last_checked`` for a new release
+            — exactly the cross-release mixing the version marker exists to prevent.
         """
         try:
             response = requests.head(url, timeout=self.timeout)
             response.raise_for_status()
         except requests.RequestException as e:
             self.logger.warning(
-                f"HEAD request failed for {url}: {e}; assuming file is current"
+                f"HEAD request failed for {url}: {e}; using the cached file, "
+                f"but it will be re-checked on next use"
             )
-            return True
+            return None
 
         remote_headers = response.headers
 
@@ -284,6 +332,10 @@ class BabelDownloader:
             local_path: Local file path to write to
             resume_byte_pos: Starting byte position (for resume)
             chunk_size: Size of chunks to read/write
+
+        Raises:
+            IncompleteDownloadError: If fewer bytes arrived than Content-Length
+                advertised.
         """
         content_length = response.headers.get("Content-Length")
         if content_length:
@@ -307,6 +359,16 @@ class BabelDownloader:
                         f.write(chunk)
                         progress_bar.update(len(chunk))
 
+        # A stream can end early without raising. Comparing against Content-Length
+        # is only meaningful for an identity-coded body: with Content-Encoding set,
+        # iter_content hands back decoded bytes whose count is unrelated to it.
+        if total_size is not None and not response.headers.get("Content-Encoding"):
+            written = os.path.getsize(local_path)
+            if written != total_size:
+                raise IncompleteDownloadError(
+                    f"{local_path}: expected {total_size} bytes, received {written}"
+                )
+
     def _download_with_retry(self, url, local_path, chunk_size):
         """
         Download a file with retry logic and resume capability.
@@ -322,6 +384,14 @@ class BabelDownloader:
         Raises:
             RuntimeError: If all retry attempts fail
         """
+        # Validator (ETag, else Last-Modified) of the response we started writing
+        # from. Sent back as If-Range on a resume so a file that changed mid-download
+        # restarts from scratch instead of having the new version's tail appended to
+        # the old version's prefix — a splice that would pass every later ETag check.
+        # A leftover .tmp from an earlier run carries no validator and is never
+        # resumed; get_downloaded_file removes it before we are called.
+        validator = None
+
         for attempt in range(1, self.retries + 1):
             try:
                 resume_byte_pos = 0
@@ -331,6 +401,8 @@ class BabelDownloader:
                 headers = {}
                 if resume_byte_pos > 0:
                     headers["Range"] = f"bytes={resume_byte_pos}-"
+                    if validator:
+                        headers["If-Range"] = validator
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
                 # timeout is per-read (seconds without receiving bytes), not a total time limit.
@@ -338,12 +410,29 @@ class BabelDownloader:
                     url, headers=headers, stream=True, timeout=self.timeout
                 ) as response:
                     if response.status_code == 416:
+                        # 416 also comes back when the remote file *shrank* below our
+                        # resume offset, so "the range is past the end" does not by
+                        # itself mean the local file is the remote one. Check the size
+                        # before promoting it, or a rebuild that produced a smaller
+                        # Parquet leaves an over-long file with valid-looking metadata.
+                        head = requests.head(url, timeout=self.timeout)
+                        head.raise_for_status()
+                        remote_length = head.headers.get("Content-Length")
+                        if (
+                            remote_length is not None
+                            and int(remote_length) != resume_byte_pos
+                        ):
+                            self.logger.warning(
+                                f"Local file is {resume_byte_pos} bytes but the remote "
+                                f"file is {remote_length}; discarding it and "
+                                f"downloading afresh"
+                            )
+                            os.remove(local_path)
+                            continue
                         self.logger.info(f"File already complete: {local_path}")
                         # The 416 headers describe the error body, not the file; saving
                         # them as this file's metadata would record a bogus
                         # content_length and force a full re-download on the next check.
-                        head = requests.head(url, timeout=self.timeout)
-                        head.raise_for_status()
                         return head.headers
                     elif response.status_code == 206:
                         self.logger.info("Resuming download (HTTP 206)")
@@ -367,12 +456,15 @@ class BabelDownloader:
                     else:
                         response.raise_for_status()
 
+                    validator = response.headers.get("ETag") or response.headers.get(
+                        "Last-Modified"
+                    )
                     self._stream_download(
                         response, local_path, resume_byte_pos, chunk_size
                     )
                     return response.headers
 
-            except (OSError, requests.RequestException) as e:
+            except (OSError, requests.RequestException, IncompleteDownloadError) as e:
                 self.logger.warning(
                     f"Download attempt {attempt}/{self.retries} failed: {e}"
                 )
@@ -386,6 +478,11 @@ class BabelDownloader:
                         f"Failed to download {url} after {self.retries} attempts: {e}"
                     )
 
+        # Only reachable if the last attempt was a 416 that restarted the download
+        # (`continue`) with no attempts left. Falling through would return None and
+        # leave the caller replacing a .tmp that is no longer there.
+        raise RuntimeError(f"Failed to download {url} after {self.retries} attempts")
+
     def get_downloaded_file(self, dirpath: str, chunk_size: int = 1024 * 1024):
         """
         Download a file from the Babel server to local storage with ETag-based caching.
@@ -393,6 +490,8 @@ class BabelDownloader:
         Three-tier freshness logic:
         1. If .meta exists and last_checked is within freshness window → return immediately
         2. If .meta exists but stale → HEAD request to compare ETag; return if unchanged
+           (or if the HEAD failed, in which case last_checked is left alone so the
+           check is retried on next use)
         3. If ETag changed or no .meta → full re-download
 
         Args:
@@ -418,10 +517,20 @@ class BabelDownloader:
                     return local_path_to_download_to
 
                 # Tier 2: stale but maybe unchanged — HEAD request
-                if self._etag_matches(url_to_download, meta):
+                unchanged = self._remote_unchanged(url_to_download, meta)
+                if unchanged is True:
                     self._write_meta(local_path_to_download_to, meta)
                     self.logger.info(
                         f"ETag matches, using existing file: {local_path_to_download_to}"
+                    )
+                    return local_path_to_download_to
+                if unchanged is None:
+                    # Could not reach the server. Use the cached file, but leave
+                    # last_checked stale so the next run checks again rather than
+                    # treating an unverified file as fresh for hours.
+                    self.logger.warning(
+                        f"Could not check whether {url_to_download} changed; "
+                        f"using the cached file: {local_path_to_download_to}"
                     )
                     return local_path_to_download_to
 
@@ -437,12 +546,29 @@ class BabelDownloader:
         # Download to a sibling .tmp file, then atomically replace the final destination.
         # This ensures the final file is never partially written.
         tmp_path = local_path_to_download_to + ".tmp"
+
+        # Discard any .tmp left behind by an earlier run (killed process, Ctrl-C).
+        # _download_with_retry resumes by byte offset, and we have no way to tell
+        # which version of the remote file those bytes came from — while the only
+        # way to reach this point with a cached file present is that the remote
+        # bytes *changed*. Resuming would splice the new file's tail onto the old
+        # file's prefix and then stamp the result with the new ETag, making the
+        # corruption permanent. Restarting costs a re-download; splicing costs
+        # silent, undetectable data corruption.
+        if os.path.exists(tmp_path):
+            self.logger.warning(
+                f"Discarding partial download from an earlier run: {tmp_path}"
+            )
+            os.remove(tmp_path)
+
         try:
             response_headers = self._download_with_retry(
                 url_to_download, tmp_path, chunk_size
             )
             os.replace(tmp_path, local_path_to_download_to)
-        except Exception:
+        except BaseException:
+            # BaseException, not Exception: a Ctrl-C mid-download must clean up too,
+            # since the partial file cannot be safely resumed later.
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             raise
