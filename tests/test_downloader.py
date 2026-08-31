@@ -17,6 +17,7 @@ import requests
 from babel_explorer.core.downloader import (
     VERSION_MARKER,
     BabelDownloader,
+    IncompleteDownloadError,
     MissingBabelFileError,
     resolve_babel_version,
 )
@@ -414,8 +415,8 @@ class TestIsWithinFreshness:
         assert dl._is_within_freshness(meta, 0) is False
 
 
-class TestEtagMatches:
-    """Tests for _etag_matches."""
+class TestRemoteUnchanged:
+    """Tests for _remote_unchanged."""
 
     def _make_dl(self, tmp_path):
         return BabelDownloader(
@@ -431,7 +432,7 @@ class TestEtagMatches:
         with patch(
             "babel_explorer.core.downloader.requests.head", return_value=mock_resp
         ):
-            assert dl._etag_matches("https://example.com/f.parquet", meta) is True
+            assert dl._remote_unchanged("https://example.com/f.parquet", meta) is True
 
     def test_returns_false_on_different_etag(self, tmp_path):
         dl = self._make_dl(tmp_path)
@@ -442,7 +443,7 @@ class TestEtagMatches:
         with patch(
             "babel_explorer.core.downloader.requests.head", return_value=mock_resp
         ):
-            assert dl._etag_matches("https://example.com/f.parquet", meta) is False
+            assert dl._remote_unchanged("https://example.com/f.parquet", meta) is False
 
     def test_fallback_last_modified_match(self, tmp_path):
         dl = self._make_dl(tmp_path)
@@ -454,17 +455,18 @@ class TestEtagMatches:
         with patch(
             "babel_explorer.core.downloader.requests.head", return_value=mock_resp
         ):
-            assert dl._etag_matches("https://example.com/f.parquet", meta) is True
+            assert dl._remote_unchanged("https://example.com/f.parquet", meta) is True
 
-    def test_returns_true_on_request_error(self, tmp_path):
-        """Network errors are treated as 'assume still fresh' to avoid triggering large re-downloads."""
+    def test_returns_none_on_request_error(self, tmp_path):
+        """A failed HEAD is 'unknown', not 'unchanged' — the caller keeps the cached
+        file but must not restamp last_checked on the strength of it."""
         dl = self._make_dl(tmp_path)
         meta = {"etag": '"abc"'}
         with patch(
             "babel_explorer.core.downloader.requests.head",
             side_effect=requests.ConnectionError("fail"),
         ):
-            assert dl._etag_matches("https://example.com/f.parquet", meta) is True
+            assert dl._remote_unchanged("https://example.com/f.parquet", meta) is None
 
 
 class TestGetDownloadedFileTiers:
@@ -552,6 +554,36 @@ class TestGetDownloadedFileTiers:
         updated_ts = datetime.fromisoformat(updated_meta["last_checked"])
         assert (datetime.now(UTC) - updated_ts).total_seconds() < 5
 
+    def test_tier2_failed_head_does_not_refresh_last_checked(self, tmp_path):
+        """A HEAD that never happened must not mark the file freshly validated.
+
+        sync_cache_version clears last_checked when the Babel release changes so
+        every cached file is re-checked. If one flaky HEAD restamped it, the old
+        release's Parquet would look current for the whole freshness window under a
+        .babel-version marker naming the new release.
+        """
+        dl = self._make_dl(tmp_path, freshness=3600)
+        test_file = "duckdb/unreachable.parquet"
+        local = tmp_path / "duckdb" / "unreachable.parquet"
+        local.parent.mkdir(parents=True)
+        local.write_bytes(b"data from the previous release")
+
+        # No last_checked: exactly what sync_cache_version leaves behind.
+        with open(str(local) + ".meta", "w") as f:
+            json.dump({"etag": '"old"'}, f)
+
+        with patch(
+            "babel_explorer.core.downloader.requests.head",
+            side_effect=requests.ConnectionError("network down"),
+        ):
+            with patch("babel_explorer.core.downloader.requests.get") as mock_get:
+                result = dl.get_downloaded_file(test_file)
+                mock_get.assert_not_called()
+
+        assert result == str(local)
+        with open(str(local) + ".meta") as f:
+            assert "last_checked" not in json.load(f)
+
     # --- Tier 3: ETag changed, re-download ---
 
     def test_tier3_redownloads_when_etag_changed(self, tmp_path):
@@ -638,6 +670,203 @@ class TestGetDownloadedFileTiers:
             mock_dl.assert_called_once()
 
         assert open(result, "rb").read() == new_content
+
+
+class TestPartialDownloadSafety:
+    """A .tmp must never be resumed across two different versions of a remote file."""
+
+    def test_leftover_tmp_from_an_earlier_run_is_discarded(self, tmp_path):
+        """A .tmp of unknown provenance is deleted before the download starts.
+
+        get_downloaded_file only reaches the download block when the remote bytes
+        changed, so resuming an orphaned .tmp (left by a killed process) would
+        append the new file's tail to the old file's prefix and then stamp the
+        splice with the new ETag.
+        """
+        dl = BabelDownloader(
+            url_base="https://example.com/",
+            local_path=str(tmp_path),
+            freshness_seconds=0,
+        )
+        test_file = "duckdb/spliced.parquet"
+        local = tmp_path / "duckdb" / "spliced.parquet"
+        local.parent.mkdir(parents=True)
+        local.write_bytes(b"old version")
+        with open(str(local) + ".meta", "w") as f:
+            json.dump({"etag": '"old"'}, f)
+        tmp_file = local.parent / "spliced.parquet.tmp"
+        tmp_file.write_bytes(b"PREFIX-OF-OLD-VERSION")
+
+        seen_sizes = []
+
+        def fake_download(url, path, chunk_size):
+            seen_sizes.append(os.path.getsize(path) if os.path.exists(path) else None)
+            with open(path, "wb") as f:
+                f.write(b"new version")
+            return {"ETag": '"new"'}
+
+        head = Mock(headers={"ETag": '"new"'}, raise_for_status=Mock())
+        with (
+            patch("babel_explorer.core.downloader.requests.head", return_value=head),
+            patch.object(dl, "_download_with_retry", side_effect=fake_download),
+        ):
+            result = dl.get_downloaded_file(test_file)
+
+        assert seen_sizes == [None], "the stale .tmp was still on disk"
+        assert open(result, "rb").read() == b"new version"
+
+    def test_keyboard_interrupt_removes_the_partial_file(self, tmp_path):
+        """Ctrl-C is a BaseException; the .tmp must still be cleaned up."""
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        tmp_file = tmp_path / "interrupted.parquet.tmp"
+
+        def fake_download(url, path, chunk_size):
+            with open(path, "wb") as f:
+                f.write(b"half a file")
+            raise KeyboardInterrupt
+
+        with patch.object(dl, "_download_with_retry", side_effect=fake_download):
+            with pytest.raises(KeyboardInterrupt):
+                dl.get_downloaded_file("interrupted.parquet")
+
+        assert not tmp_file.exists()
+
+    def test_resume_sends_if_range_once_a_validator_is_known(self, tmp_path):
+        """After the first response, a resume is conditional on the file not changing."""
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
+        out_path = str(tmp_path / "conditional.bin")
+
+        # First attempt streams 4 of 10 bytes and then trips the size check.
+        first = TestDownloadWithRetry._make_response(
+            200, {"Content-Length": "10", "ETag": '"v1"'}, [b"abcd"]
+        )
+        second = TestDownloadWithRetry._make_response(
+            206, {"Content-Length": "6", "ETag": '"v1"'}, [b"efghij"]
+        )
+        with (
+            patch(
+                "babel_explorer.core.downloader.requests.get",
+                side_effect=[first, second],
+            ) as mock_get,
+            patch("babel_explorer.core.downloader.time.sleep"),
+        ):
+            dl._download_with_retry("https://example.com/file", out_path, 1024)
+
+        assert mock_get.call_args_list[1].kwargs["headers"] == {
+            "Range": "bytes=4-",
+            "If-Range": '"v1"',
+        }
+        assert open(out_path, "rb").read() == b"abcdefghij"
+
+
+class TestDownloadCompleteness:
+    """A short stream must be retried, never promoted as the finished file."""
+
+    def test_truncated_stream_raises(self, tmp_path):
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        out_path = str(tmp_path / "short.bin")
+
+        mock_response = Mock()
+        mock_response.headers = {"Content-Length": "10"}
+        mock_response.iter_content = Mock(return_value=[b"only4"])
+
+        with pytest.raises(IncompleteDownloadError, match="expected 10 bytes"):
+            dl._stream_download(mock_response, out_path, 0, 1024)
+
+    def test_truncated_stream_is_retried_and_resumed(self, tmp_path):
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
+        out_path = str(tmp_path / "resumed.bin")
+
+        first = TestDownloadWithRetry._make_response(
+            200, {"Content-Length": "10"}, [b"abcd"]
+        )
+        second = TestDownloadWithRetry._make_response(
+            206, {"Content-Length": "6"}, [b"efghij"]
+        )
+        with (
+            patch(
+                "babel_explorer.core.downloader.requests.get",
+                side_effect=[first, second],
+            ),
+            patch("babel_explorer.core.downloader.time.sleep"),
+        ):
+            dl._download_with_retry("https://example.com/file", out_path, 1024)
+
+        assert open(out_path, "rb").read() == b"abcdefghij"
+
+    def test_encoded_body_skips_the_size_check(self, tmp_path):
+        """With Content-Encoding set, iter_content yields decoded bytes whose count
+        has nothing to do with Content-Length."""
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        out_path = str(tmp_path / "gzipped.bin")
+
+        mock_response = Mock()
+        mock_response.headers = {"Content-Length": "4", "Content-Encoding": "gzip"}
+        mock_response.iter_content = Mock(return_value=[b"decompressed"])
+
+        dl._stream_download(mock_response, out_path, 0, 1024)
+        assert open(out_path, "rb").read() == b"decompressed"
+
+    def test_416_with_a_shorter_remote_file_restarts(self, tmp_path):
+        """A remote rebuild that shrank the file also answers 416; the over-long
+        local file must not be promoted as complete."""
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
+        out_path = tmp_path / "shrunk.bin"
+        out_path.write_bytes(b"the old, longer file")  # 20 bytes
+
+        too_long = TestDownloadWithRetry._make_response(416)
+        fresh = TestDownloadWithRetry._make_response(
+            200, {"Content-Length": "5", "ETag": '"new"'}, [b"short"]
+        )
+        head = MagicMock(status_code=200, headers={"Content-Length": "5"})
+        with (
+            patch(
+                "babel_explorer.core.downloader.requests.get",
+                side_effect=[too_long, fresh],
+            ),
+            patch("babel_explorer.core.downloader.requests.head", return_value=head),
+        ):
+            headers = dl._download_with_retry(
+                "https://example.com/file", str(out_path), 1024
+            )
+
+        assert out_path.read_bytes() == b"short"
+        assert headers["ETag"] == '"new"'
+
+
+class TestFullContentLength:
+    """A 206 Content-Length is a range length, not the file's length."""
+
+    def test_partial_response_records_the_total_from_content_range(self, tmp_path):
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        file_path = str(tmp_path / "resumed.parquet")
+        with open(file_path, "wb") as f:
+            f.write(b"0123456789")
+
+        dl._save_meta(
+            file_path,
+            {"Content-Length": "6", "Content-Range": "bytes 4-9/10", "ETag": '"e"'},
+        )
+        with open(file_path + ".meta") as f:
+            assert json.load(f)["content_length"] == 10
+
+    def test_partial_response_with_unknown_total_falls_back_to_the_file(self, tmp_path):
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        file_path = str(tmp_path / "unknown_total.parquet")
+        with open(file_path, "wb") as f:
+            f.write(b"0123456789")
+
+        dl._save_meta(
+            file_path, {"Content-Length": "6", "Content-Range": "bytes 4-9/*"}
+        )
+        with open(file_path + ".meta") as f:
+            assert json.load(f)["content_length"] == 10
 
 
 class TestGetDownloadedFileCaching:
