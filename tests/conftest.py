@@ -93,12 +93,18 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
     Skips the session when the Babel server cannot be reached at all. Whether a given
     file is *published* is settled per file by ``_download_or_skip``, not here — see
     that function for why the two cannot be collapsed into one probe.
+
+    The probe deliberately targets the release root rather than ``Concord.parquet``.
+    Naming a file made this look like a publication check, which is what it used to be;
+    only the response status told the two apart, and that distinction is gone now.
+    Reachability is all this answers, so it asks about the release, not a file in it —
+    and the status is not examined, because a 404 from a reachable server is still a
+    reachable server.
     """
-    probe_url = BABEL_URL + CONCORD_FILE
     try:
-        requests.head(probe_url, timeout=30)
+        requests.head(BABEL_URL, timeout=30)
     except requests.RequestException as e:
-        pytest.skip(f"Babel server unreachable at {probe_url}: {e}")
+        pytest.skip(f"Babel server unreachable at {BABEL_URL}: {e}")
     return BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
 
 

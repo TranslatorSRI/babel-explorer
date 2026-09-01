@@ -318,18 +318,34 @@ broken test environment.
 
 **A release can publish one DuckDB file without the other.** `2026jul22` serves a 4.6 GB
 `Concord.parquet` with no `Identifiers.parquet` beside it, so "does this release have the Parquet
-files?" is not one question. `shared_downloader` probes Concord and skips the session; the
-`downloaded_identifiers` fixture catches `MissingBabelFileError` and skips separately. Do not
-collapse the two into a single up-front probe — the non-slow integration tests run perfectly well
-against a release that lacks `Identifiers.parquet`.
+files?" is not one question. Every DuckDB file goes through `_download_or_skip()`, which skips on
+the `MissingBabelFileError` the downloader already raises for a 404 on a `duckdb/` path.
+`shared_downloader` answers only the genuinely session-wide question — is the server reachable —
+and deliberately probes the release root rather than a specific file, so it cannot be mistaken for
+a publication check. Do not collapse these back into one up-front probe: the non-slow integration
+tests run perfectly well against a release that lacks `Identifiers.parquet`.
 
 **A full run re-downloads everything.** `pytest_sessionfinish` deletes `data/test`, so each
 `uv run pytest` with a Babel release configured pays the multi-gigabyte download again (~9 minutes
 for `2026jul22`). Use `-m "not integration"` while iterating, and budget for the full run.
 
+**Never run two full suites at once.** `data/test` is a fixed path shared by every run, and
+`pytest_sessionfinish` deletes it unconditionally, so a second run tears down the first run's
+download — and the `FileLock` around each download does not help, because it guards one file, not
+a session. Two concurrent runs will each re-download a file the other has just deleted, for as long
+as you let them.
+
+- **Detect it**: `du -sh data/test` going *down* instead of up, and a full run that sails past the
+  ~9 minutes it should take. `ps -eo pid,etime,command | grep "[p]ytest"` showing two sets of
+  workers with different `etime` values confirms it.
+- **Avoid it**: check for a run already in flight before starting one, and never `rm -rf data/test`
+  to "start clean" without checking first — that is the fastest way to corrupt a run in progress.
+- **Recover**: kill every pytest process, `rm -rf data/test`, and start exactly one run. Nothing
+  outside `data/test` is affected, so no repository or cache state needs repairing.
+
 ### Test Infrastructure
 
-- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. The `shared_downloader` fixture HEADs `duckdb/Concord.parquet` first and skips the session on 404. Teardown removes the `data/test/` directory so the next run starts fresh.
+- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. `shared_downloader` HEADs the release root and skips the session if the server is unreachable; `_download_or_skip()` then skips per file if the release does not publish it. `nodenorm` probes `status` the same way, so a NodeNorm outage skips rather than reddening CI. Teardown removes the `data/test/` directory so the next run starts fresh — see the concurrency warning above before running two suites at once.
 - **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
 - **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
 
