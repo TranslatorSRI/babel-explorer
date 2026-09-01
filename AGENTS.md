@@ -130,7 +130,7 @@ file is never visible as the real one.
 
 Those rules are load-bearing and each records a specific failure — a corrupt or cross-release
 Parquet that then passes every freshness check, permanently. See
-**[docs/downloading.md](docs/downloading.md)** before changing anything in `core/downloader.py`,
+**[docs/Downloading.md](docs/Downloading.md)** before changing anything in `core/downloader.py`,
 `sync_cache_version()`, `_is_within_freshness()` or the resume path.
 
 `BabelExplorerGroup.invoke()` turns `requests.RequestException` into a `ClickException`, so an
