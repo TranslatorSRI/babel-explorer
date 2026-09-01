@@ -87,7 +87,11 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
 
 @pytest.fixture(scope="session")
 def downloaded_concord(shared_downloader, test_data_dir) -> str:
-    """Download duckdb/Concord.parquet (~626 MB). Returns the local path."""
+    """Download duckdb/Concord.parquet. Returns the local path.
+
+    Multi-gigabyte in current releases and growing; do not record a figure here,
+    it drifts silently and then misleads.
+    """
     lock_path = os.path.join(test_data_dir, "concord.lock")
     with FileLock(lock_path):
         return shared_downloader.get_downloaded_file(CONCORD_FILE)
@@ -112,7 +116,10 @@ def downloaded_parquet_files(downloaded_concord, downloaded_metadata) -> dict[st
 
 @pytest.fixture(scope="session")
 def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
-    """Download duckdb/Identifiers.parquet (2 GB+). Returns the local path."""
+    """Download duckdb/Identifiers.parquet, the largest file Babel publishes.
+
+    Every test that reaches this is marked ``slow``.
+    """
     lock_path = os.path.join(test_data_dir, "identifiers.lock")
     with FileLock(lock_path):
         return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)

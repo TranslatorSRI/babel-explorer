@@ -150,7 +150,7 @@ uv run pytest -v
 # Run unit tests only (fast, no network)
 uv run pytest -v -m "not integration"
 
-# Run integration tests without 2GB+ downloads
+# Run integration tests without the Identifiers.parquet download
 uv run pytest -v -m "integration and not slow"
 
 # Run a single test file
@@ -250,7 +250,12 @@ than silently emitting the full cross-reference list.
 Tests live in `tests/` and are split into fast **unit tests** (mocked, no network) and slower **integration tests** (real downloads and API calls). Pytest markers control which tests run:
 
 - **`@pytest.mark.integration`** — requires network access (downloads Parquet files or calls NodeNorm API)
-- **`@pytest.mark.slow`** — downloads very large files (2 GB+)
+- **`@pytest.mark.slow`** — downloads `Identifiers.parquet`, the largest file Babel publishes
+
+Note that `not slow` is *not* the same as "small". `Concord.parquet` is itself multi-gigabyte in
+current releases (4.6 GB in `2026jul22`) and its tests are not marked slow, because excluding them
+would leave the non-slow integration set covering nothing that touches real data. Budget for that
+before pointing CI at a Babel that publishes the Parquet files (see issue #18).
 
 Do not record per-file test counts here — they drift silently and then mislead. Get them on demand:
 

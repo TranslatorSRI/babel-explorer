@@ -59,5 +59,5 @@ ignore = [
 addopts = "-n auto"
 markers = [
     "integration: tests requiring network access (deselect with '-m \"not integration\"')",
-    "slow: tests downloading very large files 2GB+ (deselect with '-m \"not slow\"')",
+    "slow: tests downloading Identifiers.parquet, the largest file Babel publishes (deselect with '-m \"not slow\"')",
 ]

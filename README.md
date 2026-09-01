@@ -88,7 +88,7 @@ skip when that release does not publish the DuckDB Parquet files.
 # Unit tests only — fast, no network required
 uv run pytest -v -m "not integration"
 
-# Integration tests without 2GB+ downloads
+# Integration tests without the Identifiers.parquet download
 uv run pytest -v -m "integration and not slow"
 
 # Full suite including large file downloads
