@@ -6,6 +6,7 @@ import re
 from itertools import combinations
 
 import click
+import requests
 from dotenv import load_dotenv
 from rich.markup import escape
 
@@ -331,13 +332,26 @@ def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
 
 
 class BabelExplorerGroup(click.Group):
-    """Group that reports missing Babel files as a plain error rather than a traceback."""
+    """Group that reports service failures as a plain error rather than a traceback."""
 
     def invoke(self, ctx):
         try:
             return super().invoke(ctx)
         except MissingBabelFileError as e:
             raise click.ClickException(str(e)) from e
+        except requests.RequestException as e:
+            # In practice this is always NodeNorm: the downloader handles its own
+            # network failures (a failed HEAD falls back to the cached file, and
+            # _download_with_retry re-raises as RuntimeError after its last attempt),
+            # while NodeNorm deliberately lets HTTP errors propagate so a failed
+            # lookup is not cached. Note that get_babel_version() swallows its own
+            # errors, so an unreachable NodeNorm passes the version check and only
+            # fails here, part-way through a query.
+            raise click.ClickException(
+                f"NodeNorm request failed: {e}. Check that --nodenorm-url is "
+                f"reachable; `xrefs` and `ids` can also be run without --labels, "
+                f"which does not consult NodeNorm at all."
+            ) from e
 
 
 @click.group(cls=BabelExplorerGroup)

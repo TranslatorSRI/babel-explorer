@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import click
 import pytest
+import requests
 from click.testing import CliRunner
 
 from babel_explorer.cli import cli, parse_duration
@@ -768,6 +769,31 @@ class TestMissingBabelFileReporting:
 
         assert result.exit_code == 1
         assert "nope" in result.output
+        assert "Traceback" not in result.output
+
+
+class TestNodeNormFailureIsNotATraceback:
+    """An unreachable NodeNorm must not end the run in a Python stack trace."""
+
+    def test_connection_error_becomes_a_click_error(self):
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm") as mock_nn,
+        ):
+            mock_dl.return_value.babel_version = "2026jul22"
+            # get_babel_version() swallows its own errors, so the version check passes
+            # and the failure only surfaces once the query is under way.
+            mock_nn.return_value.get_babel_version.return_value = None
+            mock_bx.return_value.get_curie_xrefs.side_effect = requests.ConnectionError(
+                "connection refused"
+            )
+            result = runner.invoke(cli, ["xrefs", "A:1", "--labels"])
+
+        assert result.exit_code == 1
+        assert "NodeNorm request failed" in result.output
+        assert "connection refused" in result.output
         assert "Traceback" not in result.output
 
 

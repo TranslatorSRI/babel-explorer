@@ -97,6 +97,12 @@ If a HEAD request fails, `_remote_unchanged()` returns `None` — "could not che
 the previous release's Parquet as freshly validated for the whole freshness window, immediately
 after `sync_cache_version()` cleared `last_checked` for a new release.
 
+`BabelExplorerGroup.invoke()` turns `requests.RequestException` into a `ClickException`, so an
+unreachable NodeNorm reports an error rather than a traceback. In practice only NodeNorm reaches
+it: the downloader handles its own network failures, while NodeNorm deliberately lets HTTP errors
+propagate so a failed lookup is not cached. `get_babel_version()` swallows its own errors, so an
+unreachable NodeNorm passes the version check below and only fails part-way through the query.
+
 `xrefs` fails when NodeNorm's `status` endpoint reports a different `babel_version` than the Babel
 being queried, since labels and cliques would not match the cross-references. Pass
 `--allow-version-mismatch` to proceed anyway. The check is skipped when NodeNorm is not consulted
