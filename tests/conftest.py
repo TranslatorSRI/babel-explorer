@@ -68,20 +68,37 @@ def test_data_dir():
     return TEST_DATA_DIR
 
 
+def _download_or_skip(downloader, remote_path, test_data_dir, lock_name) -> str:
+    """Download one Babel file, skipping the tests that need it if the release omits it.
+
+    One rule, one implementation, for every DuckDB file. A release can publish
+    ``Concord.parquet`` without ``Identifiers.parquet`` — ``2026jul22`` does exactly that
+    — so "does this release have the Parquet files?" is a question each file has to answer
+    for itself, not once for the session. ``MissingBabelFileError`` is what the downloader
+    already raises on a 404 for a ``duckdb/`` path, so there is no second HEAD request here
+    to drift out of step with the real one.
+    """
+    lock_path = os.path.join(test_data_dir, lock_name)
+    with FileLock(lock_path):
+        try:
+            return downloader.get_downloaded_file(remote_path)
+        except MissingBabelFileError as e:
+            pytest.skip(str(e))
+
+
 @pytest.fixture(scope="session")
 def shared_downloader(test_data_dir) -> BabelDownloader:
     """A BabelDownloader pointed at the test data directory.
 
-    Skips the whole session when the composed Babel URL points at a release that does
-    not publish the DuckDB Parquet files (as the public releases currently do not).
+    Skips the session when the Babel server cannot be reached at all. Whether a given
+    file is *published* is settled per file by ``_download_or_skip``, not here — see
+    that function for why the two cannot be collapsed into one probe.
     """
     probe_url = BABEL_URL + CONCORD_FILE
     try:
-        response = requests.head(probe_url, timeout=30)
+        requests.head(probe_url, timeout=30)
     except requests.RequestException as e:
         pytest.skip(f"Babel server unreachable at {probe_url}: {e}")
-    if response.status_code == 404:
-        pytest.skip(f"{BABEL_URL} does not publish {CONCORD_FILE}")
     return BabelDownloader(url_base=BABEL_URL, local_path=test_data_dir)
 
 
@@ -92,17 +109,17 @@ def downloaded_concord(shared_downloader, test_data_dir) -> str:
     Multi-gigabyte in current releases and growing; do not record a figure here,
     it drifts silently and then misleads.
     """
-    lock_path = os.path.join(test_data_dir, "concord.lock")
-    with FileLock(lock_path):
-        return shared_downloader.get_downloaded_file(CONCORD_FILE)
+    return _download_or_skip(
+        shared_downloader, CONCORD_FILE, test_data_dir, "concord.lock"
+    )
 
 
 @pytest.fixture(scope="session")
 def downloaded_metadata(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Metadata.parquet (small). Returns the local path."""
-    lock_path = os.path.join(test_data_dir, "metadata.lock")
-    with FileLock(lock_path):
-        return shared_downloader.get_downloaded_file(METADATA_FILE)
+    return _download_or_skip(
+        shared_downloader, METADATA_FILE, test_data_dir, "metadata.lock"
+    )
 
 
 @pytest.fixture(scope="session")
@@ -120,19 +137,12 @@ def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
 
     Every test that reaches this is marked ``slow``.
 
-    Skips when the release does not publish it. ``shared_downloader`` probes only
-    ``Concord.parquet``, and a release can publish one file without the other —
-    ``2026jul22`` does exactly that. Without this the tests error out of the fixture
-    with ``MissingBabelFileError`` rather than skipping, which reads as a broken test
-    environment when it is the documented, expected outcome for a release that does
-    not publish the file.
+    Skips when the release does not publish it, which is not the same question as
+    whether it publishes ``Concord.parquet`` — see ``_download_or_skip``.
     """
-    lock_path = os.path.join(test_data_dir, "identifiers.lock")
-    with FileLock(lock_path):
-        try:
-            return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
-        except MissingBabelFileError as e:
-            pytest.skip(str(e))
+    return _download_or_skip(
+        shared_downloader, IDENTIFIERS_FILE, test_data_dir, "identifiers.lock"
+    )
 
 
 @pytest.fixture(scope="session")
