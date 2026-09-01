@@ -3,7 +3,17 @@ name = "babel-explorer"
 version = "0.1.0"
 description = "Tool for querying and exploring Babel APIs and intermediate files"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Gaurav Vaidya", email = "gaurav@ggvaidya.com" }]
 requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
     "click>=8.3.1",
     "duckdb>=1.4.2",
