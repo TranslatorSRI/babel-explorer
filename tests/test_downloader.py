@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import requests
+from _pytest.outcomes import Skipped
 
 from babel_explorer.core.downloader import (
     VERSION_MARKER,
@@ -22,6 +23,7 @@ from babel_explorer.core.downloader import (
     compose_babel_url,
     resolve_babel_version,
 )
+from tests import conftest
 from tests.constants import BABEL_URL, CONCORD_FILE
 
 
@@ -1279,7 +1281,124 @@ def test_download_caching_real_files(shared_downloader, downloaded_concord):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_download_identifiers_parquet(downloaded_identifiers):
-    """Verify Identifiers.parquet downloads and is > 2 GB."""
+    """Verify Identifiers.parquet downloads as a complete Parquet file.
+
+    Checks the format rather than a byte count. A hard size figure is exactly the kind
+    of number CLAUDE.md says drifts silently and then misleads — it was ``> 2 GB``,
+    chosen against a release long superseded — and the ``PAR1`` marker at both ends is
+    a better test of the thing that actually goes wrong: a truncated download, or an
+    error page saved under a .parquet name.
+    """
     assert os.path.isfile(downloaded_identifiers)
-    size = os.path.getsize(downloaded_identifiers)
-    assert size > 2 * 1024 * 1024 * 1024, f"Identifiers.parquet too small: {size} bytes"
+    assert os.path.getsize(downloaded_identifiers) > 8, "too short to be a Parquet file"
+    with open(downloaded_identifiers, "rb") as f:
+        assert f.read(4) == b"PAR1", "missing Parquet header"
+        f.seek(-4, os.SEEK_END)
+        assert f.read(4) == b"PAR1", "missing Parquet footer — download was truncated"
+
+
+class TestIdentifiersFixtureSkips:
+    """A release that omits Identifiers.parquet must skip, not error.
+
+    The bug this guards was invisible for the same reason the stale
+    `get_curie_xref.cache_clear()` calls were: it only shows up in a run against a
+    real Babel release, and those skip entirely for anyone without one configured.
+    A unit test is the only place it gets exercised routinely.
+    """
+
+    @staticmethod
+    def _call_fixture(downloader, tmp_path):
+        """Invoke the fixture's underlying function directly, past the decorator."""
+        return conftest.downloaded_identifiers.__wrapped__(downloader, str(tmp_path))
+
+    def test_missing_file_skips(self, tmp_path):
+        downloader = Mock()
+        downloader.get_downloaded_file.side_effect = MissingBabelFileError(
+            "This Babel release (2026jul22) does not publish duckdb/Identifiers.parquet."
+        )
+
+        with pytest.raises(Skipped) as excinfo:
+            self._call_fixture(downloader, tmp_path)
+
+        # The downloader's own message explains how to point at a release that has it.
+        assert "does not publish duckdb/Identifiers.parquet" in str(excinfo.value)
+
+    def test_present_file_is_returned(self, tmp_path):
+        """The skip must not swallow the normal path."""
+        downloader = Mock()
+        downloader.get_downloaded_file.return_value = (
+            "/cache/duckdb/Identifiers.parquet"
+        )
+
+        assert (
+            self._call_fixture(downloader, tmp_path)
+            == "/cache/duckdb/Identifiers.parquet"
+        )
+
+    def test_other_errors_still_propagate(self, tmp_path):
+        """Only a missing file is a skip; a real failure must still fail the run."""
+        downloader = Mock()
+        downloader.get_downloaded_file.side_effect = RuntimeError("connection reset")
+
+        with pytest.raises(RuntimeError, match="connection reset"):
+            self._call_fixture(downloader, tmp_path)
+
+
+class TestSessionFinishCleanup:
+    """A unit run must not delete an integration run's multi-gigabyte download.
+
+    `data/test` is a fixed path, not a per-run temporary directory, so the cleanup hook
+    is the one piece of test infrastructure that can destroy another process's work.
+    """
+
+    @staticmethod
+    def _session(markers):
+        """A stub session whose items carry the given marker names."""
+
+        def item(name):
+            it = Mock()
+            it.get_closest_marker.side_effect = lambda m, n=name: (
+                Mock() if m == n else None
+            )
+            return it
+
+        session = Mock()
+        session.items = [item(m) for m in markers]
+        del session.config.workerinput  # a controller, not an xdist worker
+        return session
+
+    def test_unit_only_session_leaves_the_directory_alone(self, tmp_path, monkeypatch):
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        (data_dir / "Concord.parquet").write_bytes(b"someone else is using this")
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        conftest.pytest_sessionfinish(self._session([None, None]), 0)
+
+        assert data_dir.exists(), (
+            "a `-m 'not integration'` run must not delete the integration cache"
+        )
+
+    def test_integration_session_cleans_up(self, tmp_path, monkeypatch):
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        (data_dir / "Concord.parquet").write_bytes(b"this run's own download")
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        conftest.pytest_sessionfinish(self._session([None, "integration"]), 0)
+
+        assert not data_dir.exists(), "the next run must start fresh"
+
+    def test_xdist_worker_never_cleans_up(self, tmp_path, monkeypatch):
+        """Only the controller cleans up; a worker finishing early must not."""
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        worker = Mock()
+        worker.items = [Mock()]
+        worker.config.workerinput = {"workerid": "gw0"}
+
+        conftest.pytest_sessionfinish(worker, 0)
+
+        assert data_dir.exists()

@@ -1,5 +1,8 @@
 # Valid CURIEs for integration tests.
 # Add new CURIEs here to expand test coverage — tests are parametrized over this list.
+#
+# NCIT:C55060 was removed in #27: it has no rows in Concord.parquet as of Babel
+# 2026jul22. Tracked in #29, which also covers restoring a third CURIE — with only
+# these two, both MONDO, the suite exercises no other namespace.
 MONDO:0004979
 MONDO:0005044
-NCIT:C55060
