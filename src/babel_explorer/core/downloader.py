@@ -467,6 +467,8 @@ class BabelDownloader:
         # the old version's prefix — a splice that would pass every later ETag check.
         # A leftover .tmp from an earlier run carries no validator and is never
         # resumed; get_downloaded_file removes it before we are called.
+        #
+        # Having one is a *precondition* for resuming at all: see the restart below.
         validator = None
 
         for attempt in range(1, self.retries + 1):
@@ -475,11 +477,27 @@ class BabelDownloader:
                 if os.path.exists(local_path):
                     resume_byte_pos = os.path.getsize(local_path)
 
+                if resume_byte_pos > 0 and not validator:
+                    # Nothing to make the resume conditional on. A server that sent
+                    # neither an ETag nor a Last-Modified leaves no way to ask for
+                    # "the rest of *this* file", so a bare Range against a file
+                    # rebuilt between attempts splices the new version's tail onto
+                    # the old version's prefix — the very corruption If-Range exists
+                    # to prevent, and just as permanent, since what lands gets
+                    # stamped with the new validator and passes every later check.
+                    # Such a server costs a restart instead.
+                    self.logger.warning(
+                        f"Restarting {local_path} from the beginning: the response it "
+                        f"was written from carried no ETag or Last-Modified, so the "
+                        f"resume cannot be made conditional"
+                    )
+                    os.remove(local_path)
+                    resume_byte_pos = 0
+
                 headers = {}
                 if resume_byte_pos > 0:
                     headers["Range"] = f"bytes={resume_byte_pos}-"
-                    if validator:
-                        headers["If-Range"] = validator
+                    headers["If-Range"] = validator
                     self.logger.info(f"Resuming download from byte {resume_byte_pos}")
 
                 # timeout is per-read (seconds without receiving bytes), not a total time limit.
@@ -489,22 +507,26 @@ class BabelDownloader:
                     if response.status_code == 416:
                         # 416 also comes back when the remote file *shrank* below our
                         # resume offset, so "the range is past the end" does not by
-                        # itself mean the local file is the remote one. Check the size
-                        # before promoting it, or a rebuild that produced a smaller
-                        # Parquet leaves an over-long file with valid-looking metadata.
+                        # itself mean the local file is the remote one. Only a remote
+                        # length that matches the local one proves that, so a missing
+                        # Content-Length is treated as "cannot confirm" and restarts
+                        # too: promoting an unverified file leaves a wrong-length
+                        # Parquet stamped with valid-looking metadata. The restart is
+                        # safe from looping, since the retry sends no Range at all.
                         head = requests.head(url, timeout=self.timeout)
                         head.raise_for_status()
                         remote_length = head.headers.get("Content-Length")
                         if (
-                            remote_length is not None
-                            and int(remote_length) != resume_byte_pos
+                            remote_length is None
+                            or int(remote_length) != resume_byte_pos
                         ):
                             self.logger.warning(
                                 f"Local file is {resume_byte_pos} bytes but the remote "
-                                f"file is {remote_length}; discarding it and "
-                                f"downloading afresh"
+                                f"length is {remote_length or 'unknown'}; discarding it "
+                                f"and downloading afresh"
                             )
-                            os.remove(local_path)
+                            if os.path.exists(local_path):
+                                os.remove(local_path)
                             continue
                         self.logger.info(f"File already complete: {local_path}")
                         # The 416 headers describe the error body, not the file; saving

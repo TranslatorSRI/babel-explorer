@@ -929,11 +929,13 @@ class TestDownloadCompleteness:
         )
         out_path = str(tmp_path / "resumed.bin")
 
+        # The ETag is what makes the resume conditional, and so allowed at all:
+        # without a validator the retry restarts from zero instead.
         first = TestDownloadWithRetry._make_response(
-            200, {"Content-Length": "10"}, [b"abcd"]
+            200, {"Content-Length": "10", "ETag": '"v1"'}, [b"abcd"]
         )
         second = TestDownloadWithRetry._make_response(
-            206, {"Content-Length": "6"}, [b"efghij"]
+            206, {"Content-Length": "6", "ETag": '"v1"'}, [b"efghij"]
         )
         with (
             patch(
@@ -966,8 +968,12 @@ class TestDownloadCompleteness:
             url_base="https://example.com/", local_path=str(tmp_path), retries=3
         )
         out_path = tmp_path / "shrunk.bin"
-        out_path.write_bytes(b"the old, longer file")  # 20 bytes
 
+        # Attempt 1 ends short, leaving 20 bytes and a validator behind. Only then is
+        # there a Range to send, and so a 416 to receive.
+        truncated = TestDownloadWithRetry._make_response(
+            200, {"Content-Length": "30", "ETag": '"old"'}, [b"the old, longer file"]
+        )
         too_long = TestDownloadWithRetry._make_response(416)
         fresh = TestDownloadWithRetry._make_response(
             200, {"Content-Length": "5", "ETag": '"new"'}, [b"short"]
@@ -976,9 +982,10 @@ class TestDownloadCompleteness:
         with (
             patch(
                 "babel_explorer.core.downloader.requests.get",
-                side_effect=[too_long, fresh],
+                side_effect=[truncated, too_long, fresh],
             ),
             patch("babel_explorer.core.downloader.requests.head", return_value=head),
+            patch("babel_explorer.core.downloader.time.sleep"),
         ):
             headers = dl._download_with_retry(
                 "https://example.com/file", str(out_path), 1024
@@ -1081,32 +1088,49 @@ class TestDownloadWithRetry:
                 dl._download_with_retry("https://example.com/file", out_path, 1024)
         assert os.path.exists(out_path)
 
-    def test_resume_sends_range_header(self, tmp_path):
+    def test_resume_without_a_validator_restarts_from_zero(self, tmp_path):
+        """A bare Range is a splice waiting to happen.
+
+        With neither an ETag nor a Last-Modified there is no If-Range to send, so
+        nothing stops a server that rebuilt the file from handing back the new
+        version's tail to append to the old version's prefix — and the result would
+        be stamped with the new validator and pass every later check. Restarting
+        costs a re-download; resuming costs silent corruption.
+        """
         dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
         out_path = tmp_path / "partial.bin"
         out_path.write_bytes(b"partial")  # 7 bytes
 
-        mock_response = self._make_response(206, {"Content-Length": "3"}, [b"end"])
+        mock_response = self._make_response(200, {"Content-Length": "5"}, [b"whole"])
         with patch(
             "babel_explorer.core.downloader.requests.get", return_value=mock_response
         ) as mock_get:
             dl._download_with_retry("https://example.com/file", str(out_path), 1024)
             _, kwargs = mock_get.call_args
-            assert kwargs["headers"] == {"Range": "bytes=7-"}
+            assert kwargs["headers"] == {}, "no validator means no conditional resume"
+        assert out_path.read_bytes() == b"whole"
 
     def test_http_416_file_already_complete(self, tmp_path):
-        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
         out_path = tmp_path / "complete.bin"
-        out_path.write_bytes(b"full file")
 
+        # Attempt 1 over-declares Content-Length and delivers the whole 9-byte file,
+        # so the size check retries it; attempt 2 then asks for bytes past the end of
+        # a file it already holds in full, which is what a 416 legitimately means.
+        over_declared = self._make_response(
+            200, {"Content-Length": "20", "ETag": '"v1"'}, [b"full file"]
+        )
         mock_response = self._make_response(416)
         head = MagicMock(status_code=200, headers={"Content-Length": "9"})
         with (
             patch(
                 "babel_explorer.core.downloader.requests.get",
-                return_value=mock_response,
+                side_effect=[over_declared, mock_response],
             ),
             patch("babel_explorer.core.downloader.requests.head", return_value=head),
+            patch("babel_explorer.core.downloader.time.sleep"),
         ):
             headers = dl._download_with_retry(
                 "https://example.com/file", str(out_path), 1024
@@ -1115,6 +1139,42 @@ class TestDownloadWithRetry:
         # The 416 response describes the error body; saving its length as the file's
         # metadata would fail every later freshness check and re-download the file.
         assert headers == {"Content-Length": "9"}
+
+    def test_416_without_a_content_length_restarts(self, tmp_path):
+        """416 alone does not prove completeness — it is also how a shrunk file answers.
+
+        With no remote length to compare against there is no way to tell the two
+        apart, so the local file must not be promoted as complete.
+        """
+        dl = BabelDownloader(
+            url_base="https://example.com/", local_path=str(tmp_path), retries=3
+        )
+        out_path = tmp_path / "unverifiable.bin"
+
+        # Attempt 1 ends short, leaving bytes and a validator behind, so attempt 2
+        # sends the Range that draws the 416.
+        truncated = self._make_response(
+            200, {"Content-Length": "30", "ETag": '"old"'}, [b"possibly stale bytes"]
+        )
+        range_rejected = self._make_response(416)
+        fresh = self._make_response(
+            200, {"Content-Length": "5", "ETag": '"new"'}, [b"fresh"]
+        )
+        head = MagicMock(status_code=200, headers={})
+        with (
+            patch(
+                "babel_explorer.core.downloader.requests.get",
+                side_effect=[truncated, range_rejected, fresh],
+            ),
+            patch("babel_explorer.core.downloader.requests.head", return_value=head),
+            patch("babel_explorer.core.downloader.time.sleep"),
+        ):
+            headers = dl._download_with_retry(
+                "https://example.com/file", str(out_path), 1024
+            )
+
+        assert out_path.read_bytes() == b"fresh"
+        assert headers["ETag"] == '"new"'
 
     def test_server_no_resume_restarts_download(self, tmp_path):
         """When server responds 200 (instead of 206), partial file is removed and download restarts."""

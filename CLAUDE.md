@@ -121,12 +121,19 @@ permanent, because the file gets stamped with the *correct* ETag:
   orphaned `.tmp` carries no record of which version its bytes came from. Restarting costs a
   re-download; splicing costs silent data corruption. Do not "optimise" this back into a
   cross-run resume without persisting the validator alongside the `.tmp`.
-- **In-run resumes send `If-Range`** with the validator from the response they started writing
-  from, so a file rebuilt mid-download restarts (HTTP 200) instead of splicing.
+- **A resume requires a validator, and sends it as `If-Range`.** The validator is the ETag (else
+  Last-Modified) of the response the bytes on disk were written from, so a file rebuilt
+  mid-download restarts (HTTP 200) instead of splicing. A server that supplies neither leaves
+  nothing to make the resume conditional on, so `_download_with_retry()` discards the partial file
+  and restarts from zero rather than sending a bare `Range`. Do not relax that into "send `Range`,
+  add `If-Range` when we happen to have one": the case with no validator is exactly the one where
+  a splice cannot be detected afterwards.
 - **Sizes are checked, twice.** A stream that ends short of `Content-Length` raises
   `IncompleteDownloadError` and is retried, rather than being promoted as complete; and an HTTP
   416 is only treated as "already complete" once the local size matches the remote
-  `Content-Length`, since 416 also means the remote file *shrank* below the resume offset.
+  `Content-Length`, since 416 also means the remote file *shrank* below the resume offset. A HEAD
+  that reports no `Content-Length` at all is "cannot confirm", not "complete", and restarts too —
+  which cannot loop, because the retry has nothing on disk and so sends no `Range`.
 
 `_save_meta()` records the length of the whole file, taken from `Content-Range` rather than a 206
 response's `Content-Length` (which is only the range's length). Storing the partial length would
