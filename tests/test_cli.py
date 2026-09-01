@@ -791,6 +791,20 @@ class TestPathsFormatGuard:
         # Rejected before anything is downloaded.
         mock_dl.assert_not_called()
 
+    def test_single_curie_rejected_before_downloading(self):
+        """--paths implies --recurse, so finding out late costs a 4.6 GB download."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.BabelDownloader") as mock_dl,
+            patch("babel_explorer.cli.BabelXRefs"),
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            result = runner.invoke(cli, ["xrefs", "A:1", "--paths"])
+
+        assert result.exit_code != 0
+        assert "--paths needs at least two CURIEs" in result.output
+        mock_dl.assert_not_called()
+
     def test_allowed_for_console(self):
         runner = CliRunner()
         with (

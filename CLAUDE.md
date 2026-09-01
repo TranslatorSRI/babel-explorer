@@ -207,7 +207,10 @@ MONDO:0004979 "asthma"  skos:exactMatch  EFO:0000270 "asthma"
 This applies everywhere labels appear: `xrefs --labels`, `xrefs --paths --labels`, `ids --labels`, and `test-concord`.
 
 `--paths` is console-only; combining it with `--format json`/`tsv`/`csv` is rejected up front rather
-than silently emitting the full cross-reference list.
+than silently emitting the full cross-reference list. It also needs at least two CURIEs, and that
+is checked in the same place, before `make_downloader()` — `--paths` implies `--recurse`, so
+finding out inside `_print_paths()` would cost a multi-gigabyte download and a full recursive query
+before rejecting the run.
 
 **When a label is absent, omit it entirely** — do not substitute a placeholder like `-` or `""`. A CURIE with no label renders as just the bare CURIE.
 

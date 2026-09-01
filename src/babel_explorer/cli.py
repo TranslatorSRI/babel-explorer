@@ -248,12 +248,13 @@ def _depth_of(curie: str, query_set: set, depth: int | None) -> int | None:
 
 
 def _print_paths(console, curies, xrefs_list, labels: bool) -> None:
-    """Print the shortest path between every pair of query CURIEs."""
-    curie_list = list(curies)
-    if len(curie_list) < 2:
-        console.print("[yellow]--paths requires at least two CURIEs.[/yellow]")
-        return
+    """Print the shortest path between every pair of query CURIEs.
 
+    The caller checks the "at least two CURIEs" requirement up front — see ``xrefs`` —
+    so that a run that cannot produce a path never downloads Concord.parquet to find
+    that out. With fewer than two, ``combinations`` simply yields no pairs.
+    """
+    curie_list = list(curies)
     query_set = set(curie_list)
     # One neighbour map for every pair: rebuilding it per pair re-walks the whole
     # recursive xref list C(n,2) times.
@@ -402,13 +403,22 @@ def xrefs(
     :return: None
     """
     if paths:
-        # Checked before anything is downloaded. Only the console renderer knows how to
-        # lay out paths; the other formats would silently emit the full recursive xref
-        # list instead, which looks like a successful --paths run but is not one.
+        # Both checks happen before anything is downloaded. --paths implies --recurse,
+        # so getting one of them wrong otherwise costs a multi-gigabyte Concord.parquet
+        # download and a full recursive query before the run is rejected.
+        #
+        # Only the console renderer knows how to lay out paths; the other formats would
+        # silently emit the full recursive xref list instead, which looks like a
+        # successful --paths run but is not one.
         if fmt != "console":
             raise click.UsageError(
                 f"--paths is only supported with --format console, not --format {fmt}. "
                 f"Drop --paths to emit the full cross-reference list as {fmt}."
+            )
+        if len(curies) < 2:
+            raise click.UsageError(
+                "--paths needs at least two CURIEs to find a path between. "
+                "Drop --paths to list the cross-references of a single CURIE."
             )
         recurse = True
 
