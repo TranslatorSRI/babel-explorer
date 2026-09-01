@@ -1,0 +1,63 @@
+[project]
+name = "babel-explorer"
+version = "0.1.0"
+description = "Tool for querying and exploring Babel APIs and intermediate files"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Gaurav Vaidya", email = "gaurav@ggvaidya.com" }]
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "click>=8.3.1",
+    "duckdb>=1.4.2",
+    "python-dotenv>=1.0",
+    "requests>=2.32.5",
+    "rich>=13",
+    "tqdm>=4.67.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "filelock>=3.16",
+    "pytest>=8.3.5",
+    "pytest-xdist[psutil]>=3.6",
+    "ruff>=0.11.0",
+]
+
+[project.scripts]
+babel-explorer = "babel_explorer.cli:cli"
+
+[tool.ruff]
+# ruff 0.16 began formatting Python inside Markdown code blocks. Our snippets are
+# illustrative fragments rather than runnable modules, so keep ruff out of them.
+# Line length is left at ruff's default of 88.
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # let the formatter handle wrapping consistently
+]
+
+[tool.pytest.ini_options]
+addopts = "-n auto"
+markers = [
+    "integration: tests requiring network access (deselect with '-m \"not integration\"')",
+    "slow: tests downloading Identifiers.parquet, the largest file Babel publishes (deselect with '-m \"not slow\"')",
+]
