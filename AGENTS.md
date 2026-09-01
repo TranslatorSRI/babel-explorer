@@ -57,46 +57,16 @@ path segment for older trees that predate it. `latest/` resolves to whatever rel
 points at. That fallback segment is now exactly `BABEL_VERSION`, so a pinned release still
 resolves when `VERSION.txt` is unreachable, while `latest` yields `None` as before.
 
-The `.babel-version` marker records the release the server *resolved* to, not the one requested, so
-`BABEL_VERSION=latest` and `BABEL_VERSION=2025dec11` share a cache while they name the same
-release. That is deliberate — do not "fix" it into a spurious refresh.
-
 `BABEL_LOCAL_DIR` holds **one Babel release at a time**, recorded in a `.babel-version` marker.
-When the release changes, `BabelDownloader.sync_cache_version()` clears `last_checked` from the
-`.meta` sidecars in `<local_dir>/duckdb/` — never the Parquet files — so the existing ETag path
-re-checks each cached file and re-downloads only what actually changed. The stored ETag is kept
-deliberately: deleting the sidecar outright skips the HEAD and forces an unconditional
-multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, so no prefix from the previous
-release survives into the next one. This keeps `Concord.parquet` and `Identifiers.parquet` from
-being read together across two different Babel releases.
+When the release changes, the downloader re-validates every cached file against the new release and
+re-downloads only what actually changed — the multi-gigabyte Parquet files are never deleted
+speculatively. Downloads land in a sibling `.tmp` and are promoted with `os.replace`, so a partial
+file is never visible as the real one.
 
-`sync_cache_version()` does **not** write the new release to `.babel-version` itself. The marker
-claims "the local cache holds this release", which is only true once every cached file has been
-re-validated against it, so it is written by `_write_version_marker_if_synced()` after a download
-instead — once no `.meta` sidecar in `duckdb/` is still missing its `last_checked`. Stamping it up
-front would leave a run interrupted between `Concord.parquet` and `Identifiers.parquet` with a
-marker naming the new release over a half-old cache, and the next run would see a marker that
-matches and skip the refresh entirely. A cached file nobody asks for holds the marker back
-indefinitely, costing one HEAD per run; that is correct, not a bug — the file really is still from
-the previous release.
-
-`--check-download never` (`freshness_seconds=inf`) suppresses re-checks *within* a release, not
-across one. `_is_within_freshness()` tests for a missing `last_checked` **before** the `inf`
-shortcut, so a sidecar the version change expired is never fresh. Reordering those two lines
-re-opens the whole hole: `never` would hand back the previous release's Parquet with no network
-call at all.
-
-A `.tmp` is deleted in two places, on purpose. The delete in `get_downloaded_file()` is the safety
-guarantee (see [Partial downloads](#partial-downloads)); the sweep in `sync_cache_version()` is
-housekeeping that reclaims gigabytes belonging to a release nobody will ask for again, including
-for files that are never re-downloaded and so never reach `get_downloaded_file()`. Dropping the
-sweep only wastes disk; dropping the other reintroduces silent Parquet corruption.
-
-If a HEAD request fails, `_remote_unchanged()` returns `None` — "could not check", distinct from
-`True`/"confirmed unchanged". The cached file is still used, but `last_checked` is deliberately
-**not** refreshed, so the next run checks again. Restamping it there would let one flaky HEAD pin
-the previous release's Parquet as freshly validated for the whole freshness window, immediately
-after `sync_cache_version()` cleared `last_checked` for a new release.
+Those rules are load-bearing and each records a specific failure — a corrupt or cross-release
+Parquet that then passes every freshness check, permanently. See
+**[docs/downloading.md](docs/downloading.md)** before changing anything in `core/downloader.py`,
+`sync_cache_version()`, `_is_within_freshness()` or the resume path.
 
 `BabelExplorerGroup.invoke()` turns `requests.RequestException` into a `ClickException`, so an
 unreachable NodeNorm reports an error rather than a traceback. In practice only NodeNorm reaches
@@ -110,66 +80,13 @@ being queried, since labels and cliques would not match the cross-references. Pa
 (`xrefs` without `--labels`, including `--recurse`, which is served entirely by DuckDB; and `ids`
 without `--labels`) or when either version is unavailable.
 
-## Partial downloads
-
-Downloads land in a sibling `.tmp` file and are promoted with `os.replace`. Three rules keep a
-`.tmp` from becoming a corrupt Parquet that then passes every freshness check — a failure that is
-permanent, because the file gets stamped with the *correct* ETag:
-
-- **A `.tmp` is never resumed across runs.** `get_downloaded_file()` deletes any it finds before
-  starting, and cleans up on `BaseException` so a Ctrl-C leaves nothing behind. Resume is by byte
-  offset, the only way to reach the download at all is that the remote bytes *changed*, and an
-  orphaned `.tmp` carries no record of which version its bytes came from. Restarting costs a
-  re-download; splicing costs silent data corruption. Do not "optimise" this back into a
-  cross-run resume without persisting the validator alongside the `.tmp`.
-- **A resume requires a validator, and sends it as `If-Range`.** The validator is the ETag (else
-  Last-Modified) of the response the bytes on disk were written from, so a file rebuilt
-  mid-download restarts (HTTP 200) instead of splicing. A server that supplies neither leaves
-  nothing to make the resume conditional on, so `_download_with_retry()` discards the partial file
-  and restarts from zero rather than sending a bare `Range`. Do not relax that into "send `Range`,
-  add `If-Range` when we happen to have one": the case with no validator is exactly the one where
-  a splice cannot be detected afterwards.
-- **Sizes are checked, twice.** A stream that ends short of `Content-Length` raises
-  `IncompleteDownloadError` and is retried, rather than being promoted as complete; and an HTTP
-  416 is only treated as "already complete" once the local size matches the remote
-  `Content-Length`, since 416 also means the remote file *shrank* below the resume offset. A HEAD
-  that reports no `Content-Length` at all is "cannot confirm", not "complete", and restarts too —
-  which cannot loop, because the retry has nothing on disk and so sends no `Range`.
-
-`_save_meta()` records the length of the whole file, taken from `Content-Range` rather than a 206
-response's `Content-Length` (which is only the range's length). Storing the partial length would
-make the Last-Modified fallback in `_remote_unchanged()` compare it against the full remote length
-forever, re-downloading an unchanged multi-gigabyte file on every freshness expiry.
-
 ## Commands
 
 ### Running the Application
 
-```bash
-# Get cross-references for one or more CURIEs
-uv run babel-explorer xrefs MONDO:0004979
-
-# Get cross-references with expansion (recursive lookup)
-uv run babel-explorer xrefs MONDO:0004979 --recurse
-
-# Get cross-references with labels from NodeNorm
-uv run babel-explorer xrefs MONDO:0004979 --labels
-
-# Get ID records for CURIEs
-uv run babel-explorer ids MONDO:0004979
-
-# Get ID records with labels from NodeNorm
-uv run babel-explorer ids MONDO:0004979 --labels
-
-# Test concordance changes with NodeNorm
-uv run babel-explorer test-concord MONDO:0004979 HP:0000001
-
-# Use a custom Babel server or local directory (overrides .env)
-uv run babel-explorer xrefs MONDO:0004979 --local-dir data --babel-version 2025dec11
-
-# Override the composed URL entirely (command line only; there is no BABEL_URL env var)
-uv run babel-explorer xrefs MONDO:0004979 --babel-url https://stars.renci.org/var/babel/latest/
-```
+`README.md` documents every command and flag with worked examples; it is the user-facing reference
+and is kept current. Do not restate it here — this file covers what an agent needs *beyond* the
+README.
 
 ### Development Commands
 
@@ -249,8 +166,8 @@ before rejecting the run.
    - Caching is on disk, keyed by ETag and the `.meta` sidecars — not in memory. Only
      `babel_version` is memoised, via `functools.cached_property`
    - Resolves the Babel version (`resolve_babel_version`) and refreshes the cache when it changes (`sync_cache_version`)
-   - Raises `MissingBabelFileError` on a 404 for a `duckdb/` file, since public releases do not publish them
-   - **Important**: Requires network access but no external tools like `wget`
+   - Raises `MissingBabelFileError` on **any** 404, not just `duckdb/` paths, so a release that
+     omits a file it is asked for reports that rather than a bare HTTP error
 
 2. **BabelXRefs** (`src/babel_explorer/core/babel_xrefs.py`):
    - Main query engine for cross-references
@@ -284,12 +201,9 @@ before rejecting the run.
 
 ### Key Design Patterns
 
-- **Lazy downloading**: Files are only downloaded when first accessed
-- **Caching**: Downloads are cached on disk (ETag + `.meta` sidecar); NodeNorm results are cached
-  in per-instance dicts. Neither uses `functools.lru_cache`
-- **Recursive expansion**: The `--recurse` flag recursively follows all cross-references to build complete graphs
-- **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups, spilling
-  to `<BABEL_LOCAL_DIR>/duckdb-spill/` rather than the working directory
+- **Lazy downloading**: files are only downloaded when first accessed
+- **Recursive expansion**: `--recurse` follows cross-references transitively in a single
+  `WITH RECURSIVE` DuckDB query rather than a Python loop
 
 ## Testing
 
@@ -303,7 +217,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 Note that `not slow` is *not* the same as "small". `Concord.parquet` is itself multi-gigabyte in
 current releases (4.6 GB in `2026jul22`) and its tests are not marked slow, because excluding them
 would leave the non-slow integration set covering nothing that touches real data. Budget for that
-before pointing CI at a Babel that publishes the Parquet files (see issue #18).
+before pointing CI at a Babel that publishes the Parquet files (see #18 and #28).
 
 Do not record per-file test counts here — they drift silently and then mislead. Get them on demand:
 
@@ -320,7 +234,7 @@ broken test environment.
 **A release can publish one DuckDB file without the other.** `2026jul22` serves a 4.6 GB
 `Concord.parquet` with no `Identifiers.parquet` beside it, so "does this release have the Parquet
 files?" is not one question. Every DuckDB file goes through `_download_or_skip()`, which skips on
-the `MissingBabelFileError` the downloader already raises for a 404 on a `duckdb/` path.
+the `MissingBabelFileError` the downloader already raises on a 404.
 `shared_downloader` answers only the genuinely session-wide question — is the server reachable —
 and deliberately probes the release root rather than a specific file, so it cannot be mistaken for
 a publication check. Do not collapse these back into one up-front probe: the non-slow integration
@@ -373,18 +287,12 @@ since the initial commit. Consequences a future contributor will trip over:
 - **A clone taken before that date has divergent history.** Every SHA changed except `gh-pages`.
   Re-clone; do not try to merge or rebase the old history back together.
 - **PRs #1, #4, #6, #7 and #11 are dead.** GitHub refuses to reopen a PR whose original head
-  commits no longer exist, so they were recreated as #20-#24. Old PR links and commit SHAs in
-  issue comments point at nothing.
-- **`.env.*` is gitignored, `env.default` is not.** The URL leaked in the first place because it
-  was a default in source rather than configuration. `TestCommittedConfigTemplate`
-  (`tests/test_cli.py`) now fails if a non-public host appears in `env.default`; that test is the
-  enforcement, so do not weaken it to accommodate a convenient default.
-
-## Important Notes
-
-- **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
-- **Babel versions**: The Babel release comes from `BABEL_RELEASES_URL` + `BABEL_VERSION`, or from `--babel-url` when given; see [Babel versions](#babel-versions) above
-- **`.env`**: gitignored. Only `env.default` is committed, and it must never contain the Translator-specific Babel URL
+  commits no longer exist, so they were recreated as #20-#24 (#20 has since merged; the rest are
+  still open). Old PR links and commit SHAs in issue comments point at nothing.
+- **The rule in [Configuration](#configuration) is now enforced by a test.**
+  `TestCommittedConfigTemplate` (`tests/test_cli.py`) fails if a non-public host appears in
+  `env.default`. The URL leaked in the first place because it was a default in source rather than
+  configuration, so do not weaken that test to accommodate a convenient default.
 
 ## File Locations
 
