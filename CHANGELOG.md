@@ -35,5 +35,6 @@ label enrichment from NodeNorm.
   public `latest` is `2025dec11`, so the skew check fires. Pin `BABEL_VERSION` to the release
   NodeNorm was built from, or pass `--allow-version-mismatch`. Tracked in
   [#17](https://github.com/TranslatorSRI/babel-explorer/issues/17).
-- 28 of 288 tests are integration tests that skip without a Babel release publishing the Parquet
-  files. Tracked in [#18](https://github.com/TranslatorSRI/babel-explorer/issues/18).
+- The integration tests skip without a Babel release publishing the Parquet files, so a default
+  run exercises only the unit suite. Tracked in
+  [#18](https://github.com/TranslatorSRI/babel-explorer/issues/18).

@@ -231,7 +231,8 @@ before rejecting the run.
 1. **BabelDownloader** (`src/babel_explorer/core/downloader.py`):
    - Downloads Babel intermediate files from a remote HTTP(S) server using Python's `requests` library (streaming downloads)
    - Caches files locally in a configurable directory (default: `data/`), one Babel release at a time
-   - Uses `@functools.lru_cache` to avoid re-downloading
+   - Caching is on disk, keyed by ETag and the `.meta` sidecars — not in memory. Only
+     `babel_version` is memoised, via `functools.cached_property`
    - Resolves the Babel version (`resolve_babel_version`) and refreshes the cache when it changes (`sync_cache_version`)
    - Raises `MissingBabelFileError` on a 404 for a `duckdb/` file, since public releases do not publish them
    - **Important**: Requires network access but no external tools like `wget`
@@ -249,7 +250,8 @@ before rejecting the run.
 3. **NodeNorm** (`src/babel_explorer/core/nodenorm.py`):
    - Integration with NodeNormalization API (https://nodenormalization-sri.renci.org/)
    - Fetches labels, biolink types, and equivalent identifiers for CURIEs
-   - Uses `@functools.lru_cache` for performance
+   - Caches normalisation results, identifiers and cliques in per-instance dicts; a new
+     `NodeNorm` object is the way to get uncached results
    - `get_babel_version()` reads the `status` endpoint to report which Babel release it was built from
    - Optional component for label enrichment
 
@@ -268,7 +270,8 @@ before rejecting the run.
 ### Key Design Patterns
 
 - **Lazy downloading**: Files are only downloaded when first accessed
-- **LRU caching**: Heavy use of `@functools.lru_cache` to avoid redundant downloads and API calls
+- **Caching**: Downloads are cached on disk (ETag + `.meta` sidecar); NodeNorm results are cached
+  in per-instance dicts. Neither uses `functools.lru_cache`
 - **Recursive expansion**: The `--recurse` flag recursively follows all cross-references to build complete graphs
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups, spilling
   to `<BABEL_LOCAL_DIR>/duckdb-spill/` rather than the working directory
