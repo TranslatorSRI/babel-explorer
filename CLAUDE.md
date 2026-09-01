@@ -52,6 +52,12 @@ multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, so no prefix
 release survives into the next one. This keeps `Concord.parquet` and `Identifiers.parquet` from
 being read together across two different Babel releases.
 
+A `.tmp` is deleted in two places, on purpose. The delete in `get_downloaded_file()` is the safety
+guarantee (see [Partial downloads](#partial-downloads)); the sweep in `sync_cache_version()` is
+housekeeping that reclaims gigabytes belonging to a release nobody will ask for again, including
+for files that are never re-downloaded and so never reach `get_downloaded_file()`. Dropping the
+sweep only wastes disk; dropping the other reintroduces silent Parquet corruption.
+
 If a HEAD request fails, `_remote_unchanged()` returns `None` — "could not check", distinct from
 `True`/"confirmed unchanged". The cached file is still used, but `last_checked` is deliberately
 **not** refreshed, so the next run checks again. Restamping it there would let one flaky HEAD pin

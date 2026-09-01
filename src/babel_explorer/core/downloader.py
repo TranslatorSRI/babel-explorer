@@ -123,11 +123,20 @@ class BabelDownloader:
         destroyed if the version cannot be trusted, and an interrupted refresh self-heals:
         a ``.meta`` file is only written after a successful download.
 
-        Partial ``.tmp`` downloads are removed, because they are resumed by byte offset
-        and the bytes already on disk belong to the previous release. ``get_downloaded_file``
-        also discards any ``.tmp`` it finds before starting a download, which covers the
-        cases this sweep cannot see (a content change within one release, or a file that is
-        never re-downloaded); clearing them here keeps stale gigabytes off disk as well.
+        Partial ``.tmp`` downloads are removed, because the bytes already on disk belong
+        to the previous release. This is deliberately the *second* of two deletes, and the
+        redundancy is the point:
+
+        * ``get_downloaded_file`` discarding a leftover ``.tmp`` before each download is
+          the one that makes resume safe. It is the only one that covers a content change
+          within a single release, or a ``local_path`` this method never looked at.
+        * This sweep is housekeeping. It reclaims gigabytes belonging to a release nobody
+          will ask for again, including for files that are never re-downloaded and so
+          never reach ``get_downloaded_file``.
+
+        Neither is redundant with the other for the case it owns. Removing this sweep only
+        wastes disk; removing the one in ``get_downloaded_file`` reintroduces silent
+        Parquet corruption — see the comment there before touching either.
         """
         version = self.babel_version
         if version is None:
