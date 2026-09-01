@@ -18,7 +18,7 @@ uv sync
 uv sync --group dev
 
 # Configure the Babel and NodeNorm endpoints
-cp .env.example .env
+cp env.default .env
 
 # Run the CLI
 uv run babel-explorer --help
@@ -26,22 +26,39 @@ uv run babel-explorer --help
 
 ## Configuration
 
-`BABEL_URL`, `BABEL_LOCAL_DIR`, `BABEL_CHECK_DOWNLOAD`, `NODENORM_URL`, and
+`BABEL_RELEASES_URL`, `BABEL_VERSION`, `BABEL_LOCAL_DIR`, `BABEL_CHECK_DOWNLOAD`, `NODENORM_URL`, and
 `BABEL_ALLOW_VERSION_MISMATCH` are read from `.env` (via `python-dotenv`, loaded in the `cli()`
 group) or the environment. Each is also a command-line option, and precedence runs
 **flag > environment variable > `.env` > built-in default**.
 
-`.env.example` ships with the **public** Babel URL only. Public Babel releases do not currently
+The release actually queried — the **effective Babel URL** — is
+`BABEL_RELEASES_URL.rstrip("/") + "/" + BABEL_VERSION + "/"`, composed by `resolve_babel_url()`
+(`cli.py`) on top of the pure `compose_babel_url()` (`core/downloader.py`). `compose_babel_url`
+lives in the downloader rather than the CLI because `tests/constants.py` needs the same
+composition and must not import Click to get it.
+
+`--babel-url` overrides the composed pair with a complete URL, for a tree that does not follow the
+releases-directory layout. It has **no `envvar=`, on purpose**: two variables already feed the
+composed URL, and a third that silently outranked both would make "which release am I querying?"
+unanswerable from the environment alone. Do not add one. `BABEL_URL` was the single pre-refactor
+setting and is now inert; `cli()` warns if it is still set so it does not fail silently.
+
+`env.default` ships with the **public** Babel URL only. Public Babel releases do not currently
 publish the DuckDB Parquet files this tool needs, so Translator team members must contact the
-Babel developers for the Translator-specific URL and set `BABEL_URL` to it. Never commit that URL
-to this repository.
+Babel developers for the Translator-specific releases URL and set `BABEL_RELEASES_URL` to it.
+Never commit that URL to this repository.
 
 ## Babel versions
 
-The Babel version behind `--babel-url` is resolved by `resolve_babel_version()`
+The Babel version behind the effective Babel URL is resolved by `resolve_babel_version()`
 (`core/downloader.py`), which reads `VERSION.txt` (`Babel 2026jul22`) and falls back to the final
 path segment for older trees that predate it. `latest/` resolves to whatever release it currently
-points at.
+points at. That fallback segment is now exactly `BABEL_VERSION`, so a pinned release still
+resolves when `VERSION.txt` is unreachable, while `latest` yields `None` as before.
+
+The `.babel-version` marker records the release the server *resolved* to, not the one requested, so
+`BABEL_VERSION=latest` and `BABEL_VERSION=2025dec11` share a cache while they name the same
+release. That is deliberate — do not "fix" it into a spurious refresh.
 
 `BABEL_LOCAL_DIR` holds **one Babel release at a time**, recorded in a `.babel-version` marker.
 When the release changes, `BabelDownloader.sync_cache_version()` clears `last_checked` from the
@@ -118,7 +135,10 @@ uv run babel-explorer ids MONDO:0004979 --labels
 uv run babel-explorer test-concord MONDO:0004979 HP:0000001
 
 # Use a custom Babel server or local directory (overrides .env)
-uv run babel-explorer xrefs MONDO:0004979 --local-dir data --babel-url https://stars.renci.org/var/babel/latest/
+uv run babel-explorer xrefs MONDO:0004979 --local-dir data --babel-version 2025dec11
+
+# Override the composed URL entirely (command line only; there is no BABEL_URL env var)
+uv run babel-explorer xrefs MONDO:0004979 --babel-url https://stars.renci.org/var/babel/latest/
 ```
 
 ### Development Commands
@@ -210,7 +230,7 @@ than silently emitting the full cross-reference list.
 
 ### Data Flow
 
-1. User provides CURIEs via CLI; `BABEL_URL` / `NODENORM_URL` come from `.env` or the environment
+1. User provides CURIEs via CLI; `BABEL_RELEASES_URL` + `BABEL_VERSION` / `NODENORM_URL` come from `.env` or the environment, and are composed into the effective Babel URL
 2. BabelDownloader resolves the Babel version, refreshes the cache if it changed, and ensures required Parquet files are downloaded
 3. BabelXRefs queries files using DuckDB
 4. If `--labels` is set, NodeNorm is queried for additional metadata (`--recurse` alone does not consult NodeNorm — the recursive expansion is a single DuckDB query)
@@ -239,9 +259,9 @@ uv run pytest --collect-only -q -m "not integration"   # unit test count
 uv run pytest --collect-only -q                        # full count
 ```
 
-**Integration tests skip when `BABEL_URL` points at a Babel release that does not publish
+**Integration tests skip when the composed Babel URL points at a release that does not publish
 `duckdb/Concord.parquet`**, which is the case for every public release right now. A run reporting
-a couple of dozen skips is the expected result without a Translator `BABEL_URL` in `.env`, not a
+a couple of dozen skips is the expected result without a Translator `BABEL_RELEASES_URL` in `.env`, not a
 broken test environment.
 
 ### Test Infrastructure
@@ -260,8 +280,8 @@ broken test environment.
 ## Important Notes
 
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
-- **Babel versions**: The Babel release comes from whatever `--babel-url` / `BABEL_URL` points at; see [Babel versions](#babel-versions) above
-- **`.env`**: gitignored. Only `.env.example` is committed, and it must never contain the Translator-specific Babel URL
+- **Babel versions**: The Babel release comes from `BABEL_RELEASES_URL` + `BABEL_VERSION`, or from `--babel-url` when given; see [Babel versions](#babel-versions) above
+- **`.env`**: gitignored. Only `env.default` is committed, and it must never contain the Translator-specific Babel URL
 
 ## File Locations
 
@@ -269,5 +289,5 @@ broken test environment.
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `<BABEL_LOCAL_DIR>/duckdb/*.parquet` (default `data/duckdb/`)
-- Endpoint configuration: `.env` (gitignored), template in `.env.example`
+- Endpoint configuration: `.env` (gitignored), template in `env.default`
 - Entry point: `src/babel_explorer/cli.py`
