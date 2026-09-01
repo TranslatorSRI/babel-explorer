@@ -5,7 +5,72 @@ reads it too.
 
 ## Project Overview
 
-babel-explorer is a tool for querying and exploring Babel intermediate files. It allows users to discover why two biological/chemical identifiers are considered identical by the Babel system, which handles cross-references between different ontology and database identifiers (e.g., MONDO, HP, UMLS, HGNC).
+babel-explorer is a CLI for asking Babel **why** it considers two identifiers the same thing. It
+reads Babel's intermediate Parquet files through DuckDB and, optionally, enriches the results
+with labels from NodeNorm. It is a read-only diagnostic tool: it never writes to a Babel release
+and never changes what Babel decided.
+
+## Domain context
+
+If you have not worked in the Translator ecosystem, read this before the code — the terms below are
+used throughout it without explanation.
+
+**Babel** builds *cliques*: equivalence sets of identifiers across biomedical vocabularies,
+"recognizing that MESH:D014867 and DRUGBANK:DB09145 both refer to water". A clique carries a
+**preferred identifier**, a **Biolink type**, and the list of equivalent identifiers. Which member
+becomes preferred is decided by the `id_prefixes` order in the Biolink Model, not by this tool.
+
+**Concords** are the asserted cross-reference edges that *feed* clique building — the inputs, not
+the output. This distinction is the whole point of babel-explorer, and it cuts both ways:
+
+> Babel's own `AGENTS.md` says to answer clique-membership questions "from a finished build — the
+> compendia themselves, the DuckDB `Edge` table, or Node Normalization — never from the concords
+> that fed it."
+
+So `xrefs` answers **"what did Babel read that made it think these are the same?"** — which is
+exactly what you want when a merge looks wrong. It does *not* tell you what Babel finally decided.
+For that, ask NodeNorm: `--labels` and `test-concord` do. Do not "improve" `xrefs` into a clique
+oracle; it is deliberately reporting the evidence, not the verdict.
+
+**NodeNorm** (the NodeNormalization service) serves the finished cliques: give it a CURIE, get back
+the preferred CURIE, the equivalent identifiers, and Biolink types. Its data "is created by
+Babel" — each deployment is built from one specific Babel release, which is why a version skew
+between it and the Parquet files matters, and why `/status` reporting `babel_version` is what this
+tool checks. **Conflation** merges cliques that are distinct but usually wanted together;
+`nodenorm.py` requests both kinds on every call (`conflate` for GeneProtein,
+`drug_chemical_conflate` for DrugChemical).
+
+### What this tool reads
+
+A Babel release is a dated directory (`2026jul22`). This tool uses three files from `duckdb/`
+inside one:
+
+| File | Contents |
+|---|---|
+| `Concord.parquet` | One row per asserted cross-reference: `filename`, `subj`, `pred`, `obj`. `filename` is the concord file the edge came from, which is why `xrefs` can show provenance. |
+| `Identifiers.parquet` | Per-identifier records; schema varies by release, so `IdentifierRecord` reads columns dynamically. |
+| `Metadata.parquet` | Small; downloaded alongside Concord by the integration fixtures. |
+
+**These three files are not documented upstream** — neither Babel's `README.md` nor its
+`releases/ARTIFACTS.md` describes them. The schema above is what *this* repository's code assumes,
+verified against real files, not a contract Babel has published. Treat a release that disagrees as
+a real possibility rather than a bug in the reader, and see [Testing](#testing): a release can
+publish `Concord.parquet` without `Identifiers.parquet`.
+
+### Upstream repositories
+
+- **[NCATSTranslator/Babel](https://github.com/NCATSTranslator/Babel)** — builds the cliques and
+  the files this tool reads. Its `AGENTS.md` is the best short account of the pipeline and of how
+  preferred CURIEs are chosen.
+- **[NCATSTranslator/NodeNormalization](https://github.com/NCATSTranslator/NodeNormalization)** —
+  the service behind `--labels`, `test-concord` and the version check.
+- **[NCATSTranslator/NameResolution](https://github.com/NCATSTranslator/NameResolution)** — name →
+  CURIE lookup, built on NodeNorm. Not used by this tool; listed because it is the third service
+  people expect to find alongside the other two.
+
+Release naming, `latest`, and `VERSION.txt` are conventions this tool relies on but that are not
+documented in any of those repositories — see [Babel versions](#babel-versions) for what it
+actually does with them.
 
 ## Development Setup
 
