@@ -147,7 +147,19 @@ def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
 
 @pytest.fixture(scope="session")
 def nodenorm() -> NodeNorm:
-    """A NodeNorm client pointed at the public API."""
+    """A NodeNorm client pointed at the public API.
+
+    Probes ``status`` once and skips the NodeNorm integration tests if it cannot be
+    reached, matching what ``shared_downloader`` does for Babel. Without this a RENCI
+    outage turned every one of these tests red on CI's push and weekly-cron runs — a
+    failure that says nothing about the code under test. The probe cannot cover an
+    outage that begins mid-run; it covers the case that actually recurs.
+    """
+    probe_url = NODENORM_URL.rstrip("/") + "/status"
+    try:
+        requests.get(probe_url, timeout=30).raise_for_status()
+    except requests.RequestException as e:
+        pytest.skip(f"NodeNorm unreachable at {probe_url}: {e}")
     return NodeNorm(nodenorm_url=NODENORM_URL)
 
 
