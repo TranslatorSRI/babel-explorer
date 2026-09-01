@@ -246,6 +246,30 @@ class TestMissingBabelFile:
 
         assert mock_get.call_count == 1, "a 404 must not be retried"
 
+    def test_404_message_names_the_current_setting(self, tmp_path):
+        """This message is where most people learn the config scheme exists.
+
+        It named BABEL_URL for as long as that variable did; nothing caught the
+        wording when the variable was replaced. Pin it to the setting that works.
+        """
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        # Preset so the patched requests.get is not also asked to resolve VERSION.txt.
+        dl.babel_version = "2025dec11"
+        response = MagicMock(status_code=404)
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+
+        with patch(
+            "babel_explorer.core.downloader.requests.get", return_value=response
+        ):
+            with pytest.raises(MissingBabelFileError) as excinfo:
+                dl.get_downloaded_file(CONCORD_FILE)
+
+        message = str(excinfo.value)
+        assert "BABEL_RELEASES_URL" in message
+        assert "--babel-url" in message
+        assert "set BABEL_URL" not in message
+
 
 # ==========================================================================
 # Unit Tests — no network required

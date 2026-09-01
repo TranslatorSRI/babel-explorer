@@ -143,7 +143,11 @@ celerybeat.pid
 *.sage.py
 
 # Environments
+# .env.* as well as .env: a .env.backup or .env.local holding the Translator-specific
+# releases URL is exactly what must never be committed, and a blanket `git add` would
+# take it. env.default does not match this pattern and stays tracked.
 .env
+.env.*
 .envrc
 .venv
 env/

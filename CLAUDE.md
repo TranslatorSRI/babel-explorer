@@ -282,6 +282,21 @@ broken test environment.
 - **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
 - **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields, plus `nodenorm_label` under `--labels`). Returned by `BabelXRefs.get_curie_ids()`. The NodeNorm label is *not* called `label`: Identifiers.parquet has its own `label` column, which lands in `extra_fields` and would collide with it once the record is flattened for json/tsv/csv.
 
+## Repository history was rewritten on 2026-09-01
+
+Every commit was rewritten to remove an internal Babel URL that had been the hardcoded default
+since the initial commit. Consequences a future contributor will trip over:
+
+- **A clone taken before that date has divergent history.** Every SHA changed except `gh-pages`.
+  Re-clone; do not try to merge or rebase the old history back together.
+- **PRs #1, #4, #6, #7 and #11 are dead.** GitHub refuses to reopen a PR whose original head
+  commits no longer exist, so they were recreated as #20-#24. Old PR links and commit SHAs in
+  issue comments point at nothing.
+- **`.env.*` is gitignored, `env.default` is not.** The URL leaked in the first place because it
+  was a default in source rather than configuration. `TestCommittedConfigTemplate`
+  (`tests/test_cli.py`) now fails if a non-public host appears in `env.default`; that test is the
+  enforcement, so do not weaken it to accommodate a convenient default.
+
 ## Important Notes
 
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases

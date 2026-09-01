@@ -5,6 +5,8 @@ Unit tests — no network required.
 """
 
 import json
+import pathlib
+import re
 from unittest.mock import MagicMock, patch
 
 import click
@@ -13,7 +15,10 @@ from click.testing import CliRunner
 
 from babel_explorer.cli import cli, parse_duration
 from babel_explorer.core.babel_xrefs import CrossReference, IdentifierRecord
-from babel_explorer.core.downloader import MissingBabelFileError
+from babel_explorer.core.downloader import (
+    MissingBabelFileError,
+    compose_babel_url,
+)
 from babel_explorer.core.nodenorm import Identifier
 
 # ==========================================================================
@@ -661,6 +666,69 @@ class TestUrlConfiguration:
             result = runner.invoke(cli, ["xrefs", "A:1", "--babel-version", bad])
         assert result.exit_code != 0
         assert "--babel-version" in result.output or "may not contain" in result.output
+
+
+class TestCommittedConfigTemplate:
+    """env.default is the only config file that ships, so it is the one that can leak.
+
+    CLAUDE.md and README.md both say the Translator-specific URL must never be committed.
+    Until now nothing enforced it, and the URL did in fact sit in this repository's git
+    history from the initial commit until it was rewritten out on 2026-09-01. A rule with
+    no test is a rule that comes back.
+    """
+
+    TEMPLATE = pathlib.Path(__file__).resolve().parent.parent / "env.default"
+
+    def _settings(self) -> dict[str, str]:
+        settings = {}
+        for line in self.TEMPLATE.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, _, value = line.partition("=")
+                settings[key.strip()] = value.strip().strip("\"'")
+        return settings
+
+    def test_template_is_the_committed_one(self):
+        """.env.example was renamed; nothing should resurrect it alongside env.default."""
+        assert self.TEMPLATE.is_file()
+        assert not (self.TEMPLATE.parent / ".env.example").exists()
+
+    def test_documents_every_setting_the_cli_reads(self):
+        """A setting the CLI honours but the template omits is one nobody discovers."""
+        assert set(self._settings()) == {
+            "BABEL_RELEASES_URL",
+            "BABEL_VERSION",
+            "BABEL_LOCAL_DIR",
+            "BABEL_CHECK_DOWNLOAD",
+            "NODENORM_URL",
+        }
+
+    def test_defaults_match_the_cli_defaults(self):
+        """A template that disagrees with the code silently changes what `cp` gives you."""
+        settings = self._settings()
+        assert settings["BABEL_RELEASES_URL"] == "https://stars.renci.org/var/babel/"
+        assert settings["BABEL_VERSION"] == "latest"
+        assert (
+            compose_babel_url(settings["BABEL_RELEASES_URL"], settings["BABEL_VERSION"])
+            == "https://stars.renci.org/var/babel/latest/"
+        )
+
+    def test_defines_no_babel_url(self):
+        """BABEL_URL is inert. Shipping it would send people to a setting that does nothing."""
+        assert "BABEL_URL" not in self._settings()
+
+    def test_carries_no_non_public_url(self):
+        """The guard that matters: only public hosts, and never the internal outputs tree."""
+        text = self.TEMPLATE.read_text()
+        for host in re.findall(r"https?://([^/\s\"']+)", text):
+            assert host in {
+                "stars.renci.org",
+                "nodenormalization-sri.renci.org",
+            }, f"{host} is not a public endpoint"
+        for path in re.findall(r"https?://\S+", text):
+            assert "/var/babel/" in path or "nodenormalization" in path, (
+                f"{path} is not the public Babel or NodeNorm endpoint"
+            )
 
 
 class TestMissingBabelFileReporting:
