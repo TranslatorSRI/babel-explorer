@@ -240,7 +240,11 @@ before rejecting the run.
    - Main query engine for cross-references
    - Uses DuckDB to query Parquet files (`Concord.parquet`, `Identifiers.parquet`)
    - Supports recursive expansion of cross-references via a single `WITH RECURSIVE` query
-   - Uses ephemeral in-memory DuckDB connections (nothing written to disk)
+   - Uses ephemeral in-memory DuckDB connections, opened by `BabelXRefs._connect()`. No
+     database is persisted, but larger-than-memory queries spill to disk: `_connect()` sets
+     `temp_directory` to `<BABEL_LOCAL_DIR>/duckdb-spill/`, because DuckDB's default is
+     `.tmp` in the *current working directory* and a `--recurse` run materialises the whole
+     multi-gigabyte Concord relation
 
 3. **NodeNorm** (`src/babel_explorer/core/nodenorm.py`):
    - Integration with NodeNormalization API (https://nodenormalization-sri.renci.org/)
@@ -266,7 +270,8 @@ before rejecting the run.
 - **Lazy downloading**: Files are only downloaded when first accessed
 - **LRU caching**: Heavy use of `@functools.lru_cache` to avoid redundant downloads and API calls
 - **Recursive expansion**: The `--recurse` flag recursively follows all cross-references to build complete graphs
-- **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
+- **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups, spilling
+  to `<BABEL_LOCAL_DIR>/duckdb-spill/` rather than the working directory
 
 ## Testing
 
@@ -334,5 +339,6 @@ since the initial commit. Consequences a future contributor will trip over:
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `<BABEL_LOCAL_DIR>/duckdb/*.parquet` (default `data/duckdb/`)
+- DuckDB query spill: `<BABEL_LOCAL_DIR>/duckdb-spill/` (default `data/duckdb-spill/`)
 - Endpoint configuration: `.env` (gitignored), template in `env.default`
 - Entry point: `src/babel_explorer/cli.py`

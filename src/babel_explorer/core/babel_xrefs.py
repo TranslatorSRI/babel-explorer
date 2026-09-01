@@ -7,6 +7,7 @@ considered identical in a Babel build.
 
 import dataclasses
 import logging
+import os
 from collections import deque
 
 import duckdb
@@ -161,6 +162,20 @@ class BabelXRefs:
         self.nodenorm = nodenorm
         self._xref_cache: dict = {}
 
+    def _connect(self):
+        """Open an ephemeral in-memory DuckDB connection that spills into the cache dir.
+
+        Nothing is persisted, but "in-memory" is not the same as "touches no disk":
+        DuckDB's default ``temp_directory`` is ``.tmp`` in the *current working
+        directory*, and the recursive expansion materialises a multi-gigabyte Concord
+        relation. Left at the default, a ``--recurse`` run drops gigabytes of spill files
+        wherever the user happened to be standing. Point it at the directory the Parquet
+        files already live in, which the user chose knowing it holds bulk data.
+        """
+        spill_dir = os.path.join(self.downloader.local_path, "duckdb-spill")
+        os.makedirs(spill_dir, exist_ok=True)
+        return duckdb.connect(config={"temp_directory": spill_dir})
+
     def _require_nodenorm(self):
         if self.nodenorm is None:
             raise ValueError(
@@ -187,7 +202,7 @@ class BabelXRefs:
         )
 
         # Query the Parquet files using DuckDB (in-memory; nothing is persisted).
-        with duckdb.connect() as db:
+        with self._connect() as db:
             result = db.execute(
                 "SELECT * FROM read_parquet($1) WHERE curie IN (SELECT unnest($2::VARCHAR[]))",
                 [identifier_parquet, list(curies)],
@@ -236,7 +251,7 @@ class BabelXRefs:
 
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
-        with duckdb.connect() as db:
+        with self._connect() as db:
             xref_tuples = db.execute(
                 """
                 SELECT filename, subj, pred, obj FROM read_parquet($1)
@@ -296,7 +311,7 @@ class BabelXRefs:
 
         concord_parquet = self.downloader.get_downloaded_file("duckdb/Concord.parquet")
 
-        with duckdb.connect() as db:
+        with self._connect() as db:
             rows = db.execute(
                 """
             WITH RECURSIVE

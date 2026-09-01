@@ -204,6 +204,20 @@ class TestBabelXRefsInit:
         bx = BabelXRefs(dl, nn)
         assert bx.nodenorm is nn
 
+    def test_connect_spills_inside_the_cache_directory(self, tmp_path):
+        """DuckDB's default temp_directory is `.tmp` in the *current* directory.
+
+        The recursive expansion materialises a multi-gigabyte Concord relation, so
+        leaving that at the default drops gigabytes of spill wherever the user ran the
+        command.
+        """
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        with BabelXRefs(dl)._connect() as db:
+            setting = db.execute("SELECT current_setting('temp_directory')").fetchone()
+
+        assert setting[0] == str(tmp_path / "duckdb-spill")
+        assert (tmp_path / "duckdb-spill").is_dir()
+
 
 class TestBabelXRefsMocked:
     """Mocked query tests — no DuckDB or Parquet files needed."""
