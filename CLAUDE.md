@@ -309,6 +309,17 @@ uv run pytest --collect-only -q                        # full count
 a couple of dozen skips is the expected result without a Translator `BABEL_RELEASES_URL` in `.env`, not a
 broken test environment.
 
+**A release can publish one DuckDB file without the other.** `2026jul22` serves a 4.6 GB
+`Concord.parquet` with no `Identifiers.parquet` beside it, so "does this release have the Parquet
+files?" is not one question. `shared_downloader` probes Concord and skips the session; the
+`downloaded_identifiers` fixture catches `MissingBabelFileError` and skips separately. Do not
+collapse the two into a single up-front probe — the non-slow integration tests run perfectly well
+against a release that lacks `Identifiers.parquet`.
+
+**A full run re-downloads everything.** `pytest_sessionfinish` deletes `data/test`, so each
+`uv run pytest` with a Babel release configured pays the multi-gigabyte download again (~9 minutes
+for `2026jul22`). Use `-m "not integration"` while iterating, and budget for the full run.
+
 ### Test Infrastructure
 
 - **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. The `shared_downloader` fixture HEADs `duckdb/Concord.parquet` first and skips the session on 404. Teardown removes the `data/test/` directory so the next run starts fresh.

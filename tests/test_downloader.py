@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import requests
+from _pytest.outcomes import Skipped
 
 from babel_explorer.core.downloader import (
     VERSION_MARKER,
@@ -22,6 +23,7 @@ from babel_explorer.core.downloader import (
     compose_babel_url,
     resolve_babel_version,
 )
+from tests import conftest
 from tests.constants import BABEL_URL, CONCORD_FILE
 
 
@@ -1283,3 +1285,50 @@ def test_download_identifiers_parquet(downloaded_identifiers):
     assert os.path.isfile(downloaded_identifiers)
     size = os.path.getsize(downloaded_identifiers)
     assert size > 2 * 1024 * 1024 * 1024, f"Identifiers.parquet too small: {size} bytes"
+
+
+class TestIdentifiersFixtureSkips:
+    """A release that omits Identifiers.parquet must skip, not error.
+
+    The bug this guards was invisible for the same reason the stale
+    `get_curie_xref.cache_clear()` calls were: it only shows up in a run against a
+    real Babel release, and those skip entirely for anyone without one configured.
+    A unit test is the only place it gets exercised routinely.
+    """
+
+    @staticmethod
+    def _call_fixture(downloader, tmp_path):
+        """Invoke the fixture's underlying function directly, past the decorator."""
+        return conftest.downloaded_identifiers.__wrapped__(downloader, str(tmp_path))
+
+    def test_missing_file_skips(self, tmp_path):
+        downloader = Mock()
+        downloader.get_downloaded_file.side_effect = MissingBabelFileError(
+            "This Babel release (2026jul22) does not publish duckdb/Identifiers.parquet."
+        )
+
+        with pytest.raises(Skipped) as excinfo:
+            self._call_fixture(downloader, tmp_path)
+
+        # The downloader's own message explains how to point at a release that has it.
+        assert "does not publish duckdb/Identifiers.parquet" in str(excinfo.value)
+
+    def test_present_file_is_returned(self, tmp_path):
+        """The skip must not swallow the normal path."""
+        downloader = Mock()
+        downloader.get_downloaded_file.return_value = (
+            "/cache/duckdb/Identifiers.parquet"
+        )
+
+        assert (
+            self._call_fixture(downloader, tmp_path)
+            == "/cache/duckdb/Identifiers.parquet"
+        )
+
+    def test_other_errors_still_propagate(self, tmp_path):
+        """Only a missing file is a skip; a real failure must still fail the run."""
+        downloader = Mock()
+        downloader.get_downloaded_file.side_effect = RuntimeError("connection reset")
+
+        with pytest.raises(RuntimeError, match="connection reset"):
+            self._call_fixture(downloader, tmp_path)
