@@ -329,15 +329,23 @@ tests run perfectly well against a release that lacks `Identifiers.parquet`.
 `uv run pytest` with a Babel release configured pays the multi-gigabyte download again (~9 minutes
 for `2026jul22`). Use `-m "not integration"` while iterating, and budget for the full run.
 
-**Never run two full suites at once.** `data/test` is a fixed path shared by every run, and
-`pytest_sessionfinish` deletes it unconditionally, so a second run tears down the first run's
-download — and the `FileLock` around each download does not help, because it guards one file, not
-a session. Two concurrent runs will each re-download a file the other has just deleted, for as long
-as you let them.
+**Only one pytest session may touch `data/test` at a time.** It is a fixed path shared by every
+run, not a per-run temporary directory, and `pytest_sessionfinish` deletes it at the end of the
+session. The `FileLock` around each download does not help: it guards one file, not a session.
 
-- **Detect it**: `du -sh data/test` going *down* instead of up, and a full run that sails past the
-  ~9 minutes it should take. `ps -eo pid,etime,command | grep "[p]ytest"` showing two sets of
-  workers with different `etime` values confirms it.
+`pytest_sessionfinish` skips the cleanup when the session selected no `integration` tests, so the
+fast `-m "not integration"` loop you run while editing is safe alongside a long integration run.
+**Do not remove that guard.** Without it, every unit run — the most frequent command in this
+repository — silently deletes a multi-gigabyte download in progress in another terminal, and the
+integration run just starts over, looking like a downloader bug rather than an unrelated `pytest`
+invocation two windows away. This was diagnosed twice as a resume defect before the real cause
+turned up.
+
+Two concurrent *integration* runs still clash, and nothing here prevents that:
+
+- **Detect it**: `du -sh data/test` going *down* instead of up, and a run sailing well past the ~9
+  minutes it should take. `ps -eo pid,etime,command | grep "[p]ytest"` showing two sets of workers
+  with different `etime` values confirms it.
 - **Avoid it**: check for a run already in flight before starting one, and never `rm -rf data/test`
   to "start clean" without checking first — that is the fastest way to corrupt a run in progress.
 - **Recover**: kill every pytest process, `rm -rf data/test`, and start exactly one run. Nothing

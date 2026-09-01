@@ -38,6 +38,11 @@ def valid_curies() -> list[str]:
     return curies
 
 
+def _selected_any_integration_test(session) -> bool:
+    """Did this session actually select a test that uses ``data/test``?"""
+    return any(item.get_closest_marker("integration") for item in session.items)
+
+
 def pytest_sessionfinish(session, exitstatus):
     """Remove the shared test data directory once every worker has finished.
 
@@ -50,8 +55,18 @@ def pytest_sessionfinish(session, exitstatus):
     down at an unpredictable time and gw0 could delete Concord.parquet while gw5
     is still reading it. Guarding that teardown on the worker id, as this used to,
     meant the directory was simply never removed.
+
+    **A session that selected no integration tests cleans up nothing.** ``data/test``
+    is a fixed path, not a per-run temporary directory, so an unconditional delete here
+    means any ``pytest -m "not integration"`` — the fast loop you run constantly while
+    editing — silently destroys the multi-gigabyte download of an integration run going
+    on in another terminal. The unit suite never creates or reads that directory, so it
+    has no business removing it. Two concurrent *integration* runs still clash; that one
+    is unavoidable while the path is shared, and is documented in CLAUDE.md.
     """
     if hasattr(session.config, "workerinput"):
+        return
+    if not _selected_any_integration_test(session):
         return
     if os.path.exists(TEST_DATA_DIR):
         shutil.rmtree(TEST_DATA_DIR, ignore_errors=True)

@@ -1342,3 +1342,63 @@ class TestIdentifiersFixtureSkips:
 
         with pytest.raises(RuntimeError, match="connection reset"):
             self._call_fixture(downloader, tmp_path)
+
+
+class TestSessionFinishCleanup:
+    """A unit run must not delete an integration run's multi-gigabyte download.
+
+    `data/test` is a fixed path, not a per-run temporary directory, so the cleanup hook
+    is the one piece of test infrastructure that can destroy another process's work.
+    """
+
+    @staticmethod
+    def _session(markers):
+        """A stub session whose items carry the given marker names."""
+
+        def item(name):
+            it = Mock()
+            it.get_closest_marker.side_effect = lambda m, n=name: (
+                Mock() if m == n else None
+            )
+            return it
+
+        session = Mock()
+        session.items = [item(m) for m in markers]
+        del session.config.workerinput  # a controller, not an xdist worker
+        return session
+
+    def test_unit_only_session_leaves_the_directory_alone(self, tmp_path, monkeypatch):
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        (data_dir / "Concord.parquet").write_bytes(b"someone else is using this")
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        conftest.pytest_sessionfinish(self._session([None, None]), 0)
+
+        assert data_dir.exists(), (
+            "a `-m 'not integration'` run must not delete the integration cache"
+        )
+
+    def test_integration_session_cleans_up(self, tmp_path, monkeypatch):
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        (data_dir / "Concord.parquet").write_bytes(b"this run's own download")
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        conftest.pytest_sessionfinish(self._session([None, "integration"]), 0)
+
+        assert not data_dir.exists(), "the next run must start fresh"
+
+    def test_xdist_worker_never_cleans_up(self, tmp_path, monkeypatch):
+        """Only the controller cleans up; a worker finishing early must not."""
+        data_dir = tmp_path / "test"
+        data_dir.mkdir()
+        monkeypatch.setattr(conftest, "TEST_DATA_DIR", str(data_dir))
+
+        worker = Mock()
+        worker.items = [Mock()]
+        worker.config.workerinput = {"workerid": "gw0"}
+
+        conftest.pytest_sessionfinish(worker, 0)
+
+        assert data_dir.exists()
