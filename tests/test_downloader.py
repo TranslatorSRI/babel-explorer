@@ -1281,10 +1281,20 @@ def test_download_caching_real_files(shared_downloader, downloaded_concord):
 @pytest.mark.integration
 @pytest.mark.slow
 def test_download_identifiers_parquet(downloaded_identifiers):
-    """Verify Identifiers.parquet downloads and is > 2 GB."""
+    """Verify Identifiers.parquet downloads as a complete Parquet file.
+
+    Checks the format rather than a byte count. A hard size figure is exactly the kind
+    of number CLAUDE.md says drifts silently and then misleads — it was ``> 2 GB``,
+    chosen against a release long superseded — and the ``PAR1`` marker at both ends is
+    a better test of the thing that actually goes wrong: a truncated download, or an
+    error page saved under a .parquet name.
+    """
     assert os.path.isfile(downloaded_identifiers)
-    size = os.path.getsize(downloaded_identifiers)
-    assert size > 2 * 1024 * 1024 * 1024, f"Identifiers.parquet too small: {size} bytes"
+    assert os.path.getsize(downloaded_identifiers) > 8, "too short to be a Parquet file"
+    with open(downloaded_identifiers, "rb") as f:
+        assert f.read(4) == b"PAR1", "missing Parquet header"
+        f.seek(-4, os.SEEK_END)
+        assert f.read(4) == b"PAR1", "missing Parquet footer — download was truncated"
 
 
 class TestIdentifiersFixtureSkips:
