@@ -8,15 +8,17 @@ import { sessionPrefs, savePrefs, loadPrefs } from '../../lib/instance-prefs';
  * objects for use in result tables (ComparisonView column headers, etc.).
  */
 const ENV_LABELS: Record<string, string> = {
-  exp: 'RENCI Experimental',
-  dev: 'RENCI Dev',
-  ci: 'ITRB CI',
-  test: 'ITRB Test',
-  prod: 'ITRB Prod',
+  exp:      'RENCI Experimental',
+  dev:      'RENCI Dev',
+  ci:       'ITRB CI',
+  es_ci:    'ITRB ES CI',
+  redis_ci: 'ITRB Redis CI',
+  test:     'ITRB Test',
+  prod:     'ITRB Prod',
 };
 
 /** Environments shown in the main section (always visible). */
-const PRIMARY_ENVS = new Set(['dev', 'ci', 'prod']);
+const PRIMARY_ENVS = new Set(['dev', 'ci', 'es_ci', 'redis_ci', 'prod']);
 
 interface Instance {
   name: string;
@@ -191,6 +193,14 @@ function removeCustomUrl() {
   customUrlAdded.value = null;
 }
 
+/** Returns the display HTML for an instance's checkbox label.
+ *  Safe: only developer-controlled strings reach v-html. */
+function labelHtml(inst: Instance): string {
+  if (inst.env === 'es_ci') return 'ITRB <abbr title="ElasticSearch">ES</abbr> CI';
+  if (inst.env === 'redis_ci') return 'ITRB <abbr title="Redis">Redis</abbr> CI';
+  return ENV_LABELS[inst.env] ?? inst.name;
+}
+
 function saveDefault() {
   const keys = [...selectedUrls.value].map(
     (url) => props.instances.find((i) => i.url === url)?.env ?? url,
@@ -223,9 +233,7 @@ function saveDefault() {
       :checked="selectedUrls.has(inst.url)"
       @change="toggleUrl(inst.url)"
     />
-    <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
-      {{ ENV_LABELS[inst.env] ?? inst.name }}
-    </label>
+    <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url" v-html="labelHtml(inst)" />
   </div>
 
   <!-- Extended environments disclosure -->
@@ -251,9 +259,7 @@ function saveDefault() {
           :checked="selectedUrls.has(inst.url)"
           @change="toggleUrl(inst.url)"
         />
-        <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
-          {{ ENV_LABELS[inst.env] ?? inst.name }}
-        </label>
+        <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url" v-html="labelHtml(inst)" />
       </div>
 
       <!-- Custom URL row (shown when a custom URL has been added) -->

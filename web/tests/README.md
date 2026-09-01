@@ -28,10 +28,16 @@ Tests are **co-located** with source using `__tests__/` directories:
 web/src/
   lib/
     __tests__/
-      nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
-      url-state.test.ts       # readQueryState + buildQueryUrl + round-trip
-      curie-links.test.ts     # parseCurie + getCurieUrl + loadPrefixMap
-      types.test.ts           # DEFAULT_API_OPTIONS smoke test
+      nodenorm-api.test.ts             # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
+      url-state.test.ts                # readQueryState + buildQueryUrl + round-trip
+      curie-links.test.ts              # parseCurie + getCurieUrl + loadPrefixMap
+      types.test.ts                    # DEFAULT_API_OPTIONS smoke test
+      nameres-api.test.ts              # NameRes /lookup wrapper + parseSearchTerms + validateExpectedCuries
+      nameres-url-state.test.ts        # NameRes URL-state round-trip
+      debounce.test.ts                 # coalescing, cancel(), synchronous 0-ms path
+      highlight-sanitize.test.ts       # <em> preservation, script/attribute/quote escaping
+      autocomplete-url-state.test.ts   # read/build round-trip, preset-implied value handling, parseExpectedCuries
+      autocomplete-diff.test.ts        # computeInstanceDiffs (presence/rank/label/types) + classifyExpectedCurie
   components/
     nodenorm/
       __tests__/
@@ -39,9 +45,16 @@ web/src/
         CurieDetailPanel.test.ts
         CurieResultCard.test.ts
         ComparisonView.test.ts
+        ColumnVisibility.test.ts
+        EquivalentIdTable.test.ts
+    autocomplete/
+      __tests__/
+        AutocompleteForm.test.ts       # preset ↔ options coupling, hand-edit → custom auto-switch, field bindings
+        AutocompleteApp.test.ts        # mocked fetch: debounce coalescing, abort on new keystroke, deep lookup uses limit=100, single-vs-multi view
     shared/
       __tests__/
         CurieLink.test.ts
+        InstanceSelector.test.ts
 ```
 
 ### Library tests (highest priority)
@@ -51,6 +64,12 @@ Pure function tests with mocked `fetch()`. These cover:
 - **`url-state.ts`**: `readQueryState` (no params, curie/target/option parsing), `buildQueryUrl` (default option omission, multi-target), and round-trip fidelity
 - **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map, cache behavior
 - **`types.ts`**: Default options constant
+- **`nameres-api.ts`**: `/lookup` URL construction, parameter passthrough, `parseSearchTerms` `[[CURIE]]` annotation handling, `validateExpectedCuries` threshold semantics
+- **`nameres-url-state.ts`**: repeated `term=`/`target=` parsing, option-override round-trip, threshold handling
+- **`debounce.ts`**: coalescing, `cancel()`, `ms === 0` synchronous path
+- **`highlight-sanitize.ts`**: `<em>` preservation, `<script>`/`<img>`/attribute escaping, HTML-entity escaping, unterminated tags
+- **`autocomplete-url-state.ts`**: `q`/`preset`/`target`/`expected`/advanced-flag round-trip; preset-implied values suppressed from URL; `parseExpectedCuries` (split, dedupe, prefix uppercase)
+- **`autocomplete-diff.ts`**: union/presence/rank/label-mismatch/types-mismatch/uniqueness computation (order-independent set comparison); `classifyExpectedCurie` top-N vs top-100 vs miss vs unknown
 
 ### Component tests
 
@@ -58,8 +77,10 @@ Mount Vue components with `@vue/test-utils` and assert on rendered output and co
 - **`ResultsSummary`**: normalized/partial/not-found counts, disagreement detection across instances, type badge aggregation; disagreements tile hidden for single instance
 - **`CurieDetailPanel`**: description, types, IC score display; adaptive threshold (≤10 full table vs >10 prefix summary + expand); "Show all" / "Collapse" toggle
 - **`CurieResultCard`**: accordion header (preferred ID, label, type badges, equiv count); delegates body to CurieDetailPanel
-- **`ComparisonView`**: agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
+- **`ComparisonView`** (NodeNorm): agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
 - **`CurieLink`**: conditional `<a>` vs `<span>` rendering
+- **`AutocompleteForm`**: emits `update:query` on input; preset change sets `biolink_type` + `only_prefixes`; preset `custom` does NOT emit options; hand-editing `biolink_type` away from the preset auto-switches preset to `custom`; debounce / highlight / advanced field bindings
+- **`AutocompleteApp`**: with `vi.mock`ed `fetchNameResLookup` — typing triggers exactly one call after the debounce window; a new keystroke while a request is in flight aborts it (`signal.aborted === true`); the Check button fires a second lookup with `limit: 100`; single-instance state renders the Results view (not the Comparison view)
 
 ## Shared Fixtures
 

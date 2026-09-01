@@ -16,11 +16,12 @@ def _load_nodenorm_urls() -> dict[str, str]:
     try:
         endpoints = json.loads(config_path.read_text())
         env_labels = {
-            "dev": "Dev",
-            "exp": "Exp",
-            "ci": "CI",
-            "test": "Test",
-            "prod": "Production",
+            "dev":      "Dev",
+            "exp":      "Exp",
+            "ci":       "CI",
+            "redis_ci": "Redis CI",
+            "test":     "Test",
+            "prod":     "Production",
         }
         return {
             f"NodeNorm {env_labels.get(env, env)}": url

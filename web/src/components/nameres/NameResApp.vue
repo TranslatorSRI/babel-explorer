@@ -4,6 +4,7 @@ import type { NameResResult, NameResInstance, NameResApiOptions, ParsedSearchTer
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
 import { parseSearchTerms, fetchNameResLookup } from '../../lib/nameres-api';
 import { loadPrefixMap } from '../../lib/curie-links';
+import { sortInstances } from '../../lib/instance-prefs';
 import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-url-state';
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
@@ -15,6 +16,7 @@ const ENV_LABELS: Record<string, string> = {
   dev: 'Dev',
   exp: 'Exp',
   ci: 'CI',
+  es_ci: 'ES CI',
   test: 'Test',
   prod: 'Production',
 };
@@ -172,9 +174,11 @@ async function handleSubmit(payload: {
     }
 
     resultsByInstance.value = resultMap;
-    queriedInstances.value = payload.instanceUrls
-      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
-      .filter((inst): inst is NameResInstance => inst != null);
+    queriedInstances.value = sortInstances(
+      payload.instanceUrls
+        .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
+        .filter((inst): inst is NameResInstance => inst != null)
+    );
 
     if (errors.length > 0) {
       error.value = `Some lookups failed: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? ` (+${errors.length - 5} more)` : ''}`;

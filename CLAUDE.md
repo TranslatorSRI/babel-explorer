@@ -117,24 +117,25 @@ cd web && npm run test:watch # Watch mode
    - Astro + Vue 3 static site for browser-only tools (no backend required)
    - npm package name: `babel-explorer` (directory stays `web/`)
    - Deployed to GitHub Pages
-   - Currently hosts: NodeNorm lookup (unified instance selection via checkboxes, expandable result table, shareable URLs)
-   - Calls NodeNorm API directly from the browser via `fetch()` (CORS-enabled)
+   - Currently hosts:
+     - **NodeNorm lookup** — unified instance selection, expandable result table, shareable URLs
+     - **NameRes lookup** — batch name → CURIE resolution with expected-CURIE validation via `[[CURIE]]` annotations
+     - **Autocomplete playground** — live-as-you-type NameRes with preset dropdown (Disease/Gene/SmallMolecule/Custom), debounce+abort, latency badges, expected-CURIE rank check, and side-by-side environment comparison
+   - Calls NodeNorm and NameRes APIs directly from the browser via `fetch()` (CORS-enabled)
    - Uses Bootstrap 5 (CDN) with the same dark-navbar styling as the Python frontend
    - CURIE link-outs via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7, fetched at runtime)
-   - Tested with Vitest + @vue/test-utils + happy-dom (99 tests); see `web/tests/README.md`
+   - Tested with Vitest + @vue/test-utils + happy-dom (276 tests); see `web/tests/README.md`
    - See `web/README.md` for development instructions and `web/FUTURE.md` for deferred features
 
 7. **Shared Configuration** (`config/`):
-   - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments (dev, exp, ci, test, prod)
-   - Consumed by Python CLI/frontend (`nodenorm.py`) and Astro frontend (`NodeNormApp.vue`)
+   - `config/translator-endpoints.json` — single source of truth for NodeNorm and NameRes deployment URLs across all environments
+   - Consumed by Python CLI/frontend (`nodenorm.py`) and Astro frontend (`NodeNormApp.vue`, `NameResApp.vue`, `AutocompleteApp.vue`)
+   - **NodeNorm envs**: `dev`, `exp`, `ci` (ElasticSearch-backed CI), `redis_ci` (Redis CI — kept for comparison, to be retired), `test`, `prod`
+   - **NameRes envs**: `dev`, `exp`, `ci` (Solr-backed CI — the stable default), `es_ci` (ElasticSearch CI — experimental), `test`, `prod`
+   - Note: NodeNorm and NameRes use the same `ci` key but point to different backends. NodeNorm CI is ES-based; NameRes CI is still Solr-based. The NameRes `es_ci` key is a separate experimental instance.
 
 ### Data Flow
 
-1. User provides CURIEs via CLI
-2. BabelDownloader ensures required Parquet files are downloaded
-3. BabelXRefs queries files using DuckDB
-4. If `--labels` or `--recurse` flags are set, NodeNorm is queried for additional metadata
-5. Results are printed to stdout
 1. User provides CURIEs via CLI, Python web UI, or Astro web UI
 2. For DB-dependent tools (XRefs, IDs): BabelDownloader ensures required Parquet files are downloaded, BabelXRefs queries files using DuckDB
 3. For API-only tools (NodeNorm): the Astro frontend calls the NodeNorm API directly from the browser; the Python frontend proxies through the server
@@ -148,25 +149,32 @@ web/src/
   layouts/BaseLayout.astro          # Bootstrap 5 CDN + dark navbar
   components/
     Navbar.astro                    # Dark navbar matching Python frontend
-    nodenorm/
-      NodeNormApp.vue               # Root Vue island (client:only="vue")
-      NodeNormForm.vue              # Form: textarea, checkboxes + custom URL, API toggles
-      ComparisonView.vue            # Results table (rows=CURIEs, cols=instances) with expandable rows
-      CurieDetailPanel.vue          # Expandable detail body: description, types, IC, equiv IDs
-      CurieResultCard.vue           # Accordion card wrapping CurieDetailPanel (single-instance use)
-      ResultsSummary.vue            # Unified stat tiles: normalized count, disagreements, types
-      EquivalentIdTable.vue         # Striped table with togglable columns
-      ColumnVisibility.vue          # Page-wide column show/hide controls
+    nodenorm/                       # NodeNorm tool components (App, Form, ComparisonView, CurieDetailPanel, CurieResultCard, ResultsSummary, EquivalentIdTable, ColumnVisibility)
+    nameres/                        # NameRes tool components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
+    autocomplete/                   # Autocomplete tool components (App, Form, Results, ComparisonView, HighlightedFragment, ExpectedCuriePanel, LatencyBadge)
     shared/
+      InstanceSelector.vue          # Reusable env checkboxes + custom URL + localStorage prefs
       CurieLink.vue                 # CURIE → external URL link using biolink prefix map
+      BiolinkTypeLink.vue           # Biolink type badge → link to biolink.github.io/biolink-model/{Type}; handles both prefixed ("biolink:Gene") and unprefixed ("Gene") types; used by NodeNorm, NameRes, and Autocomplete
   lib/
     nodenorm-api.ts                 # fetch() wrapper for NodeNorm get_normalized_nodes (AbortSignal support)
+    nameres-api.ts                  # fetch() wrapper for NameRes /lookup; parseSearchTerms; validateExpectedCuries
+    nameres-types.ts                # NameResResult, NameResApiOptions, DEFAULT_NAMERES_OPTIONS
+    nameres-url-state.ts            # Encode/decode NameRes query state
+    autocomplete-url-state.ts       # Encode/decode Autocomplete query state (q, preset, target, expected, debounce, highlight)
+    autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom preset definitions + detectPreset
+    autocomplete-diff.ts            # computeInstanceDiffs (presence/rank/label/types mismatch) + classifyExpectedCurie
+    debounce.ts                     # debounce(fn, ms) with .cancel(); synchronous path when ms===0
+    highlight-sanitize.ts           # Whitelist sanitizer for Solr highlighting (<em> only)
+    instance-prefs.ts               # sessionPrefs + localStorage helpers + sortInstances (ENV_ORDER canonical sort) — used by InstanceSelector and all App components
     curie-links.ts                  # Biolink prefix map loader + URL builder
-    url-state.ts                    # Encode/decode query state in URL params (readQueryState, buildQueryUrl)
-    types.ts                        # TypeScript interfaces + DEFAULT_API_OPTIONS
+    url-state.ts                    # Encode/decode NodeNorm query state
+    types.ts                        # NodeNorm TypeScript interfaces + DEFAULT_API_OPTIONS
   pages/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # NodeNorm tool page
+    nameres.astro                   # NameRes tool page
+    autocomplete.astro              # Autocomplete playground page
 ```
 
 Key patterns:
@@ -195,6 +203,8 @@ The NodeNorm and Test Concordance pages include a dropdown to select from predef
 - **DuckDB for querying**: In-memory SQL queries against Parquet files for fast lookups
 - **Dual frontend**: DB-dependent tools on a server (FastAPI + htmx), API-only tools in the browser (Astro + Vue). Split follows data dependencies.
 - **Shared config**: `config/translator-endpoints.json` is the single source of truth for deployment URLs, consumed by both frontends and the CLI
+- **Canonical instance ordering**: `sortInstances()` in `instance-prefs.ts` sorts by `ENV_ORDER` (Exp → Dev → CI → ES CI → Redis CI → Test → Prod → custom URLs). Called in every App component after setting `queriedInstances` so comparison tables always display in pipeline order.
+- **Adding a new named instance**: requires (1) entry in `config/translator-endpoints.json`, (2) add env key to `PRIMARY_ENVS` in `InstanceSelector.vue` if it should appear in the main section rather than "Extended environments", (3) add to `ENV_ORDER` in `instance-prefs.ts` for sort position, (4) add label to `ENV_LABELS` in the relevant App component(s) and in `InstanceSelector.vue`, (5) add a `labelHtml()` case in `InstanceSelector.vue` if the label needs `<abbr>` rendering (e.g. ES, Redis), (6) add to Python `env_labels` in `nodenorm.py` if it's a NodeNorm instance.
 
 ## Testing
 
@@ -231,6 +241,7 @@ Tests live in `tests/` and are split into fast **unit tests** (mocked, no networ
 
 - **Data directory**: The `data/` directory is gitignored and contains downloaded Parquet files and generated DuckDB databases
 - **Babel versions**: The default Babel version is `2025nov19`, but this can be customized via `--local-dir` and `--babel-url`
+- **Pre-existing Python test failures**: `tests/test_web.py::test_nodenorm_page` and `tests/test_web.py::test_test_concord_page` fail with `AttributeError: type object 'NodeNorm' has no attribute 'URLs'` — this is a pre-existing issue unrelated to the Astro frontend work. The `NodeNorm.URLs` attribute referenced in the Python web routes no longer matches the actual class interface.
 
 ## File Locations
 
