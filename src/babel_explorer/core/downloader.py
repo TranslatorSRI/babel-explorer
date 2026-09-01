@@ -101,6 +101,9 @@ class BabelDownloader:
         self.freshness_seconds = freshness_seconds
         self.timeout = timeout
         self.logger = logging.getLogger(BabelDownloader.__name__)
+        # Release whose marker is waiting for the cache to catch up with it; see
+        # _write_version_marker_if_synced.
+        self._pending_version: str | None = None
 
         if local_path is None:
             local_path = tempfile.gettempdir()
@@ -153,6 +156,10 @@ class BabelDownloader:
         Neither is redundant with the other for the case it owns. Removing this sweep only
         wastes disk; removing the one in ``get_downloaded_file`` reintroduces silent
         Parquet corruption — see the comment there before touching either.
+
+        The new release is *not* written to the version marker here — it is handed to
+        ``_write_version_marker_if_synced``, which stamps it only once the cache actually
+        holds it. See that method for why writing it up front is unsafe.
         """
         version = self.babel_version
         if version is None:
@@ -190,8 +197,44 @@ class BabelDownloader:
                 os.remove(tmp_path)
 
         if cached_version != version:
-            with open(marker_path, "w") as f:
-                f.write(version + "\n")
+            self._pending_version = version
+            # Usually a no-op here (the sidecars were just expired), but it covers the
+            # cases with nothing to catch up on: a first run with an empty cache, and a
+            # cache written before this tool kept a marker at all.
+            self._write_version_marker_if_synced()
+
+    def _write_version_marker_if_synced(self):
+        """Record the pending release in ``.babel-version`` once the cache matches it.
+
+        The marker claims "the local cache holds this release", and that only becomes
+        true once every cached file has been re-validated against it — so it is written
+        here, after downloads, rather than by ``sync_cache_version`` the moment the change
+        is noticed. Stamping it up front leaves a run that is interrupted after
+        ``Concord.parquet`` is refreshed but before ``Identifiers.parquet`` is with a
+        marker naming the new release over a half-old cache; the next run then sees a
+        marker that matches, does no version-driven refresh, and reads the two Parquet
+        files together across two different Babel releases.
+
+        "Re-validated" is exactly "the sidecar has a ``last_checked`` again":
+        ``sync_cache_version`` cleared it from all of them, and only a confirmed-unchanged
+        HEAD or a completed download puts it back. A cached file that nobody asks for
+        therefore holds the marker back indefinitely, at a cost of one HEAD per run. That
+        is the honest answer rather than a bug — that file really is still from the
+        previous release.
+        """
+        version = self._pending_version
+        if version is None:
+            return
+
+        duckdb_dir = os.path.join(self.local_path, "duckdb")
+        for meta_path in glob.glob(os.path.join(duckdb_dir, "*.meta")):
+            meta = self._load_meta(meta_path.removesuffix(".meta"))
+            if meta is None or "last_checked" not in meta:
+                return
+
+        with open(os.path.join(self.local_path, VERSION_MARKER), "w") as f:
+            f.write(version + "\n")
+        self._pending_version = None
 
     def _get_meta_path(self, local_path):
         """Return the sidecar metadata file path for a given local file."""
@@ -263,6 +306,15 @@ class BabelDownloader:
         """
         Return True if last_checked is within freshness_seconds of now.
 
+        A file that has never been validated against the current release is never
+        fresh, whatever the window. That case is tested *before* the ``float('inf')``
+        shortcut, and the order matters: ``sync_cache_version`` clears ``last_checked``
+        from every sidecar when the Babel release changes, and if ``inf`` short-circuited
+        ahead of that, ``--check-download never`` would hand back the previous release's
+        Parquet without a single network call — while the version marker went on to name
+        the new release, so the mismatch would never be noticed again. ``never`` means
+        "do not re-check for changes *within* a release", not "ignore a release change".
+
         Args:
             meta: dict loaded from .meta file
             freshness_seconds: Number of seconds; float('inf') means always fresh
@@ -270,11 +322,11 @@ class BabelDownloader:
         Returns:
             bool
         """
-        if freshness_seconds == float("inf"):
-            return True
         last_checked_str = meta.get("last_checked")
         if not last_checked_str:
             return False
+        if freshness_seconds == float("inf"):
+            return True
         try:
             last_checked = datetime.fromisoformat(last_checked_str)
             age = (datetime.now(UTC) - last_checked).total_seconds()
@@ -527,6 +579,15 @@ class BabelDownloader:
         Returns:
             str: Local path to the downloaded file
         """
+        local_path = self._fetch_file(dirpath, chunk_size)
+        # This file may have been the last one still holding the cache back from a
+        # release change sync_cache_version spotted. If so, this is where the version
+        # marker finally gets written.
+        self._write_version_marker_if_synced()
+        return local_path
+
+    def _fetch_file(self, dirpath: str, chunk_size: int):
+        """Do the actual fetching for ``get_downloaded_file``, which see."""
         local_path_to_download_to = os.path.join(self.local_path, dirpath)
         os.makedirs(os.path.dirname(local_path_to_download_to), exist_ok=True)
 

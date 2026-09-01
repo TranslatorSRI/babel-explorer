@@ -69,6 +69,22 @@ multi-gigabyte re-download. Partial `.tmp` downloads *are* deleted, so no prefix
 release survives into the next one. This keeps `Concord.parquet` and `Identifiers.parquet` from
 being read together across two different Babel releases.
 
+`sync_cache_version()` does **not** write the new release to `.babel-version` itself. The marker
+claims "the local cache holds this release", which is only true once every cached file has been
+re-validated against it, so it is written by `_write_version_marker_if_synced()` after a download
+instead — once no `.meta` sidecar in `duckdb/` is still missing its `last_checked`. Stamping it up
+front would leave a run interrupted between `Concord.parquet` and `Identifiers.parquet` with a
+marker naming the new release over a half-old cache, and the next run would see a marker that
+matches and skip the refresh entirely. A cached file nobody asks for holds the marker back
+indefinitely, costing one HEAD per run; that is correct, not a bug — the file really is still from
+the previous release.
+
+`--check-download never` (`freshness_seconds=inf`) suppresses re-checks *within* a release, not
+across one. `_is_within_freshness()` tests for a missing `last_checked` **before** the `inf`
+shortcut, so a sidecar the version change expired is never fresh. Reordering those two lines
+re-opens the whole hole: `never` would hand back the previous release's Parquet with no network
+call at all.
+
 A `.tmp` is deleted in two places, on purpose. The delete in `get_downloaded_file()` is the safety
 guarantee (see [Partial downloads](#partial-downloads)); the sweep in `sync_cache_version()` is
 housekeeping that reclaims gigabytes belonging to a release nobody will ask for again, including

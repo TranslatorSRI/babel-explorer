@@ -175,7 +175,51 @@ class TestSyncCacheVersion:
             "dropping the ETag would force an unconditional multi-gigabyte re-download"
         )
         assert parquet.exists(), "the Parquet file itself must never be deleted"
+
+    def test_changed_version_leaves_marker_until_the_cache_catches_up(self, tmp_path):
+        """A marker written up front makes an interrupted refresh look complete.
+
+        If the marker named the new release straight away and the run died after
+        Concord was refreshed but before Identifiers was, the next run would see a
+        matching marker, skip the version-driven refresh entirely, and read the two
+        Parquet files together across two Babel releases.
+        """
+        self._seed_cache(tmp_path)
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        self._downloader(tmp_path, "2026jul22").sync_cache_version()
+
+        assert (tmp_path / VERSION_MARKER).read_text().strip() == "2025nov19"
+
+    def test_marker_written_once_every_sidecar_is_revalidated(self, tmp_path):
+        _, meta = self._seed_cache(tmp_path)
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        dl = self._downloader(tmp_path, "2026jul22")
+        dl.sync_cache_version()
+
+        # What a confirmed-unchanged HEAD or a completed download leaves behind.
+        dl._write_meta(str(meta).removesuffix(".meta"), json.loads(meta.read_text()))
+        dl._write_version_marker_if_synced()
+
         assert (tmp_path / VERSION_MARKER).read_text().strip() == "2026jul22"
+
+    def test_marker_withheld_while_one_cached_file_is_still_stale(self, tmp_path):
+        """Every cached file must be re-validated, not just the one that was asked for."""
+        _, meta = self._seed_cache(tmp_path)
+        other = tmp_path / "duckdb" / "Identifiers.parquet.meta"
+        other.write_text(
+            json.dumps({"etag": '"def"', "last_checked": "2026-07-22T00:00:00+00:00"})
+        )
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+
+        dl = self._downloader(tmp_path, "2026jul22")
+        dl.sync_cache_version()
+
+        dl._write_meta(str(meta).removesuffix(".meta"), json.loads(meta.read_text()))
+        dl._write_version_marker_if_synced()
+
+        assert (tmp_path / VERSION_MARKER).read_text().strip() == "2025nov19"
 
     def test_changed_version_removes_partial_downloads(self, tmp_path):
         """A .tmp from the previous release must not be resumed against the new one."""
@@ -462,6 +506,16 @@ class TestIsWithinFreshness:
         meta = {"last_checked": old}
         assert dl._is_within_freshness(meta, float("inf")) is True
 
+    def test_returns_false_when_missing_last_checked_even_if_inf(self, tmp_path):
+        """`--check-download never` must not resurrect a sidecar the version change expired.
+
+        sync_cache_version clears last_checked to force a re-check. If float('inf')
+        short-circuited ahead of that test, `never` would return the previous release's
+        Parquet with no network call at all.
+        """
+        dl = self._make_dl(tmp_path)
+        assert dl._is_within_freshness({"etag": '"old"'}, float("inf")) is False
+
     def test_returns_false_when_freshness_is_zero(self, tmp_path):
         dl = self._make_dl(tmp_path)
         just_now = datetime.now(UTC).isoformat()
@@ -554,6 +608,45 @@ class TestGetDownloadedFileTiers:
                 mock_head.assert_not_called()
                 mock_get.assert_not_called()
         assert result == str(local)
+
+    def test_never_still_rechecks_after_a_release_change(self, tmp_path):
+        """`--check-download never` must not defeat the cross-release refresh.
+
+        End-to-end version of the _is_within_freshness ordering: the cache holds the
+        previous release, sync_cache_version has expired the sidecar, and `never` still
+        has to issue the HEAD that notices the ETag changed.
+        """
+        dl = self._make_dl(tmp_path, freshness=float("inf"))
+        test_file = "duckdb/test.parquet"
+        local = tmp_path / "duckdb" / "test.parquet"
+        local.parent.mkdir(parents=True)
+        local.write_bytes(b"data from the previous release")
+
+        # No last_checked: exactly what sync_cache_version leaves behind.
+        with open(str(local) + ".meta", "w") as f:
+            json.dump({"etag": '"old"'}, f)
+
+        mock_head_resp = Mock()
+        mock_head_resp.headers = {"ETag": '"new"'}
+        mock_head_resp.raise_for_status = Mock()
+
+        def fake_download(url, tmp_path_, chunk_size):
+            """Stand in for the real download by writing the .tmp it would have left."""
+            with open(tmp_path_, "wb") as f:
+                f.write(b"the new release")
+            return {"ETag": '"new"'}
+
+        with patch(
+            "babel_explorer.core.downloader.requests.head", return_value=mock_head_resp
+        ) as mock_head:
+            with patch.object(
+                dl, "_download_with_retry", side_effect=fake_download
+            ) as mock_download:
+                dl.get_downloaded_file(test_file)
+
+        mock_head.assert_called_once()
+        mock_download.assert_called_once()
+        assert local.read_bytes() == b"the new release"
 
     # --- Tier 2: stale .meta, ETag matches ---
 
