@@ -31,12 +31,28 @@ class IncompleteDownloadError(RuntimeError):
     """
 
 
+def compose_babel_url(releases_url: str, version: str) -> str:
+    """Join a releases-directory URL and a release name into one Babel base URL.
+
+    Normalised the way ``BabelDownloader`` wants it — exactly one trailing slash — so
+    callers can join relative paths straight onto the result. A releases URL with no
+    trailing slash would otherwise compose ``.../babellatest/`` and 404 everything.
+
+    Lives here rather than in ``cli.py`` because ``tests/constants.py`` needs the same
+    composition and should not import Click to get it.
+    """
+    return releases_url.strip().rstrip("/") + "/" + version.strip().strip("/") + "/"
+
+
 def resolve_babel_version(url_base: str, timeout: int = 30) -> str | None:
     """
     Resolve the Babel version behind a Babel base URL.
 
     Reads ``VERSION.txt`` (present on all full Babel releases, e.g. ``Babel 2026jul22``),
-    falling back to the final path segment for older trees that predate it.
+    falling back to the final path segment for older trees that predate it. Under the
+    ``BABEL_RELEASES_URL`` + ``BABEL_VERSION`` scheme that final segment *is* the
+    requested version, so a pinned release survives a missing ``VERSION.txt`` while
+    ``latest`` still resolves to ``None``.
 
     :return: The version string, or ``None`` if it cannot be determined.
     """
@@ -458,9 +474,10 @@ class BabelDownloader:
                         # do not currently publish the DuckDB Parquet files.
                         raise MissingBabelFileError(
                             f"This Babel release ({self.babel_version or self.url_base}) does not "
-                            f"publish {url[len(self.url_base) :]}. Translator team members should "
-                            f"contact the Babel developers for the Translator-specific URL and set "
-                            f"BABEL_URL in .env."
+                            f"publish {url[len(self.url_base) :]}. Translator team members "
+                            f"should contact the Babel developers for the Translator-specific "
+                            f"releases URL and set BABEL_RELEASES_URL in .env, or pass "
+                            f"--babel-url with a complete release URL for a one-off run."
                         )
                     else:
                         response.raise_for_status()

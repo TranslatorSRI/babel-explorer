@@ -19,14 +19,45 @@ from babel_explorer.core.downloader import (
     BabelDownloader,
     IncompleteDownloadError,
     MissingBabelFileError,
+    compose_babel_url,
     resolve_babel_version,
 )
 from tests.constants import BABEL_URL, CONCORD_FILE
 
 
 def test_babel_url_is_normalised_for_direct_path_joins():
-    """A slashless BABEL_URL would probe ".../latestduckdb/..." and 404-skip everything."""
+    """The env-driven URL must end in "/" too, or the skip probe requests
+    ".../latestduckdb/Concord.parquet", 404s, and silently skips every integration test."""
     assert BABEL_URL.endswith("/")
+
+
+class TestComposeBabelUrl:
+    """Composition has to absorb the slashes users will and will not type."""
+
+    @pytest.mark.parametrize(
+        "releases, version, expected",
+        [
+            ("https://ex.com/babel/", "latest", "https://ex.com/babel/latest/"),
+            ("https://ex.com/babel", "latest", "https://ex.com/babel/latest/"),
+            ("https://ex.com/babel//", "2025dec11", "https://ex.com/babel/2025dec11/"),
+            ("https://ex.com/babel", "/2025dec11/", "https://ex.com/babel/2025dec11/"),
+            ("  https://ex.com/babel  ", "latest", "https://ex.com/babel/latest/"),
+            (
+                "https://ex.com/babel",
+                "  2025dec11  ",
+                "https://ex.com/babel/2025dec11/",
+            ),
+        ],
+    )
+    def test_normalisation(self, releases, version, expected):
+        assert compose_babel_url(releases, version) == expected
+
+    def test_public_default_composes_to_the_historical_url(self):
+        """The default pair must reproduce the single URL this option pair replaced."""
+        assert (
+            compose_babel_url("https://stars.renci.org/var/babel/", "latest")
+            == "https://stars.renci.org/var/babel/latest/"
+        )
 
 
 def _version_response(text):

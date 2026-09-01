@@ -5,17 +5,22 @@ import pathlib
 
 from dotenv import load_dotenv
 
-# Integration tests run against whatever BABEL_URL points at, so a Translator developer
-# with a .env exercises them while public contributors and CI fall back to the public
-# release (which does not yet publish the DuckDB Parquet files, so those tests skip).
+from babel_explorer.core.downloader import compose_babel_url
+
+# Integration tests run against whatever BABEL_RELEASES_URL and BABEL_VERSION compose to,
+# so a Translator developer with a .env exercises them while public contributors and CI
+# fall back to the public release (which does not yet publish the DuckDB Parquet files,
+# so those tests skip).
 load_dotenv()
 
-# Normalised the same way BabelDownloader does, so tests that join paths onto it
-# directly agree with the downloader instead of quietly requesting ".../latestduckdb/".
-BABEL_URL = (
-    os.environ.get("BABEL_URL", "https://stars.renci.org/var/babel/latest/").rstrip("/")
-    + "/"
+BABEL_RELEASES_URL = os.environ.get(
+    "BABEL_RELEASES_URL", "https://stars.renci.org/var/babel/"
 )
+BABEL_VERSION = os.environ.get("BABEL_VERSION", "latest")
+
+# Composed exactly the way the CLI composes it, so tests that join paths onto it directly
+# agree with the downloader instead of quietly requesting ".../latestduckdb/".
+BABEL_URL = compose_babel_url(BABEL_RELEASES_URL, BABEL_VERSION)
 NODENORM_URL = os.environ.get(
     "NODENORM_URL", "https://nodenormalization-sri.renci.org/"
 )

@@ -1,6 +1,7 @@
 """Command-line interface for babel-explorer."""
 
 import logging
+import os
 import re
 from itertools import combinations
 
@@ -15,7 +16,11 @@ from babel_explorer.core.babel_xrefs import (
     build_depth_map,
     find_shortest_path,
 )
-from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
+from babel_explorer.core.downloader import (
+    BabelDownloader,
+    MissingBabelFileError,
+    compose_babel_url,
+)
 from babel_explorer.core.nodenorm import NodeNorm
 from babel_explorer.formatting import (
     curie_with_label,
@@ -27,14 +32,33 @@ from babel_explorer.formatting import (
 )
 
 
+def _validate_babel_version(ctx, param, value):
+    """Reject a --babel-version that is really a URL or a path traversal.
+
+    Anyone with muscle memory from the old BABEL_URL variable will eventually put a
+    complete URL here, which would compose into nonsense with no useful diagnostic.
+    """
+    if value is None:
+        return value
+    if "://" in value:
+        raise click.BadParameter(
+            f"{value!r} looks like a complete URL. Pass it to --babel-url instead, "
+            f"or give --babel-version just the release name (e.g. '2025dec11')."
+        )
+    if ".." in value:
+        raise click.BadParameter(f"{value!r} may not contain '..'.")
+    return value
+
+
 def babel_options(f):
-    """Decorator adding the Babel source options: --local-dir, --babel-url,
-    --check-download and --allow-version-mismatch."""
+    """Decorator adding the Babel source options: --local-dir, --babel-releases-url,
+    --babel-version, --babel-url, --check-download and --allow-version-mismatch."""
     f = click.option(
         "--allow-version-mismatch",
         is_flag=True,
         envvar="BABEL_ALLOW_VERSION_MISMATCH",
-        help="Proceed even if NodeNorm was built from a different Babel release than --babel-url",
+        help="Proceed even if NodeNorm was built from a different Babel release than "
+        "the one being queried",
     )(f)
     f = click.option(
         "--check-download",
@@ -48,19 +72,44 @@ def babel_options(f):
     f = click.option(
         "--babel-url",
         type=str,
-        default="https://stars.renci.org/var/babel/latest/",
+        default=None,
+        # Deliberately NO envvar=. BABEL_RELEASES_URL + BABEL_VERSION is the only
+        # environment-driven path to a Babel URL, so there is never a question of which
+        # variable wins. This is a per-run escape hatch, not configuration. Do not add one.
+        help="Complete URL of one Babel release, overriding --babel-releases-url and "
+        "--babel-version. Command line only: there is no BABEL_URL environment variable. "
+        "[default: --babel-releases-url + --babel-version]",
+    )(f)
+    f = click.option(
+        "--babel-version",
+        type=str,
+        default="latest",
         show_default=True,
-        envvar="BABEL_URL",
-        help="Base URL of the Babel server",
+        show_envvar=True,
+        envvar="BABEL_VERSION",
+        callback=_validate_babel_version,
+        help="Babel release to use: the name of a subdirectory under --babel-releases-url "
+        "(e.g. '2025dec11'). 'latest' follows whatever the server currently publishes.",
+    )(f)
+    f = click.option(
+        "--babel-releases-url",
+        type=str,
+        default="https://stars.renci.org/var/babel/",
+        show_default=True,
+        show_envvar=True,
+        envvar="BABEL_RELEASES_URL",
+        help="URL of a directory holding one subdirectory per Babel release.",
     )(f)
     f = click.option(
         "--local-dir",
         type=str,
         default="data",
         show_default=True,
+        show_envvar=True,
         envvar="BABEL_LOCAL_DIR",
         help="Local location to save Babel download files to. Holds one Babel release at "
-        "a time; cached files are refreshed automatically when --babel-url points at a new one.",
+        "a time; cached files are refreshed automatically when the effective Babel URL "
+        "points at a new one.",
     )(f)
     return f
 
@@ -77,10 +126,48 @@ def nodenorm_options(f):
     )(f)
 
 
-def make_downloader(babel_url: str, local_dir: str, check_download: str):
-    """Build a BabelDownloader and point its cache at the Babel release behind *babel_url*."""
+def resolve_babel_url(
+    babel_url: str | None, babel_releases_url: str, babel_version: str
+) -> str:
+    """The effective Babel URL: the one release this run will query.
+
+    ``--babel-url`` is a complete URL and wins outright; otherwise the release is
+    composed from the releases directory and the version. ``--babel-url`` has no
+    matching environment variable on purpose — with two variables already feeding the
+    composed URL, a third that silently outranked both would make "which release am I
+    actually querying?" unanswerable from the environment alone.
+    """
+    if babel_url:
+        # Warn only when --babel-version was actually typed. A developer with
+        # BABEL_VERSION permanently in .env would otherwise be warned on every
+        # --babel-url run, which just teaches them to ignore warnings.
+        ctx = click.get_current_context(silent=True)
+        if ctx is not None and ctx.get_parameter_source("babel_version") == (
+            click.core.ParameterSource.COMMANDLINE
+        ):
+            click.echo(
+                f"Warning: --babel-url overrides --babel-version, so "
+                f"{babel_version!r} is ignored.",
+                err=True,
+            )
+        return babel_url.strip().rstrip("/") + "/"
+    return compose_babel_url(babel_releases_url, babel_version)
+
+
+def make_downloader(
+    babel_url: str | None,
+    babel_releases_url: str,
+    babel_version: str,
+    local_dir: str,
+    check_download: str,
+):
+    """Build a BabelDownloader and point its cache at the effective Babel release.
+
+    Composition happens here rather than at each call site so a future command cannot
+    take the options and forget to resolve them.
+    """
     downloader = BabelDownloader(
-        babel_url,
+        resolve_babel_url(babel_url, babel_releases_url, babel_version),
         local_path=local_dir,
         freshness_seconds=parse_duration(check_download),
     )
@@ -97,19 +184,22 @@ def check_babel_versions(
     cliques would come from one Babel while the cross-references come from another.
     Skipped when either version is unavailable.
     """
-    babel_version = downloader.babel_version
+    # Named for the release the *server* reports, to keep it distinct from the
+    # babel_version parameter the commands take, which is the release the user asked for.
+    downloader_version = downloader.babel_version
     nodenorm_version = nodenorm.get_babel_version()
     if (
-        babel_version
+        downloader_version
         and nodenorm_version
-        and babel_version != nodenorm_version
+        and downloader_version != nodenorm_version
         and not allow_version_mismatch
     ):
         raise click.ClickException(
             f"NodeNorm at {nodenorm.nodenorm_url} was built from Babel {nodenorm_version}, "
-            f"but {downloader.url_base} is Babel {babel_version}. Labels and cliques would "
+            f"but {downloader.url_base} is Babel {downloader_version}. Labels and cliques would "
             f"not match the cross-references. Point --nodenorm-url at a matching NodeNorm, "
-            f"or pass --allow-version-mismatch to proceed anyway."
+            f"pin --babel-version to the release NodeNorm was built from, or pass "
+            f"--allow-version-mismatch to proceed anyway."
         )
 
 
@@ -255,6 +345,15 @@ def cli():
     logging.basicConfig(level=logging.INFO)
     # Runs before subcommand parameters are parsed, so .env feeds the envvar= defaults.
     load_dotenv()
+    # BABEL_URL was the single Babel setting before BABEL_RELEASES_URL + BABEL_VERSION.
+    # It is now inert, and silently ignoring it would send someone to the wrong release
+    # with no clue why. Checked after load_dotenv() so a stale .env is caught too.
+    if os.environ.get("BABEL_URL"):
+        click.echo(
+            "Warning: BABEL_URL is no longer used. Set BABEL_RELEASES_URL and "
+            "BABEL_VERSION instead, or pass --babel-url for a single run.",
+            err=True,
+        )
 
 
 @cli.command("xrefs")
@@ -271,7 +370,9 @@ def cli():
 @format_option
 def xrefs(
     curies: list[str],
-    babel_url: str,
+    babel_url: str | None,
+    babel_releases_url: str,
+    babel_version: str,
     nodenorm_url: str,
     local_dir: str,
     recurse: bool,
@@ -290,8 +391,13 @@ def xrefs(
     :param curies: A list of CURIEs (Compact URI) for which cross-references need
         to be retrieved.
     :type curies: list[str]
-    :param babel_url: Base URL of the Babel server from which to download DuckDB files.
-    :type babel_url: str
+    :param babel_url: Complete URL of one Babel release, overriding the two below.
+        ``None`` unless ``--babel-url`` was passed.
+    :type babel_url: str | None
+    :param babel_releases_url: URL of a directory holding one subdirectory per release.
+    :type babel_releases_url: str
+    :param babel_version: Which release subdirectory to query, or ``latest``.
+    :type babel_version: str
 
     :return: None
     """
@@ -306,7 +412,9 @@ def xrefs(
             )
         recurse = True
 
-    downloader = make_downloader(babel_url, local_dir, check_download)
+    downloader = make_downloader(
+        babel_url, babel_releases_url, babel_version, local_dir, check_download
+    )
     nodenorm = NodeNorm(nodenorm_url)
     # NodeNorm is only consulted for labels; --recurse is served entirely by the
     # recursive DuckDB query, so its results cannot disagree with NodeNorm's release.
@@ -353,7 +461,9 @@ def xrefs(
 @format_option
 def ids(
     curies: list[str],
-    babel_url: str,
+    babel_url: str | None,
+    babel_releases_url: str,
+    babel_version: str,
     nodenorm_url: str,
     local_dir: str,
     labels: bool,
@@ -370,12 +480,19 @@ def ids(
     :param curies: A list of CURIEs (Compact URI) for which cross-references need
         to be retrieved.
     :type curies: list[str]
-    :param babel_url: Base URL of the Babel server
-    :type babel_url: str
+    :param babel_url: Complete URL of one Babel release, overriding the two below.
+        ``None`` unless ``--babel-url`` was passed.
+    :type babel_url: str | None
+    :param babel_releases_url: URL of a directory holding one subdirectory per release.
+    :type babel_releases_url: str
+    :param babel_version: Which release subdirectory to query, or ``latest``.
+    :type babel_version: str
 
     :return: None
     """
-    downloader = make_downloader(babel_url, local_dir, check_download)
+    downloader = make_downloader(
+        babel_url, babel_releases_url, babel_version, local_dir, check_download
+    )
     nodenorm = NodeNorm(nodenorm_url)
     # NodeNorm is only consulted for labels, so only then can its Babel release differ.
     if labels:

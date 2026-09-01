@@ -518,6 +518,11 @@ class TestUrlConfiguration:
     def _invoke(args, env):
         runner = CliRunner()
         with (
+            # load_dotenv() runs inside cli(), i.e. after CliRunner(env=...) has cleared a
+            # variable and before Click reads envvars — so a real .env would leak into
+            # these assertions. Every Translator developer is about to have
+            # BABEL_RELEASES_URL in theirs, so neutralise it rather than hope.
+            patch("babel_explorer.cli.load_dotenv"),
             patch("babel_explorer.cli.BabelDownloader") as mock_dl,
             patch("babel_explorer.cli.BabelXRefs") as mock_bx,
             patch("babel_explorer.cli.NodeNorm") as mock_nn,
@@ -529,7 +534,12 @@ class TestUrlConfiguration:
 
     def test_defaults_are_public(self):
         mock_dl, mock_nn = self._invoke(
-            ["xrefs", "A:1"], env={"BABEL_URL": None, "NODENORM_URL": None}
+            ["xrefs", "A:1"],
+            env={
+                "BABEL_RELEASES_URL": None,
+                "BABEL_VERSION": None,
+                "NODENORM_URL": None,
+            },
         )
         assert mock_dl.call_args[0][0] == "https://stars.renci.org/var/babel/latest/"
         assert mock_nn.call_args[0][0] == "https://nodenormalization-sri.renci.org/"
@@ -538,21 +548,119 @@ class TestUrlConfiguration:
         mock_dl, mock_nn = self._invoke(
             ["xrefs", "A:1"],
             env={
-                "BABEL_URL": "https://example.com/babel/",
+                "BABEL_RELEASES_URL": "https://example.com/babel/",
+                "BABEL_VERSION": "2025dec11",
                 "BABEL_LOCAL_DIR": "/tmp/babel-cache",
                 "NODENORM_URL": "https://example.com/nn/",
             },
         )
-        assert mock_dl.call_args[0][0] == "https://example.com/babel/"
+        assert mock_dl.call_args[0][0] == "https://example.com/babel/2025dec11/"
         assert mock_dl.call_args.kwargs["local_path"] == "/tmp/babel-cache"
         assert mock_nn.call_args[0][0] == "https://example.com/nn/"
+
+    def test_releases_url_without_trailing_slash_still_composes(self):
+        mock_dl, _ = self._invoke(
+            ["xrefs", "A:1"],
+            env={
+                "BABEL_RELEASES_URL": "https://example.com/babel",
+                "BABEL_VERSION": "2025dec11",
+            },
+        )
+        assert mock_dl.call_args[0][0] == "https://example.com/babel/2025dec11/"
 
     def test_flag_beats_env(self):
         mock_dl, _ = self._invoke(
             ["xrefs", "A:1", "--babel-url", "https://flag.example.com/"],
-            env={"BABEL_URL": "https://env.example.com/"},
+            env={
+                "BABEL_RELEASES_URL": "https://env.example.com/",
+                "BABEL_VERSION": "2025dec11",
+            },
         )
         assert mock_dl.call_args[0][0] == "https://flag.example.com/"
+
+    def test_babel_version_flag_beats_env(self):
+        mock_dl, _ = self._invoke(
+            ["xrefs", "A:1", "--babel-version", "2026jul22"],
+            env={
+                "BABEL_RELEASES_URL": "https://example.com/babel/",
+                "BABEL_VERSION": "2025dec11",
+            },
+        )
+        assert mock_dl.call_args[0][0] == "https://example.com/babel/2026jul22/"
+
+    def test_babel_url_has_no_environment_variable(self):
+        """The design decision, pinned: BABEL_URL in the environment does nothing.
+
+        Two variables already feed the composed URL; a third that silently outranked
+        both would make the effective release unreadable from the environment alone.
+        """
+        mock_dl, _ = self._invoke(
+            ["xrefs", "A:1"],
+            env={
+                "BABEL_URL": "https://ignored.example.com/",
+                "BABEL_RELEASES_URL": None,
+                "BABEL_VERSION": None,
+            },
+        )
+        assert mock_dl.call_args[0][0] == "https://stars.renci.org/var/babel/latest/"
+
+    def test_stale_babel_url_warns(self):
+        """Ignoring it silently would send someone to the wrong release with no clue."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.load_dotenv"),
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            result = runner.invoke(
+                cli, ["xrefs", "A:1"], env={"BABEL_URL": "https://stale.example.com/"}
+            )
+        assert result.exit_code == 0, result.output
+        assert "BABEL_URL is no longer used" in result.output
+
+    def test_babel_url_with_typed_version_warns(self):
+        mock_dl, _ = self._invoke(
+            [
+                "xrefs",
+                "A:1",
+                "--babel-url",
+                "https://flag.example.com/",
+                "--babel-version",
+                "2026jul22",
+            ],
+            env={},
+        )
+        assert mock_dl.call_args[0][0] == "https://flag.example.com/"
+
+    def test_babel_url_with_env_version_is_silent(self):
+        """Warning on an env-supplied version would fire on every --babel-url run."""
+        runner = CliRunner()
+        with (
+            patch("babel_explorer.cli.load_dotenv"),
+            patch("babel_explorer.cli.BabelDownloader"),
+            patch("babel_explorer.cli.BabelXRefs") as mock_bx,
+            patch("babel_explorer.cli.NodeNorm"),
+        ):
+            mock_bx.return_value.get_curie_xrefs.return_value = []
+            result = runner.invoke(
+                cli,
+                ["xrefs", "A:1", "--babel-url", "https://flag.example.com/"],
+                env={"BABEL_VERSION": "2026jul22"},
+            )
+        assert result.exit_code == 0, result.output
+        assert "is ignored" not in result.output
+
+    @pytest.mark.parametrize(
+        "bad", ["https://example.com/babel/latest/", "../../etc/passwd"]
+    )
+    def test_babel_version_rejects_urls_and_traversal(self, bad):
+        runner = CliRunner()
+        with patch("babel_explorer.cli.load_dotenv"):
+            result = runner.invoke(cli, ["xrefs", "A:1", "--babel-version", bad])
+        assert result.exit_code != 0
+        assert "--babel-version" in result.output or "may not contain" in result.output
 
 
 class TestMissingBabelFileReporting:

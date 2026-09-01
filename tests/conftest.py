@@ -72,8 +72,8 @@ def test_data_dir():
 def shared_downloader(test_data_dir) -> BabelDownloader:
     """A BabelDownloader pointed at the test data directory.
 
-    Skips the whole session when BABEL_URL points at a Babel release that does not
-    publish the DuckDB Parquet files (as the public releases currently do not).
+    Skips the whole session when the composed Babel URL points at a release that does
+    not publish the DuckDB Parquet files (as the public releases currently do not).
     """
     probe_url = BABEL_URL + CONCORD_FILE
     try:
