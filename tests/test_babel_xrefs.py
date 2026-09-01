@@ -204,6 +204,22 @@ class TestBabelXRefsInit:
         bx = BabelXRefs(dl, nn)
         assert bx.nodenorm is nn
 
+    def test_clear_xref_cache_empties_the_cache(self, tmp_path):
+        """The integration tests reset the cache between queries and must reach it.
+
+        They used to call `get_curie_xref.cache_clear()`, left over from when the
+        method was decorated with lru_cache. It is a plain method over a per-instance
+        dict now, so that raised AttributeError — invisible because those tests skip
+        without a Babel release publishing the Parquet files.
+        """
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        bx = BabelXRefs(dl)
+        bx._xref_cache[("A:1", False)] = []
+
+        bx.clear_xref_cache()
+
+        assert bx._xref_cache == {}
+
     def test_connect_spills_inside_the_cache_directory(self, tmp_path):
         """DuckDB's default temp_directory is `.tmp` in the *current* directory.
 
@@ -411,7 +427,7 @@ class TestBuildAdjacency:
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xref(babel_xrefs, curie):
     """get_curie_xref returns non-empty CrossReferences with the queried CURIE."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     results = list(babel_xrefs.get_curie_xref(curie))
     assert len(results) > 0, f"No cross-references found for {curie}"
     for xr in results:
@@ -423,7 +439,7 @@ def test_get_curie_xref(babel_xrefs, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xref_returns_known_xrefs(babel_xrefs, curie):
     """At least one cross-reference is found."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     results = list(babel_xrefs.get_curie_xref(curie))
     assert len(results) >= 1
 
@@ -432,7 +448,7 @@ def test_get_curie_xref_returns_known_xrefs(babel_xrefs, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
     """get_curie_xrefs without expansion returns sorted, non-empty results."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     results = babel_xrefs.get_curie_xrefs([curie], recurse=False)
     assert len(results) > 0
     assert results == sorted(results)
@@ -442,9 +458,9 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
     """Expanded results are at least as many as non-expanded."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     non_expanded = babel_xrefs.get_curie_xrefs([curie], recurse=False)
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     expanded = babel_xrefs.get_curie_xrefs([curie], recurse=True)
     assert len(expanded) >= len(non_expanded)
 
@@ -453,9 +469,9 @@ def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
     """Non-expanded results are a subset of expanded results."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     non_expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=False))
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=True))
     assert non_expanded.issubset(expanded)
 
@@ -464,7 +480,7 @@ def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
 def test_get_curie_xref_caching(babel_xrefs):
     """Cached calls return the same object."""
     curie = VALID_CURIES[0]
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     r1 = babel_xrefs.get_curie_xref(curie)
     r2 = babel_xrefs.get_curie_xref(curie)
     assert r1 is r2
@@ -474,7 +490,7 @@ def test_get_curie_xref_caching(babel_xrefs):
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xref_with_labels(babel_xrefs_with_nodenorm, curie):
     """With labels, returns LabeledCrossReference objects."""
-    babel_xrefs_with_nodenorm.get_curie_xref.cache_clear()
+    babel_xrefs_with_nodenorm.clear_xref_cache()
     results = list(babel_xrefs_with_nodenorm.get_curie_xref(curie, label_curies=True))
     assert len(results) > 0
     for xr in results:
@@ -484,7 +500,7 @@ def test_get_curie_xref_with_labels(babel_xrefs_with_nodenorm, curie):
 @pytest.mark.integration
 def test_get_curie_xref_nonexistent_curie(babel_xrefs):
     """A made-up CURIE returns an empty list."""
-    babel_xrefs.get_curie_xref.cache_clear()
+    babel_xrefs.clear_xref_cache()
     results = list(babel_xrefs.get_curie_xref("FAKE:9999999999"))
     assert results == []
 

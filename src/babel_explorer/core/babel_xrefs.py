@@ -176,6 +176,15 @@ class BabelXRefs:
         os.makedirs(spill_dir, exist_ok=True)
         return duckdb.connect(config={"temp_directory": spill_dir})
 
+    def clear_xref_cache(self) -> None:
+        """Discard the per-CURIE cross-reference cache.
+
+        The cache is per instance and keyed by ``(curie, label_curies)``, so it is
+        normally left alone. Tests that want a query to actually hit Parquet — rather
+        than a result an earlier test in the same session put there — clear it first.
+        """
+        self._xref_cache.clear()
+
     def _require_nodenorm(self):
         if self.nodenorm is None:
             raise ValueError(
