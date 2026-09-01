@@ -13,7 +13,7 @@ import requests
 from filelock import FileLock
 
 from babel_explorer.core.babel_xrefs import BabelXRefs
-from babel_explorer.core.downloader import BabelDownloader
+from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
 from babel_explorer.core.nodenorm import NodeNorm
 from tests.constants import (
     BABEL_URL,
@@ -119,10 +119,20 @@ def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
     """Download duckdb/Identifiers.parquet, the largest file Babel publishes.
 
     Every test that reaches this is marked ``slow``.
+
+    Skips when the release does not publish it. ``shared_downloader`` probes only
+    ``Concord.parquet``, and a release can publish one file without the other —
+    ``2026jul22`` does exactly that. Without this the tests error out of the fixture
+    with ``MissingBabelFileError`` rather than skipping, which reads as a broken test
+    environment when it is the documented, expected outcome for a release that does
+    not publish the file.
     """
     lock_path = os.path.join(test_data_dir, "identifiers.lock")
     with FileLock(lock_path):
-        return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
+        try:
+            return shared_downloader.get_downloaded_file(IDENTIFIERS_FILE)
+        except MissingBabelFileError as e:
+            pytest.skip(str(e))
 
 
 @pytest.fixture(scope="session")
