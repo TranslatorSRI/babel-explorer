@@ -184,7 +184,14 @@ uv run pytest -v -m "integration and not slow"
 
 # Run a single test file
 uv run pytest -v tests/test_nodenorm.py
+
+# Run serially, e.g. to read one test's output
+uv run pytest -v -n0 tests/test_nodenorm.py
 ```
+
+`[tool.pytest.ini_options]` puts `-n auto` in `addopts`, so every run is parallel by default.
+Disable it with `-n0`, **not** `-p no:xdist` — unloading the plugin leaves the already-parsed
+`-n` behind and pytest exits with `unrecognized arguments: -n`.
 
 ### Linting
 

@@ -8,8 +8,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 import requests
+from _pytest.outcomes import Skipped
 
 from babel_explorer.core.nodenorm import NORMALIZE_BATCH_SIZE, Identifier, NodeNorm
+from tests import conftest
 from tests.constants import load_curies
 
 VALID_CURIES = load_curies()
@@ -485,3 +487,43 @@ class TestNormalizeCuriesBatching:
             with pytest.raises(requests.HTTPError):
                 nn.normalize_curies(["X:1"])
         assert "X:1" not in nn._normalize_cache
+
+
+class TestNodeNormFixtureSkips:
+    """An unreachable NodeNorm must skip its integration tests, not fail them.
+
+    Same blind spot as the Babel-side guard: these fixtures only do anything during an
+    integration run, and CI's integration job skips, so nothing would notice the probe
+    being dropped. Exercising the fixture function directly puts it in the unit suite.
+    """
+
+    @staticmethod
+    def _call_fixture():
+        """Invoke the fixture's underlying function directly, past the decorator."""
+        return conftest.nodenorm.__wrapped__()
+
+    def test_unreachable_api_skips(self):
+        with patch(
+            "tests.conftest.requests.get",
+            side_effect=requests.ConnectionError("network down"),
+        ):
+            with pytest.raises(Skipped) as excinfo:
+                self._call_fixture()
+
+        assert "NodeNorm unreachable" in str(excinfo.value)
+
+    def test_error_status_skips(self):
+        """A 5xx is as unusable as no connection at all."""
+        response = Mock()
+        response.raise_for_status.side_effect = requests.HTTPError("503")
+
+        with patch("tests.conftest.requests.get", return_value=response):
+            with pytest.raises(Skipped):
+                self._call_fixture()
+
+    def test_reachable_api_returns_a_client(self):
+        """The probe must not swallow the normal path."""
+        with patch("tests.conftest.requests.get", return_value=Mock()):
+            client = self._call_fixture()
+
+        assert isinstance(client, NodeNorm)
