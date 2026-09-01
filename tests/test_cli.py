@@ -694,15 +694,24 @@ class TestCommittedConfigTemplate:
         assert self.TEMPLATE.is_file()
         assert not (self.TEMPLATE.parent / ".env.example").exists()
 
+    @staticmethod
+    def _envvars_the_cli_reads() -> set[str]:
+        """Every envvar= declared on any command's options, read off the CLI itself.
+
+        Derived rather than listed: a hard-coded set passes just as happily when a new
+        setting is added to the CLI and forgotten here, which is how
+        BABEL_ALLOW_VERSION_MISMATCH went undocumented in the template.
+        """
+        return {
+            param.envvar
+            for command in cli.commands.values()
+            for param in command.params
+            if getattr(param, "envvar", None)
+        }
+
     def test_documents_every_setting_the_cli_reads(self):
         """A setting the CLI honours but the template omits is one nobody discovers."""
-        assert set(self._settings()) == {
-            "BABEL_RELEASES_URL",
-            "BABEL_VERSION",
-            "BABEL_LOCAL_DIR",
-            "BABEL_CHECK_DOWNLOAD",
-            "NODENORM_URL",
-        }
+        assert set(self._settings()) == self._envvars_the_cli_reads()
 
     def test_defaults_match_the_cli_defaults(self):
         """A template that disagrees with the code silently changes what `cp` gives you."""
