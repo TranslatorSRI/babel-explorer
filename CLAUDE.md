@@ -154,6 +154,9 @@ uv run babel-explorer xrefs MONDO:0004979 --recurse
 # Get cross-references with labels from NodeNorm
 uv run babel-explorer xrefs MONDO:0004979 --labels
 
+# Open the local recursive cross-reference graph viewer
+uv run babel-explorer viewer
+
 # Get ID records for CURIEs
 uv run babel-explorer ids MONDO:0004979
 
