@@ -221,3 +221,4 @@ __marimo__/
 # Node.js (web/ frontend)
 node_modules/
 web/dist/
+web/.astro/
