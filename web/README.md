@@ -28,6 +28,20 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Multi-instance comparison**: Same unified instance selector as NodeNorm
 - **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; shareable URL state and JSON export
 
+### Autocomplete Playground (`/autocomplete`)
+
+Purpose-built for evaluating NameRes as a real autocomplete (the primary way the Translator UI uses it).
+
+- **Live-as-you-type**: every keystroke re-queries after a configurable debounce (0/150/300/500 ms); in-flight requests are aborted via `AbortController` so stale responses never render
+- **Preset dropdown**: one-click switches between the three Translator UI query shapes — Disease (`DiseaseOrPhenotypicFeature` + `only_prefixes=MONDO|HP`), Gene, Small Molecule — plus Custom. Presets only set `biolink_type` and `only_prefixes`; every other field stays user-editable
+- **Advanced options**: debounce, autocomplete flag, highlighting toggle, exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
+- **Latency badges**: per-instance response time, with a tooltip noting parallel-contention when comparing multiple environments
+- **Match-reason highlighting**: renders NameRes's Solr `highlighting` fragments (`<em>`-wrapped matches) behind a whitelist sanitiser — the only place `v-html` is used in the codebase
+- **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches; each column header has an `API↗` link to the raw NameRes JSON for that instance
+- **Biolink type display**: the left-hand CURIE column shows the most specific Biolink type as a badge (linked to biolink.github.io/biolink-model); when instances disagree, all distinct types are shown and the type is repeated per-cell for easy comparison
+- **Expected-CURIE panel**: paste CURIEs you expect to see; "Check" button fires a `limit=100` parallel lookup per instance and shows whether each expected CURIE appears in the top-N (green), top-100 (amber) or is missing (red). Round-trips through URL state for shareable review links
+- **Shareable state**: `q`, `preset`, repeated `target`, repeated `expected`, per-field option overrides, non-default `debounce` and `highlight` all encoded in the URL
+
 ## Development
 
 ```bash
@@ -63,6 +77,10 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
 
+Instance keys: NodeNorm has `dev`, `exp`, `ci` (ElasticSearch-backed), `redis_ci` (Redis, kept for comparison until retired), `test`, `prod`; NameRes has `dev`, `exp`, `ci` (Solr-backed), `es_ci` (ElasticSearch, experimental), `test`, `prod`. The two services share the `ci` key but it points at different backends.
+
+Comparison tables always list instances in pipeline order — `ENV_ORDER` in `src/lib/instance-prefs.ts` (Exp, Dev, CI, ES CI, Redis CI, Test, Prod, then custom URLs). To add a named instance: (1) add it to `config/translator-endpoints.json`; (2) add the key to `PRIMARY_ENVS` in `InstanceSelector.vue` if it belongs in the main section rather than under "Extended environments"; (3) add it to `ENV_ORDER`; (4) add its label to `ENV_LABELS` in the App components and in `InstanceSelector.vue`, with a `labelHtml()` case there if the label needs an `<abbr>`.
+
 CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. `src/lib/curie-links.ts` records which release it came from and how to update it.
 
 ## Architecture
@@ -79,6 +97,7 @@ src/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # Hosts NodeNormApp Vue island
     nameres.astro                   # Hosts NameResApp Vue island
+    autocomplete.astro              # Hosts AutocompleteApp Vue island
   components/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
@@ -90,6 +109,7 @@ src/
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
     nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
+    autocomplete/                   # Autocomplete Vue components (App, Form, Results, ComparisonView, HighlightedFragment, ExpectedCuriePanel, LatencyBadge)
     shared/
       InstanceSelector.vue          # Deployment checkboxes + custom URL, remembered in localStorage
       CurieLink.vue                 # CURIE → external URL link
@@ -103,6 +123,11 @@ src/
     nameres-types.ts                # NameRes interfaces and default options
     nameres-url-state.ts            # Encode/decode NameRes query state
     instance-prefs.ts               # localStorage helpers and canonical instance ordering
+    autocomplete-url-state.ts       # Encode/decode Autocomplete query state
+    autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom presets + detectPreset
+    autocomplete-diff.ts            # Presence/rank/label/type diffs across instances
+    debounce.ts                     # debounce(fn, ms) with .cancel()
+    highlight-sanitize.ts           # Whitelist sanitiser for Solr highlighting (<em> only)
 ```
 
 ## Adding a New Tool
