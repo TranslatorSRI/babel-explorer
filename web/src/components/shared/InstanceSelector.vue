@@ -173,13 +173,11 @@ function removeCustomUrl() {
   customUrlAdded.value = null;
 }
 
-/** Returns the display HTML for an instance's checkbox label.
- *  Safe: only developer-controlled strings reach v-html. */
-function labelHtml(inst: Instance): string {
-  if (inst.env === 'es_ci') return 'ITRB <abbr title="ElasticSearch">ES</abbr> CI';
-  if (inst.env === 'redis_ci') return 'ITRB <abbr title="Redis">Redis</abbr> CI';
-  return ENV_LABELS[inst.env] ?? inst.name;
-}
+/** CI backends whose label abbreviates the backend name ("ITRB <abbr>ES</abbr> CI"). */
+const BACKEND_ABBR: Record<string, { text: string; title: string }> = {
+  es_ci:    { text: 'ES',    title: 'ElasticSearch' },
+  redis_ci: { text: 'Redis', title: 'Redis' },
+};
 
 function saveDefault() {
   const keys = [...selectedUrls.value].map(
@@ -213,7 +211,10 @@ function saveDefault() {
       :checked="selectedUrls.has(inst.url)"
       @change="toggleUrl(inst.url)"
     />
-    <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url" v-html="labelHtml(inst)" />
+    <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
+      <template v-if="BACKEND_ABBR[inst.env]">ITRB <abbr :title="BACKEND_ABBR[inst.env].title">{{ BACKEND_ABBR[inst.env].text }}</abbr> CI</template>
+      <template v-else>{{ ENV_LABELS[inst.env] ?? inst.name }}</template>
+    </label>
   </div>
 
   <!-- Extended environments disclosure -->
@@ -239,7 +240,10 @@ function saveDefault() {
           :checked="selectedUrls.has(inst.url)"
           @change="toggleUrl(inst.url)"
         />
-        <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url" v-html="labelHtml(inst)" />
+        <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
+          <template v-if="BACKEND_ABBR[inst.env]">ITRB <abbr :title="BACKEND_ABBR[inst.env].title">{{ BACKEND_ABBR[inst.env].text }}</abbr> CI</template>
+          <template v-else>{{ ENV_LABELS[inst.env] ?? inst.name }}</template>
+        </label>
       </div>
 
       <!-- Custom URL row (shown when a custom URL has been added) -->
