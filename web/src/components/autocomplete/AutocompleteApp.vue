@@ -92,7 +92,15 @@ const hasDeepResults = computed(() => {
 // ─── Abort + debounce machinery ─────────────────────────────────────────────
 
 let abortController: AbortController | null = null;
+// The deep check has its own controller so it never cancels the live lookup.
+let deepController: AbortController | null = null;
 let lastFireId = 0;
+
+function abortDeepCheck() {
+  deepController?.abort();
+  deepController = null;
+  checking.value = false;
+}
 
 function ensureInstanceState(url: string): InstanceState {
   let s = perInstance.value.get(url);
@@ -123,11 +131,15 @@ function prunePerInstance() {
 
 async function fire() {
   // Invalidate deep results whenever the primary query fires.
+  abortDeepCheck();
   resetDeepResultsOnly();
 
   const q = query.value.trim();
-  // Reset state for an empty query — clean, no fetch.
+  // Reset state for an empty query — clean, no fetch. Cancel and invalidate
+  // any lookup still in flight so it cannot write into the cleared box.
   if (!q) {
+    abortController?.abort();
+    lastFireId++;
     for (const s of perInstance.value.values()) {
       s.results = [];
       s.elapsedMs = null;
@@ -231,10 +243,10 @@ async function runDeepCheck() {
   const q = query.value.trim();
   if (!q || expected.value.length === 0 || selectedUrls.value.length === 0) return;
 
+  abortDeepCheck();
   checking.value = true;
-  abortController?.abort();
-  abortController = new AbortController();
-  const { signal } = abortController;
+  const controller = (deepController = new AbortController());
+  const { signal } = controller;
   const deepOpts = { ...options.value, limit: 100 };
 
   const calls = selectedUrls.value.map((url) =>
@@ -244,6 +256,8 @@ async function runDeepCheck() {
     ),
   );
   const outcomes = await Promise.all(calls);
+  // Stale-write guard: a newer query or deep check has replaced this one.
+  if (deepController !== controller) return;
   for (const o of outcomes) {
     const s = ensureInstanceState(o.url);
     if (o.ok) {
@@ -254,6 +268,7 @@ async function runDeepCheck() {
     }
   }
   perInstance.value = new Map(perInstance.value);
+  deepController = null;
   checking.value = false;
 }
 
@@ -267,6 +282,7 @@ async function handleShare() {
 
 function handleStop() {
   abortController?.abort();
+  abortDeepCheck();
   for (const s of perInstance.value.values()) {
     if (s.inFlight) {
       s.inFlight = false;
@@ -308,6 +324,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   abortController?.abort();
+  deepController?.abort();
   debouncedFire.cancel();
 });
 

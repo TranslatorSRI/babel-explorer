@@ -102,6 +102,53 @@ describe('AutocompleteApp', () => {
     expect(firstSignal?.aborted).toBe(true);
   });
 
+  it('does not write a stale lookup into a box that has since been cleared', async () => {
+    let resolveLookup!: (r: NameResResult[]) => void;
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation(
+      () => new Promise((resolve) => { resolveLookup = resolve; }),
+    );
+
+    const input = wrapper.find('#ac-query');
+    await input.setValue('diab');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+    const signal = vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][3] as AbortSignal;
+
+    await input.setValue('');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+    expect(signal.aborted).toBe(true);
+
+    // Even if the response arrives anyway, it must not render.
+    resolveLookup([mkResult('MONDO:STALE', 'stale')]);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('MONDO:STALE');
+  });
+
+  it('does not cancel the live lookup when the deep check starts', async () => {
+    setLocation('?q=diab&expected=MONDO%3A1&target=dev');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    // A new query whose live lookup is still in flight.
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation(() => new Promise(() => {}));
+    vi.mocked(nameresApi.fetchNameResLookup).mockClear();
+    await wrapper.find('#ac-query').setValue('diabetes');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+    const liveSignal = vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][3] as AbortSignal;
+
+    const checkBtn = wrapper.findAll('button').find((b) => b.text().toLowerCase().includes('check'));
+    await checkBtn!.trigger('click');
+    await flushPromises();
+
+    expect(liveSignal.aborted).toBe(false);
+  });
+
   it('passes limit=100 when Check button fires the deep lookup', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([mkResult('MONDO:1', 'x')]);
 
