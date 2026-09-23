@@ -3,6 +3,16 @@ import { mount } from '@vue/test-utils';
 import InstanceSelector from '../InstanceSelector.vue';
 import { sessionPrefs } from '../../../lib/instance-prefs';
 
+// happy-dom doesn't implement localStorage — provide a minimal in-memory mock.
+const localStorageStore: Record<string, string> = {};
+const localStorageMock = {
+  getItem: (key: string) => localStorageStore[key] ?? null,
+  setItem: (key: string, value: string) => { localStorageStore[key] = value; },
+  removeItem: (key: string) => { delete localStorageStore[key]; },
+  clear: () => { Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]); },
+};
+vi.stubGlobal('localStorage', localStorageMock);
+
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const devInstance = { name: 'NodeNorm Dev', env: 'dev', url: 'https://dev.example.com/' };
