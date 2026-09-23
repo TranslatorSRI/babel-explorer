@@ -33,3 +33,42 @@ export function loadPrefs(): string[] | null {
     return null;
   }
 }
+
+/**
+ * Resolve a target — an env key or a URL — to an instance URL. Returns null
+ * for an env key this service does not have: prefs and `?target=` links are
+ * shared across tools, and NodeNorm and NameRes do not have the same keys
+ * (`redis_ci` vs `es_ci`), so an unknown key must be dropped rather than
+ * fetched as if it were a custom URL.
+ */
+export function resolveTarget(
+  instances: { env: string; url: string }[],
+  target: string,
+): string | null {
+  const inst = instances.find((i) => i.env === target || i.url === target);
+  if (inst) return inst.url;
+  return /^https?:\/\//i.test(target) ? target : null;
+}
+
+const ENV_ORDER: Record<string, number> = {
+  exp:      0,
+  dev:      1,
+  ci:       2,
+  es_ci:    3,
+  redis_ci: 4,
+  test:     5,
+  prod:     6,
+};
+
+/**
+ * Sort instances into canonical pipeline order: Exp → Dev → CI → ES CI → Redis CI → Test → Prod → custom URLs.
+ * Custom URLs (env not in the known set) sort last, then alphabetically by URL for stability.
+ */
+export function sortInstances<T extends { env: string; url: string }>(instances: T[]): T[] {
+  return [...instances].sort((a, b) => {
+    const oa = ENV_ORDER[a.env] ?? 7;
+    const ob = ENV_ORDER[b.env] ?? 7;
+    if (oa !== ob) return oa - ob;
+    return a.url.localeCompare(b.url);
+  });
+}

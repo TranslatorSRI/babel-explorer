@@ -24,6 +24,11 @@ const base = import.meta.env.BASE_URL; // ends in '/': astro.config.mjs sets bas
             NameRes
           </a>
         </li>
+        <li class="nav-item">
+          <a class:list={['nav-link', { active: activePage === 'autocomplete' }]} href={`${base}autocomplete`}>
+            Autocomplete
+          </a>
+        </li>
       </ul>
       <ul class="navbar-nav ms-auto">
         <li class="nav-item">

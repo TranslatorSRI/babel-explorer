@@ -3,6 +3,7 @@ import { ref, shallowRef, reactive, computed, onMounted } from 'vue';
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
+import { sortInstances, resolveTarget } from '../../lib/instance-prefs';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
 import ComparisonView from './ComparisonView.vue';
@@ -12,11 +13,12 @@ import endpoints from '../../../../config/translator-endpoints.json';
 
 // Build instance list from shared config
 const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  test: 'Test',
-  prod: 'Production',
+  dev:      'Dev',
+  exp:      'Exp',
+  ci:       'CI',
+  redis_ci: 'Redis CI',
+  test:     'Test',
+  prod:     'Production',
 };
 
 const instances: NodeNormInstance[] = Object.entries(endpoints.nodenorm).map(
@@ -26,11 +28,6 @@ const instances: NodeNormInstance[] = Object.entries(endpoints.nodenorm).map(
     url: url as string,
   }),
 );
-
-/** Resolve a target (env key or full URL) to an instance URL. */
-function resolveTarget(target: string): string {
-  return instances.find((i) => i.env === target || i.url === target)?.url ?? target;
-}
 
 /** Convert instance URLs back to env keys (or full URL if custom) for the URL bar. */
 function urlsToTargets(urls: string[]): string[] {
@@ -60,9 +57,10 @@ let abortController: AbortController | null = null;
 
 onMounted(async () => {
   if (urlState.curies.length) {
-    const instanceUrls = urlState.targets.length > 0
-      ? urlState.targets.map(resolveTarget)
-      : [instances[0].url];
+    const resolved = urlState.targets
+      .map((t) => resolveTarget(instances, t))
+      .filter((u): u is string => u !== null);
+    const instanceUrls = resolved.length > 0 ? resolved : [instances[0].url];
     await handleSubmit({
       curies: urlState.curies.join('\n'),
       instanceUrls,
@@ -147,8 +145,10 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
     }
 
     resultsByInstance.value = resultMap;
-    queriedInstances.value = payload.instanceUrls
-      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url });
+    queriedInstances.value = sortInstances(
+      payload.instanceUrls
+        .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
+    );
 
     if (errors.length > 0) {
       error.value = `Some instances failed: ${errors.join('; ')}`;
