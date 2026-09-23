@@ -127,6 +127,26 @@ describe('AutocompleteApp', () => {
     expect(wrapper.text()).not.toContain('MONDO:STALE');
   });
 
+  it('does not render a reply that lands between a keystroke and the next fire', async () => {
+    let resolveLookup!: (r: NameResResult[]) => void;
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation(
+      () => new Promise((resolve) => { resolveLookup = resolve; }),
+    );
+
+    const input = wrapper.find('#ac-query');
+    await input.setValue('dia');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+
+    // Type again, and let the old reply arrive inside the debounce window.
+    await input.setValue('diab');
+    resolveLookup([mkResult('MONDO:STALE', 'stale')]);
+    await flushPromises();
+    expect(wrapper.text()).not.toContain('MONDO:STALE');
+  });
+
   it('does not cancel the live lookup when the deep check starts', async () => {
     setLocation('?q=diab&expected=MONDO%3A1&target=dev');
     const wrapper = mount(AutocompleteApp);

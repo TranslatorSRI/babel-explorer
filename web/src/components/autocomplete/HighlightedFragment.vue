@@ -14,7 +14,7 @@ const safe = computed(() =>
 </script>
 
 <template>
-  <!-- The single v-html in this codebase. Input is always run through the sanitizer. -->
+  <!-- The single v-html in this codebase. Both branches of `safe` escape their input. -->
   <span class="hl-fragment" v-html="safe"></span>
 </template>
 

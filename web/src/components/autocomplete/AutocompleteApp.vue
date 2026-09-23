@@ -212,10 +212,16 @@ watch(
   { immediate: true },
 );
 
-// Reactive triggers: any of these change → debounced fire.
+// Reactive triggers: any of these change → debounced fire. Invalidate the
+// previous lookup and sync the URL at once rather than when the debounce
+// expires, or a reply for the old query can still render under the new one.
 watch(
   [query, selectedUrls, () => JSON.stringify(options.value)],
   () => {
+    abortController?.abort();
+    lastFireId++;
+    abortDeepCheck();
+    syncUrl();
     debouncedFire();
   },
 );
