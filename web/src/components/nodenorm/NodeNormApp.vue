@@ -3,6 +3,7 @@ import { ref, shallowRef, reactive, computed, onMounted } from 'vue';
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
+import { sortInstances } from '../../lib/instance-prefs';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
 import ComparisonView from './ComparisonView.vue';
@@ -12,11 +13,12 @@ import endpoints from '../../../../config/translator-endpoints.json';
 
 // Build instance list from shared config
 const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  test: 'Test',
-  prod: 'Production',
+  dev:      'Dev',
+  exp:      'Exp',
+  ci:       'CI',
+  redis_ci: 'Redis CI',
+  test:     'Test',
+  prod:     'Production',
 };
 
 const instances: NodeNormInstance[] = Object.entries(endpoints.nodenorm).map(
@@ -147,8 +149,10 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
     }
 
     resultsByInstance.value = resultMap;
-    queriedInstances.value = payload.instanceUrls
-      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url });
+    queriedInstances.value = sortInstances(
+      payload.instanceUrls
+        .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
+    );
 
     if (errors.length > 0) {
       error.value = `Some instances failed: ${errors.join('; ')}`;
