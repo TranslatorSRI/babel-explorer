@@ -1,0 +1,14 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import NameResApp from '../components/nameres/NameResApp.vue';
+---
+
+<BaseLayout title="NameRes - Babel Explorer" activePage="nameres">
+  <h2 class="mb-3">NameRes Lookup</h2>
+  <p class="mb-4">
+    Look up biomedical concepts by name using
+    <a href="https://name-resolution-sri.renci.org/docs" target="_blank">NameRes</a>.
+    Annotate terms with <code>[[CURIE]]</code> to validate expected results.
+  </p>
+  <NameResApp client:only="vue" />
+</BaseLayout>
