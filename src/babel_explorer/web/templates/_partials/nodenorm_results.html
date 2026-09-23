@@ -1,0 +1,44 @@
+<p>{{ rows|length }} result{{ "s" if rows|length != 1 else "" }} found.</p>
+
+<div class="mb-2">
+  <button class="btn btn-sm btn-outline-secondary" onclick="copyTableAsTSV('results-table')">Copy as TSV</button>
+  <a class="btn btn-sm btn-outline-secondary" id="csv-download" href="#">Download CSV</a>
+</div>
+
+<div class="table-responsive">
+<table class="table table-striped table-sm" id="results-table">
+  <thead>
+    <tr>
+      <th>Input CURIE</th>
+      <th>Normalized CURIE</th>
+      <th>Label</th>
+      <th>Biolink Type</th>
+      <th>Taxa</th>
+      <th>Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.input_curie }}</td>
+      <td>{{ row.normalized_curie }}</td>
+      <td>{{ row.label }}</td>
+      <td>{{ row.biolink_type }}</td>
+      <td>{{ row.taxa }}</td>
+      <td>{{ row.description }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+<script>
+(function() {
+  const curies = {{ rows|map(attribute='input_curie')|list|tojson }};
+  const params = curies.map(c => 'curie=' + encodeURIComponent(c)).join('&');
+  const nnUrl = document.getElementById('nodenorm_url');
+  let url = '/api/nodenorm/csv?' + params;
+  if (nnUrl && nnUrl.value) url += '&nodenorm_url=' + encodeURIComponent(nnUrl.value);
+  document.getElementById('csv-download').href = url;
+})();
+</script>
