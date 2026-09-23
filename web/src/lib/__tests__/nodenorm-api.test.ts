@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseCuries, fetchNormalizedNodes } from '../nodenorm-api';
+import { parseCuries, fetchNormalizedNodes, preferredIdsDisagree } from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
 import type { ApiOptions, NormalizedNode } from '../types';
 import mondoFixture from '../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
@@ -291,5 +291,31 @@ describe('conflation', () => {
     expect(calledUrl.searchParams.get('drug_chemical_conflate')).toBe('false');
 
     vi.restoreAllMocks();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// preferredIdsDisagree
+// ---------------------------------------------------------------------------
+
+describe('preferredIdsDisagree', () => {
+  const a = { name: 'A', env: 'a', url: 'https://a/' };
+  const b = { name: 'B', env: 'b', url: 'https://b/' };
+  const node = (identifier: string) =>
+    ({ id: { identifier }, equivalent_identifiers: [], type: [] }) as NormalizedNode;
+
+  it('is false when every instance that answered agrees', () => {
+    const results = new Map([[a.url, { X: node('P:1') }], [b.url, { X: node('P:1') }]]);
+    expect(preferredIdsDisagree('X', [a, b], results)).toBe(false);
+  });
+
+  it('counts an instance that answered null as disagreeing', () => {
+    const results = new Map([[a.url, { X: node('P:1') }], [b.url, { X: null }]]);
+    expect(preferredIdsDisagree('X', [a, b], results)).toBe(true);
+  });
+
+  it('skips an instance whose request failed', () => {
+    const results = new Map([[a.url, { X: node('P:1') }]]);
+    expect(preferredIdsDisagree('X', [a, b], results)).toBe(false);
   });
 });

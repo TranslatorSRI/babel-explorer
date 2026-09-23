@@ -4,7 +4,6 @@ import CurieDetailPanel from '../CurieDetailPanel.vue';
 import type { NormalizedNode } from '../../../lib/types';
 import ncitFixture from '../../../../../tests/fixtures/nodenorm_responses/ncit_c55060.json';
 import mondoFixture from '../../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
-import prefixMapSubset from '../../../../../tests/fixtures/prefix_map_subset.json';
 
 // NCIT:C55060 has 2 equiv IDs (≤10, small clique)
 const smallCliqueNode = ncitFixture['NCIT:C55060'] as NormalizedNode;
@@ -13,7 +12,6 @@ const largeCliqueNode = mondoFixture['MONDO:0004979'] as NormalizedNode;
 
 const defaultProps = {
   visibleColumns: new Set(['type', 'taxa', 'description']),
-  prefixMap: prefixMapSubset,
 };
 
 describe('CurieDetailPanel', () => {

@@ -18,13 +18,7 @@ export interface QueryState {
   options: Partial<ApiOptions>;
 }
 
-const OPTION_KEYS: (keyof ApiOptions)[] = [
-  'conflate',
-  'drug_chemical_conflate',
-  'description',
-  'individual_types',
-  'include_taxa',
-];
+const OPTION_KEYS = Object.keys(DEFAULT_API_OPTIONS) as (keyof ApiOptions)[];
 
 /**
  * Read the current URL's query params and return the encoded query state.

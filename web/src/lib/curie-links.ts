@@ -1,40 +1,16 @@
 /**
  * CURIE link-out support using the biolink-model prefix map.
  *
- * The prefix map is fetched from GitHub at build time and bundled.
- * It maps CURIE prefixes to IRI bases (e.g. MONDO → http://purl.obolibrary.org/obo/MONDO_).
+ * The prefix map maps CURIE prefixes to IRI bases (e.g. MONDO → http://purl.obolibrary.org/obo/MONDO_).
  * These IRIs generally resolve via 303/302 redirects to useful browseable pages
  * (OLS, identifiers.org, GenNames, etc.).
  *
- * Biolink model version is configurable — update BIOLINK_VERSION below.
+ * biolink-prefix-map.json is a vendored copy of biolink-model v4.3.7's
+ * src/biolink_model/prefixmaps/biolink-model-prefix-map.json, bundled at build time.
+ * To update it, download that file from the new release tag over the vendored copy.
  */
 
-const BIOLINK_VERSION = 'v4.3.7';
-
-const PREFIX_MAP_URL =
-  `https://raw.githubusercontent.com/biolink/biolink-model/${BIOLINK_VERSION}/src/biolink_model/prefixmaps/biolink-model-prefix-map.json`;
-
-/** Cached prefix map: prefix → IRI base URL. */
-let prefixMap: Record<string, string> | null = null;
-
-/**
- * Load the biolink prefix map. Fetches from GitHub on first call,
- * then returns the cached copy. Falls back to an empty map on error.
- */
-export async function loadPrefixMap(): Promise<Record<string, string>> {
-  if (prefixMap) return prefixMap;
-
-  try {
-    const resp = await fetch(PREFIX_MAP_URL);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    prefixMap = await resp.json();
-    return prefixMap!;
-  } catch (err) {
-    console.warn('Failed to load biolink prefix map:', err);
-    prefixMap = {};
-    return prefixMap;
-  }
-}
+import PREFIX_MAP from './biolink-prefix-map.json';
 
 /**
  * Parse a CURIE into prefix and local ID.
@@ -53,7 +29,10 @@ export function parseCurie(curie: string): { prefix: string; localId: string } |
  * The IRI base typically ends with _ or / — we append the local ID directly.
  * e.g. MONDO:0004979 → http://purl.obolibrary.org/obo/MONDO_0004979
  */
-export function getCurieUrl(curie: string, map: Record<string, string>): string | null {
+export function getCurieUrl(
+  curie: string,
+  map: Record<string, string> = PREFIX_MAP,
+): string | null {
   const parsed = parseCurie(curie);
   if (!parsed) return null;
 

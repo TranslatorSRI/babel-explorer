@@ -1,4 +1,4 @@
-import type { ApiOptions, NormalizedNode, NodeNormResponse } from './types';
+import type { ApiOptions, NormalizedNode, NodeNormInstance, NodeNormResponse } from './types';
 
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
@@ -14,18 +14,7 @@ export async function fetchNormalizedNodes(
   options: ApiOptions,
   signal?: AbortSignal,
 ): Promise<NodeNormResponse> {
-  const url = new URL('get_normalized_nodes', baseUrl);
-
-  for (const curie of curies) {
-    url.searchParams.append('curie', curie);
-  }
-  url.searchParams.set('conflate', String(options.conflate));
-  url.searchParams.set('drug_chemical_conflate', String(options.drug_chemical_conflate));
-  url.searchParams.set('description', String(options.description));
-  url.searchParams.set('individual_types', String(options.individual_types));
-  url.searchParams.set('include_taxa', String(options.include_taxa));
-
-  const resp = await fetch(url.toString(), { signal });
+  const resp = await fetch(buildNodeNormUrl(baseUrl, curies, options), { signal });
   if (!resp.ok) {
     throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
   }
@@ -33,18 +22,36 @@ export async function fetchNormalizedNodes(
 }
 
 /**
- * Build the NodeNorm GET URL for a single CURIE with the given options.
- * Useful for linking directly to the raw API response.
+ * Build the NodeNorm get_normalized_nodes GET URL for the given CURIEs and options.
+ * Also used to link directly to the raw API response for one CURIE.
  */
-export function buildNodeNormUrl(baseUrl: string, curie: string, options: ApiOptions): string {
+export function buildNodeNormUrl(baseUrl: string, curies: string[], options: ApiOptions): string {
   const url = new URL('get_normalized_nodes', baseUrl);
-  url.searchParams.append('curie', curie);
-  url.searchParams.set('conflate', String(options.conflate));
-  url.searchParams.set('drug_chemical_conflate', String(options.drug_chemical_conflate));
-  url.searchParams.set('description', String(options.description));
-  url.searchParams.set('individual_types', String(options.individual_types));
-  url.searchParams.set('include_taxa', String(options.include_taxa));
+  for (const curie of curies) {
+    url.searchParams.append('curie', curie);
+  }
+  for (const [key, value] of Object.entries(options)) {
+    url.searchParams.set(key, String(value));
+  }
   return url.toString();
+}
+
+/**
+ * True if the instances that answered disagree on the preferred ID for a CURIE.
+ * An instance with no response (its request failed) is skipped; one that answered
+ * null counts as "(not found)".
+ */
+export function preferredIdsDisagree(
+  curie: string,
+  instances: NodeNormInstance[],
+  resultsByInstance: Map<string, NodeNormResponse>,
+): boolean {
+  const ids = new Set<string>();
+  for (const inst of instances) {
+    const resp = resultsByInstance.get(inst.url);
+    if (resp) ids.add(resp[curie]?.id?.identifier ?? '(not found)');
+  }
+  return ids.size > 1;
 }
 
 /**

@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import type { NormalizedNode } from '../../lib/types';
 import { getDirectTypes } from '../../lib/nodenorm-api';
+import { parseCurie } from '../../lib/curie-links';
 import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
 import EquivalentIdTable from './EquivalentIdTable.vue';
 
@@ -10,7 +11,6 @@ const EXPAND_THRESHOLD = 10;
 const props = defineProps<{
   node: NormalizedNode | null;
   visibleColumns: Set<string>;
-  prefixMap: Record<string, string>;
 }>();
 
 const expanded = ref(false);
@@ -18,14 +18,12 @@ const expanded = ref(false);
 const equivIds = computed(() => props.node?.equivalent_identifiers ?? []);
 const directTypes = computed(() => props.node ? getDirectTypes(props.node) : []);
 const isLargeClique = computed(() => equivIds.value.length > EXPAND_THRESHOLD);
-const showTable = computed(() => !isLargeClique.value || expanded.value);
 
 /** Summarize equivalent IDs by prefix count. e.g. "MONDO: 2, UMLS: 5" */
 const prefixSummary = computed(() => {
   const counts: Record<string, number> = {};
   for (const id of equivIds.value) {
-    const idx = id.identifier.indexOf(':');
-    const prefix = idx > 0 ? id.identifier.substring(0, idx) : '(unknown)';
+    const prefix = parseCurie(id.identifier)?.prefix ?? '(unknown)';
     counts[prefix] = (counts[prefix] || 0) + 1;
   }
   return Object.entries(counts)
@@ -63,7 +61,7 @@ const prefixSummary = computed(() => {
       </button>
     </template>
 
-    <template v-if="showTable">
+    <template v-else>
       <button
         v-if="isLargeClique"
         class="btn btn-sm btn-outline-secondary mb-2"
@@ -71,11 +69,7 @@ const prefixSummary = computed(() => {
       >
         Collapse
       </button>
-      <EquivalentIdTable
-        :identifiers="equivIds"
-        :visible-columns="visibleColumns"
-        :prefix-map="prefixMap"
-      />
+      <EquivalentIdTable :identifiers="equivIds" :visible-columns="visibleColumns" />
     </template>
   </template>
   <template v-else>

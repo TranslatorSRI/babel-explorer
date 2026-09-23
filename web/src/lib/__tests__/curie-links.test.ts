@@ -1,22 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import { parseCurie, getCurieUrl } from '../curie-links';
 import prefixMapSubset from '../../../../tests/fixtures/prefix_map_subset.json';
 
-// Module-level cache in curie-links.ts requires re-importing after reset.
-// Each describe block that tests loadPrefixMap uses vi.resetModules().
-
 // ---------------------------------------------------------------------------
-// parseCurie  (pure function — no module cache issues)
+// parseCurie
 // ---------------------------------------------------------------------------
 
 describe('parseCurie', () => {
-  // Import once since parseCurie is pure.
-  let parseCurie: typeof import('../curie-links').parseCurie;
-
-  beforeEach(async () => {
-    const mod = await import('../curie-links');
-    parseCurie = mod.parseCurie;
-  });
-
   it('parses a standard CURIE', () => {
     expect(parseCurie('MONDO:0004979')).toEqual({
       prefix: 'MONDO',
@@ -52,13 +42,6 @@ describe('parseCurie', () => {
 // ---------------------------------------------------------------------------
 
 describe('getCurieUrl', () => {
-  let getCurieUrl: typeof import('../curie-links').getCurieUrl;
-
-  beforeEach(async () => {
-    const mod = await import('../curie-links');
-    getCurieUrl = mod.getCurieUrl;
-  });
-
   it('returns IRI URL for a known prefix', () => {
     expect(getCurieUrl('MONDO:0004979', prefixMapSubset)).toBe(
       'http://purl.obolibrary.org/obo/MONDO_0004979',
@@ -84,58 +67,8 @@ describe('getCurieUrl', () => {
   it('returns null for unparseable CURIE', () => {
     expect(getCurieUrl('nocolon', prefixMapSubset)).toBeNull();
   });
-});
 
-// ---------------------------------------------------------------------------
-// loadPrefixMap  (has module-level cache, needs vi.resetModules)
-// ---------------------------------------------------------------------------
-
-describe('loadPrefixMap', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.restoreAllMocks();
-  });
-
-  it('returns map on successful fetch', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(prefixMapSubset),
-    }));
-
-    const { loadPrefixMap } = await import('../curie-links');
-    const map = await loadPrefixMap();
-    expect(map).toEqual(prefixMapSubset);
-  });
-
-  it('returns empty map on fetch failure', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
-
-    const { loadPrefixMap } = await import('../curie-links');
-    const map = await loadPrefixMap();
-    expect(map).toEqual({});
-  });
-
-  it('returns empty map on non-OK response', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: false,
-      status: 404,
-    }));
-
-    const { loadPrefixMap } = await import('../curie-links');
-    const map = await loadPrefixMap();
-    expect(map).toEqual({});
-  });
-
-  it('caches result — second call does not re-fetch', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(prefixMapSubset),
-    });
-    vi.stubGlobal('fetch', mockFetch);
-
-    const { loadPrefixMap } = await import('../curie-links');
-    await loadPrefixMap();
-    await loadPrefixMap();
-    expect(mockFetch).toHaveBeenCalledOnce();
+  it('defaults to the vendored biolink prefix map', () => {
+    expect(getCurieUrl('MONDO:0004979')).toBe('http://purl.obolibrary.org/obo/MONDO_0004979');
   });
 });

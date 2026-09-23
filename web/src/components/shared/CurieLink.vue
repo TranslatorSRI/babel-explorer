@@ -2,12 +2,9 @@
 import { computed } from 'vue';
 import { getCurieUrl } from '../../lib/curie-links';
 
-const props = defineProps<{
-  curie: string;
-  prefixMap: Record<string, string>;
-}>();
+const props = defineProps<{ curie: string }>();
 
-const url = computed(() => getCurieUrl(props.curie, props.prefixMap));
+const url = computed(() => getCurieUrl(props.curie));
 </script>
 
 <template>

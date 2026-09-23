@@ -4,7 +4,6 @@ import ComparisonView from '../ComparisonView.vue';
 import type { NodeNormResponse, NodeNormInstance } from '../../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../../lib/types';
 import mondoFixture from '../../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
-import prefixMapSubset from '../../../../../tests/fixtures/prefix_map_subset.json';
 
 const devInstance: NodeNormInstance = { name: 'Dev', env: 'dev', url: 'https://dev.example.com/' };
 const prodInstance: NodeNormInstance = { name: 'Prod', env: 'prod', url: 'https://prod.example.com/' };
@@ -24,7 +23,6 @@ const disagreeResults = new Map<string, NodeNormResponse>([
 const defaultProps = {
   curies: ['MONDO:0004979'],
   queriedInstances: [devInstance, prodInstance],
-  prefixMap: prefixMapSubset,
   visibleColumns: new Set(['type']),
   typeFilter: new Set<string>(),
   apiOptions: DEFAULT_API_OPTIONS,
@@ -139,7 +137,6 @@ describe('ComparisonView — column visibility', () => {
   const singleInstanceProps = {
     curies: ['MONDO:0004979'],
     queriedInstances: [devInstance],
-    prefixMap: prefixMapSubset,
     resultsByInstance: singleInstance,
     typeFilter: new Set<string>(),
     apiOptions: DEFAULT_API_OPTIONS,
@@ -194,7 +191,6 @@ describe('ComparisonView — type filtering', () => {
   const baseProps = {
     curies: ['MONDO:0004979'],
     queriedInstances: [devInstance],
-    prefixMap: prefixMapSubset,
     visibleColumns: new Set<string>(),
     resultsByInstance: results,
     apiOptions: DEFAULT_API_OPTIONS,
@@ -209,21 +205,21 @@ describe('ComparisonView — type filtering', () => {
 
   it('shows CURIE when its type matches the active filter', () => {
     const wrapper = mount(ComparisonView, {
-      props: { ...baseProps, typeFilter: new Set(['Disease']) },
+      props: { ...baseProps, typeFilter: new Set(['biolink:Disease']) },
     });
     expect(wrapper.text()).toContain('MONDO:0004979');
   });
 
   it('hides CURIE when its type does not match the active filter', () => {
     const wrapper = mount(ComparisonView, {
-      props: { ...baseProps, typeFilter: new Set(['Gene']) },
+      props: { ...baseProps, typeFilter: new Set(['biolink:Gene']) },
     });
     expect(wrapper.text()).not.toContain('MONDO:0004979');
   });
 
   it('shows empty-state message when filter excludes all CURIEs', () => {
     const wrapper = mount(ComparisonView, {
-      props: { ...baseProps, typeFilter: new Set(['Gene']) },
+      props: { ...baseProps, typeFilter: new Set(['biolink:Gene']) },
     });
     expect(wrapper.text()).toContain('No CURIEs match the selected type filter');
   });
@@ -234,7 +230,7 @@ describe('ComparisonView — type filtering', () => {
     });
     expect(wrapper.text()).toContain('MONDO:0004979');
 
-    await wrapper.setProps({ typeFilter: new Set(['Gene']) });
+    await wrapper.setProps({ typeFilter: new Set(['biolink:Gene']) });
     expect(wrapper.text()).not.toContain('MONDO:0004979');
 
     await wrapper.setProps({ typeFilter: new Set<string>() });

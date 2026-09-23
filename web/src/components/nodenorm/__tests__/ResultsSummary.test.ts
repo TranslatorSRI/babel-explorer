@@ -226,7 +226,7 @@ describe('ResultsSummary — types tile', () => {
       props: {
         ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
         curies: ['MONDO:0004979'],
-        selectedTypes: new Set(['Disease']),
+        selectedTypes: new Set(['biolink:Disease']),
       },
     });
     const typeBtn = wrapper.findAll('button').find((b) => b.text().includes('Disease'))!;
@@ -243,7 +243,7 @@ describe('ResultsSummary — types tile', () => {
     });
     const typeBtn = wrapper.findAll('button').find((b) => b.text().includes('Disease'))!;
     await typeBtn.trigger('click');
-    expect(wrapper.emitted('toggle-type-filter')).toEqual([['Disease']]);
+    expect(wrapper.emitted('toggle-type-filter')).toEqual([['biolink:Disease']]);
   });
 
   it('"clear" button is absent when no types are selected', () => {
@@ -262,7 +262,7 @@ describe('ResultsSummary — types tile', () => {
       props: {
         ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
         curies: ['MONDO:0004979'],
-        selectedTypes: new Set(['Disease']),
+        selectedTypes: new Set(['biolink:Disease']),
       },
     });
     expect(wrapper.text()).toContain('clear');
@@ -273,7 +273,7 @@ describe('ResultsSummary — types tile', () => {
       props: {
         ...singleInstanceResults({ 'MONDO:0004979': mondoNode }),
         curies: ['MONDO:0004979'],
-        selectedTypes: new Set(['Disease']),
+        selectedTypes: new Set(['biolink:Disease']),
       },
     });
     const clearBtn = wrapper.findAll('button').find((b) => b.text() === 'clear')!;

@@ -1,9 +1,8 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, shallowRef, reactive, computed, onMounted } from 'vue';
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
-import { loadPrefixMap } from '../../lib/curie-links';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
 import ComparisonView from './ComparisonView.vue';
@@ -43,35 +42,24 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const queriedCuries = ref<string[]>([]);
 const visibleColumns = reactive(new Set(['type', 'taxa']));
-const prefixMap = ref<Record<string, string>>({});
 
 // Read URL state synchronously so NodeNormForm receives correct initial values
 // on its first render (before onMounted fires).
-const urlState = typeof window !== 'undefined' ? readQueryState() : null;
-const initialCuries = ref<string | undefined>(
-  urlState?.curies.length ? urlState.curies.join('\n') : undefined,
-);
-const initialTargets = ref<string[] | undefined>(
-  urlState?.targets.length ? urlState.targets : undefined,
-);
-const initialOptions = ref<Partial<ApiOptions> | undefined>(
-  urlState?.options && Object.keys(urlState.options).length ? urlState.options : undefined,
-);
+const urlState = readQueryState();
 
-// Results keyed by instance URL
-const resultsByInstance = ref<Map<string, NodeNormResponse>>(new Map());
+// Results keyed by instance URL. Only ever replaced whole, so shallowRef avoids
+// deep-proxying every NodeNorm response.
+const resultsByInstance = shallowRef(new Map<string, NodeNormResponse>());
 const queriedInstances = ref<NodeNormInstance[]>([]);
 const queriedOptions = ref<ApiOptions>(DEFAULT_API_OPTIONS);
 const hasResults = computed(() => resultsByInstance.value.size > 0);
-const typeFilter = ref(new Set<string>());
+const typeFilter = reactive(new Set<string>());
 
 // Abort controller for in-flight requests
 let abortController: AbortController | null = null;
 
 onMounted(async () => {
-  prefixMap.value = await loadPrefixMap();
-
-  if (urlState?.curies.length) {
+  if (urlState.curies.length) {
     const instanceUrls = urlState.targets.length > 0
       ? urlState.targets.map(resolveTarget)
       : [instances[0].url];
@@ -87,21 +75,9 @@ function stopQuery() {
   abortController?.abort();
 }
 
-function toggleColumn(col: string) {
-  if (visibleColumns.has(col)) {
-    visibleColumns.delete(col);
-  } else {
-    visibleColumns.add(col);
-  }
+function toggle(set: Set<string>, key: string) {
+  if (!set.delete(key)) set.add(key);
 }
-
-function toggleTypeFilter(type: string) {
-  const next = new Set(typeFilter.value);
-  if (next.has(type)) next.delete(type); else next.add(type);
-  typeFilter.value = next;
-}
-
-function clearTypeFilter() { typeFilter.value = new Set(); }
 
 async function handleShare() {
   await navigator.clipboard.writeText(window.location.href);
@@ -144,7 +120,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
   resultsByInstance.value = new Map();
   queriedCuries.value = curies;
   queriedOptions.value = payload.options;
-  typeFilter.value = new Set();
+  typeFilter.clear();
 
   try {
     // Fetch from all selected instances in parallel (handles single instance too)
@@ -172,8 +148,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
 
     resultsByInstance.value = resultMap;
     queriedInstances.value = payload.instanceUrls
-      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
-      .filter((inst): inst is NodeNormInstance => inst != null);
+      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url });
 
     if (errors.length > 0) {
       error.value = `Some instances failed: ${errors.join('; ')}`;
@@ -183,12 +158,6 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
     if (!signal.aborted) {
       const targets = urlsToTargets(payload.instanceUrls);
       window.history.replaceState(null, '', buildQueryUrl(curies, targets, payload.options));
-    }
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') {
-      // User clicked Stop — clear loading silently
-    } else {
-      error.value = e instanceof Error ? e.message : String(e);
     }
   } finally {
     loading.value = false;
@@ -204,9 +173,9 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :instances="instances"
         :loading="loading"
         :has-results="hasResults"
-        :initial-curies="initialCuries"
-        :initial-targets="initialTargets"
-        :initial-options="initialOptions"
+        :initial-curies="urlState.curies.join('\n') || undefined"
+        :initial-targets="urlState.targets"
+        :initial-options="urlState.options"
         @submit="handleSubmit"
         @stop="stopQuery"
         @share="handleShare"
@@ -216,13 +185,13 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
 
   <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
-  <div v-if="resultsByInstance.size > 0" class="card">
+  <div v-if="hasResults" class="card">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
       <span>
         Results — {{ queriedCuries.length }} CURIE{{ queriedCuries.length !== 1 ? 's' : '' }},
         {{ queriedInstances.length }} instance{{ queriedInstances.length !== 1 ? 's' : '' }}
       </span>
-      <ColumnVisibility :visible-columns="visibleColumns" @toggle="toggleColumn" />
+      <ColumnVisibility :visible-columns="visibleColumns" @toggle="toggle(visibleColumns, $event)" />
     </div>
     <div class="card-body">
       <ResultsSummary
@@ -230,15 +199,14 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :queried-instances="queriedInstances"
         :curies="queriedCuries"
         :selected-types="typeFilter"
-        @toggle-type-filter="toggleTypeFilter"
-        @clear-type-filter="clearTypeFilter"
+        @toggle-type-filter="toggle(typeFilter, $event)"
+        @clear-type-filter="typeFilter.clear()"
       />
       <ComparisonView
         :results-by-instance="resultsByInstance"
         :queried-instances="queriedInstances"
         :curies="queriedCuries"
         :visible-columns="visibleColumns"
-        :prefix-map="prefixMap"
         :type-filter="typeFilter"
         :api-options="queriedOptions"
       />

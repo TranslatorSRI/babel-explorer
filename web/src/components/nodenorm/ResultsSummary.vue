@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { NodeNormResponse, NodeNormInstance } from '../../lib/types';
-import { getDirectTypes } from '../../lib/nodenorm-api';
+import { getDirectTypes, preferredIdsDisagree } from '../../lib/nodenorm-api';
 
 const props = defineProps<{
   resultsByInstance: Map<string, NodeNormResponse>;
@@ -17,53 +17,34 @@ const emit = defineEmits<{
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** CURIEs found (non-null) by every queried instance. */
-const normalizedByAll = computed(() =>
-  props.curies.filter((c) =>
-    props.queriedInstances.every((inst) => {
-      const resp = props.resultsByInstance.get(inst.url);
-      return resp != null && resp[c] != null;
-    }),
-  ),
-);
-
-/** CURIEs not found by any instance. */
-const notFoundByAny = computed(() =>
-  props.curies.filter((c) =>
-    props.queriedInstances.every((inst) => {
-      const resp = props.resultsByInstance.get(inst.url);
-      return resp == null || resp[c] == null;
-    }),
-  ),
-);
-
-/** CURIEs found by at least one instance but not all (partial hits). */
-const partiallyFound = computed(() =>
-  props.curies.filter(
-    (c) => !normalizedByAll.value.includes(c) && !notFoundByAny.value.includes(c),
-  ),
-);
+/** CURIEs bucketed by how many queried instances found them: all, some, or none. */
+const coverage = computed(() => {
+  const all: string[] = [];
+  const partial: string[] = [];
+  const none: string[] = [];
+  for (const c of props.curies) {
+    const hits = props.queriedInstances.filter(
+      (inst) => props.resultsByInstance.get(inst.url)?.[c] != null,
+    ).length;
+    (hits === 0 ? none : hits === props.queriedInstances.length ? all : partial).push(c);
+  }
+  return { all, partial, none };
+});
 
 /**
  * CURIEs where instances disagree on the preferred ID.
  * Only relevant when 2+ instances are queried.
  */
-const disagreements = computed(() => {
-  if (props.queriedInstances.length < 2) return [];
-  return props.curies.filter((c) => {
-    const ids = new Set<string>();
-    for (const inst of props.queriedInstances) {
-      const resp = props.resultsByInstance.get(inst.url);
-      ids.add(resp?.[c]?.id?.identifier ?? '(not found)');
-    }
-    return ids.size > 1;
-  });
-});
+const disagreements = computed(() =>
+  props.curies.filter((c) =>
+    preferredIdsDisagree(c, props.queriedInstances, props.resultsByInstance),
+  ),
+);
 
 /**
  * Biolink types seen across all results, using the most-specific type (type[0])
  * per CURIE. Counts distinct CURIEs per type (not occurrences).
- * Returns array of [displayName, count] pairs sorted by count descending.
+ * Returns array of [biolink type, count] pairs sorted by count descending.
  */
 const typeCounts = computed((): [string, number][] => {
   const curiesByType = new Map<string, Set<string>>();
@@ -72,9 +53,8 @@ const typeCounts = computed((): [string, number][] => {
       const node = props.resultsByInstance.get(inst.url)?.[curie];
       if (!node) continue;
       for (const t of getDirectTypes(node)) {
-        const label = t.replace('biolink:', '');
-        if (!curiesByType.has(label)) curiesByType.set(label, new Set());
-        curiesByType.get(label)!.add(curie);
+        if (!curiesByType.has(t)) curiesByType.set(t, new Set());
+        curiesByType.get(t)!.add(curie);
       }
       break; // take the first instance that finds this CURIE
     }
@@ -102,16 +82,16 @@ function formatCurieList(curies: string[]): string {
       <div class="card-body py-2 px-3">
         <div class="text-muted small mb-1">Normalized</div>
         <div class="fs-5 fw-semibold">
-          {{ normalizedByAll.length }}
+          {{ coverage.all.length }}
           <span class="fs-6 fw-normal text-muted">/ {{ curies.length }}</span>
         </div>
-        <div v-if="partiallyFound.length > 0" class="text-warning small mt-1">
-          {{ partiallyFound.length }} partial
-          <span class="text-muted">({{ formatCurieList(partiallyFound) }})</span>
+        <div v-if="coverage.partial.length > 0" class="text-warning small mt-1">
+          {{ coverage.partial.length }} partial
+          <span class="text-muted">({{ formatCurieList(coverage.partial) }})</span>
         </div>
-        <div v-if="notFoundByAny.length > 0" class="text-danger small mt-1">
-          {{ notFoundByAny.length }} not found
-          <span class="text-muted">({{ formatCurieList(notFoundByAny) }})</span>
+        <div v-if="coverage.none.length > 0" class="text-danger small mt-1">
+          {{ coverage.none.length }} not found
+          <span class="text-muted">({{ formatCurieList(coverage.none) }})</span>
         </div>
       </div>
     </div>
@@ -151,9 +131,9 @@ function formatCurieList(curies: string[]): string {
             :key="type"
             type="button"
             :class="['btn', 'btn-sm', selectedTypes.has(type) ? 'btn-secondary' : 'btn-outline-secondary']"
-            :title="`Filter results to ${type}`"
+            :title="`Filter results to ${type.replace('biolink:', '')}`"
             @click="emit('toggle-type-filter', type)"
-          >{{ type }} <span class="badge bg-light text-dark">{{ count }}</span></button>
+          >{{ type.replace('biolink:', '') }} <span class="badge bg-light text-dark">{{ count }}</span></button>
         </div>
       </div>
     </div>

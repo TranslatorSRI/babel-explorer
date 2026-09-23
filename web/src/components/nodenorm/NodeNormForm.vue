@@ -85,7 +85,7 @@ function onSubmit() {
   emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
 }
 
-const ADVANCED_KEYS = ['description', 'individual_types', 'include_taxa'] as const;
+const ADVANCED_KEYS = ['description', 'include_taxa'] as const;
 const hasNonDefaultAdvancedOptions = computed(() =>
   ADVANCED_KEYS.some((k) => options.value[k] !== DEFAULT_API_OPTIONS[k])
 );
