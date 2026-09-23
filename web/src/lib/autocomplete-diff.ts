@@ -120,17 +120,28 @@ export interface ExpectedCurieStatus {
   of: number;
 }
 
+/**
+ * Comparison key for a CURIE: the prefix is case-insensitive (so `mondo:1`
+ * matches `MONDO:1`), the local identifier is not. Prefix case varies between
+ * vocabularies (`NCBIGene`, `UniProtKB`), so it cannot simply be upper-cased.
+ */
+export function curieKey(curie: string): string {
+  const idx = curie.indexOf(':');
+  return idx > 0 ? curie.slice(0, idx).toLowerCase() + curie.slice(idx) : curie;
+}
+
 export function classifyExpectedCurie(
   curie: string,
   topN: NameResResult[] | undefined,
   deep: NameResResult[] | undefined,
 ): ExpectedCurieStatus {
+  const key = curieKey(curie);
   if (topN) {
-    const i = topN.findIndex((r) => r.curie === curie);
+    const i = topN.findIndex((r) => curieKey(r.curie) === key);
     if (i !== -1) return { curie, status: 'hit', rank: i, of: topN.length };
   }
   if (deep) {
-    const i = deep.findIndex((r) => r.curie === curie);
+    const i = deep.findIndex((r) => curieKey(r.curie) === key);
     if (i !== -1) return { curie, status: 'deep', rank: i, of: deep.length };
     return { curie, status: 'miss', rank: -1, of: deep.length };
   }

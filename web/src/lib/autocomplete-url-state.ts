@@ -2,6 +2,7 @@ import type { NameResApiOptions } from './nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from './nameres-types';
 import type { AutocompletePresetId } from './autocomplete-presets';
 import { DEFAULT_PRESET_ID, getPreset } from './autocomplete-presets';
+import { curieKey } from './autocomplete-diff';
 
 /** Defaults specific to the Autocomplete tool (differ from NameRes tool on `autocomplete`). */
 export const DEFAULT_AUTOCOMPLETE_OPTIONS: NameResApiOptions = {
@@ -122,20 +123,17 @@ export function buildAutocompleteQueryUrl(state: {
   return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
 }
 
-/** Parse a raw textarea string of expected CURIEs into a deduped, normalized list. */
+/** Parse a raw textarea string of expected CURIEs into a deduped list, kept as typed. */
 export function parseExpectedCuries(raw: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const token of raw.split(/[\s,]+/)) {
     const trimmed = token.trim();
     if (!trimmed) continue;
-    // Normalize: upper-case the prefix half before the first colon, preserve the rest.
-    const idx = trimmed.indexOf(':');
-    const normalized =
-      idx > 0 ? trimmed.slice(0, idx).toUpperCase() + trimmed.slice(idx) : trimmed;
-    if (seen.has(normalized)) continue;
-    seen.add(normalized);
-    out.push(normalized);
+    const key = curieKey(trimmed);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
   }
   return out;
 }

@@ -138,13 +138,14 @@ describe('parseExpectedCuries', () => {
     ]);
   });
 
-  it('normalizes prefix to upper case but preserves identifier casing', () => {
-    expect(parseExpectedCuries('mondo:0004979')).toEqual(['MONDO:0004979']);
-    expect(parseExpectedCuries('ncbigene:1234')).toEqual(['NCBIGENE:1234']);
+  it('keeps mixed-case prefixes as typed', () => {
+    expect(parseExpectedCuries('NCBIGene:1234 UniProtKB:P1')).toEqual([
+      'NCBIGene:1234', 'UniProtKB:P1',
+    ]);
   });
 
-  it('deduplicates', () => {
-    expect(parseExpectedCuries('MONDO:1\nMONDO:1')).toEqual(['MONDO:1']);
+  it('deduplicates, ignoring prefix case', () => {
+    expect(parseExpectedCuries('MONDO:1\nMONDO:1\nmondo:1')).toEqual(['MONDO:1']);
   });
 
   it('skips blank tokens', () => {

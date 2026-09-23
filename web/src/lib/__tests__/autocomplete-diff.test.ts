@@ -90,6 +90,12 @@ describe('classifyExpectedCurie', () => {
   const top5 = [r('A:1', 'a'), r('A:2', 'a')];
   const deep = [r('A:1', 'a'), r('A:2', 'a'), r('A:3', 'a'), r('A:4', 'a')];
 
+  it('matches mixed-case prefixes, and ignores prefix case', () => {
+    const genes = [r('NCBIGene:1017', 'CDK2', ['Gene'])];
+    expect(classifyExpectedCurie('NCBIGene:1017', genes, undefined).status).toBe('hit');
+    expect(classifyExpectedCurie('ncbigene:1017', genes, undefined).status).toBe('hit');
+  });
+
   it('hit when present in top-N', () => {
     const c = classifyExpectedCurie('A:1', top5, deep);
     expect(c).toEqual({ curie: 'A:1', status: 'hit', rank: 0, of: 2 });
