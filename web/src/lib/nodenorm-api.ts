@@ -1,9 +1,16 @@
 import type { ApiOptions, NormalizedNode, NodeNormInstance, NodeNormResponse } from './types';
 
+// Keep each GET well under the ~8 KB request-line limit common to servers and proxies.
+const MAX_CURIE_PARAMS_LENGTH = 4000;
+
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
  *
- * @param baseUrl  NodeNorm instance URL (must end with /)
+ * Long CURIE lists are split into several GET requests, since one URL carrying every
+ * CURIE can exceed server limits (HTTP 414). GET rather than POST because a JSON POST
+ * needs a CORS preflight, which not every deployment answers.
+ *
+ * @param baseUrl  NodeNorm instance URL
  * @param curies   List of CURIEs to normalize
  * @param options  API query options (conflation, descriptions, etc.)
  * @returns        Raw NodeNorm response keyed by input CURIE
@@ -14,19 +21,38 @@ export async function fetchNormalizedNodes(
   options: ApiOptions,
   signal?: AbortSignal,
 ): Promise<NodeNormResponse> {
-  const resp = await fetch(buildNodeNormUrl(baseUrl, curies, options), { signal });
-  if (!resp.ok) {
-    throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+  const batches: string[][] = [];
+  let length = Infinity;
+  for (const curie of curies) {
+    const cost = '&curie='.length + encodeURIComponent(curie).length;
+    if (length + cost > MAX_CURIE_PARAMS_LENGTH) {
+      batches.push([]);
+      length = 0;
+    }
+    batches[batches.length - 1].push(curie);
+    length += cost;
   }
-  return resp.json();
+
+  const responses = await Promise.all(
+    batches.map(async (batch) => {
+      const resp = await fetch(buildNodeNormUrl(baseUrl, batch, options), { signal });
+      if (!resp.ok) {
+        throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+      }
+      return resp.json() as Promise<NodeNormResponse>;
+    }),
+  );
+  return Object.assign({}, ...responses);
 }
 
 /**
  * Build the NodeNorm get_normalized_nodes GET URL for the given CURIEs and options.
  * Also used to link directly to the raw API response for one CURIE.
+ * A base URL without a trailing slash is treated as a directory, so
+ * https://host/nodenorm resolves to https://host/nodenorm/get_normalized_nodes.
  */
 export function buildNodeNormUrl(baseUrl: string, curies: string[], options: ApiOptions): string {
-  const url = new URL('get_normalized_nodes', baseUrl);
+  const url = new URL('get_normalized_nodes', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
   for (const curie of curies) {
     url.searchParams.append('curie', curie);
   }

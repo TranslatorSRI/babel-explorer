@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseCuries, fetchNormalizedNodes, preferredIdsDisagree } from '../nodenorm-api';
+import { parseCuries, fetchNormalizedNodes, buildNodeNormUrl, preferredIdsDisagree } from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
 import type { ApiOptions, NormalizedNode } from '../types';
 import mondoFixture from '../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
@@ -176,6 +176,24 @@ describe('fetchNormalizedNodes', () => {
     ).rejects.toThrow('NodeNorm returned HTTP 500');
   });
 
+  it('splits a long CURIE list across several requests and merges the responses', async () => {
+    const mockFetch = vi.fn((url: string) => {
+      const curies = new URL(url).searchParams.getAll('curie');
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(Object.fromEntries(curies.map((c) => [c, null]))),
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const curies = Array.from({ length: 1000 }, (_, i) => `MONDO:${String(i).padStart(7, '0')}`);
+    const result = await fetchNormalizedNodes('https://example.com/', curies, DEFAULT_API_OPTIONS);
+
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(1);
+    for (const [url] of mockFetch.mock.calls) expect(url.length).toBeLessThan(8000);
+    expect(Object.keys(result)).toEqual(curies);
+  });
+
   it('throws AbortError when called with an already-aborted signal', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -189,6 +207,13 @@ describe('fetchNormalizedNodes', () => {
     ).catch((e) => e);
 
     expect(err.name).toBe('AbortError');
+  });
+});
+
+describe('buildNodeNormUrl', () => {
+  it('keeps the last path segment of a base URL without a trailing slash', () => {
+    const url = new URL(buildNodeNormUrl('https://host/nodenorm', ['X:1'], DEFAULT_API_OPTIONS));
+    expect(url.pathname).toBe('/nodenorm/get_normalized_nodes');
   });
 });
 
