@@ -1,7 +1,7 @@
 import type { ApiOptions } from './types';
 import { DEFAULT_API_OPTIONS } from './types';
 
-/** Parsed state from URL query parameters. */
+/** Parsed state from the URL fragment (or, for older links, the query string). */
 export interface QueryState {
   /** CURIEs from repeated ?curie= params. */
   curies: string[];
@@ -21,11 +21,15 @@ export interface QueryState {
 const OPTION_KEYS = Object.keys(DEFAULT_API_OPTIONS) as (keyof ApiOptions)[];
 
 /**
- * Read the current URL's query params and return the encoded query state.
- * Returns empty arrays and no options if no relevant params are present.
+ * Read the query state from the current URL.
+ *
+ * Share links keep it in the fragment (#curie=…), which browsers never send to the
+ * server, so a long CURIE list cannot hit a server's URL length limit. Links from
+ * before that change put it in the query string, which is read when there is no
+ * fragment. Returns empty arrays and no options if no relevant params are present.
  */
 export function readQueryState(): QueryState {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
 
   const curies = params.getAll('curie');
   const targets = params.getAll('target');
@@ -70,5 +74,5 @@ export function buildQueryUrl(
   }
 
   const qs = params.toString();
-  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  return qs ? `${window.location.pathname}#${qs}` : window.location.pathname;
 }

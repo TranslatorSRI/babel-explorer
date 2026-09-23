@@ -18,7 +18,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
-- **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
+- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, non-default options), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
 ## Development
