@@ -1,0 +1,181 @@
+{
+    "MONDO:0004979": {
+        "id": {
+            "identifier": "MONDO:0004979",
+            "label": "asthma",
+            "description": "A bronchial disease that is characterized by chronic inflammation and narrowing of the airways, which is caused by a combination of environmental and genetic factors resulting in recurring periods of wheezing (a whistling sound while breathing), chest tightness, shortness of breath, mucus production and coughing. The symptoms appear due to a variety of triggers such as allergens, irritants, respiratory infections, weather changes, exercise, stress, reflux disease, medications, foods and emotional anxiety."
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "MONDO:0004979",
+                "label": "asthma",
+                "description": "A bronchial disease that is characterized by chronic inflammation and narrowing of the airways, which is caused by a combination of environmental and genetic factors resulting in recurring periods of wheezing (a whistling sound while breathing), chest tightness, shortness of breath, mucus production and coughing. The symptoms appear due to a variety of triggers such as allergens, irritants, respiratory infections, weather changes, exercise, stress, reflux disease, medications, foods and emotional anxiety.",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "DOID:2841",
+                "label": "asthma",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "UMLS:C0004096",
+                "label": "Asthma",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "UMLS:C0085129",
+                "label": "Bronchial Hyperreactivity",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "UMLS:C0340062",
+                "label": "Hyperreactive airway disease",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "UMLS:C3714497",
+                "label": "Reactive airway disease",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MESH:D001249",
+                "label": "Asthma",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MESH:D016535",
+                "label": "Bronchial Hyperreactivity",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10003553",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10003555",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10003560",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10003561",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10003565",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10006450",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10037993",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10056285",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10066091",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10066863",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10082852",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "NCIT:C28397",
+                "label": "Asthma",
+                "description": "A chronic respiratory disease manifested as difficulty breathing due to the narrowing of bronchial passageways.",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "SNOMEDCT:195967001",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "SNOMEDCT:991000119106",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "medgen:2109",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "icd11.foundation:1656445230",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "ICD10:J45",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "ICD9:493",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "KEGG.DISEASE:05310",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "HP:0002099",
+                "label": "Asthma",
+                "description": "Asthma is characterized by increased responsiveness of the tracheobronchial tree to multiple stimuli, leading to narrowing of the air passages with resultant dyspnea, cough, and wheezing.",
+                "type": "biolink:Disease"
+            }
+        ],
+        "descriptions": [
+            "A bronchial disease that is characterized by chronic inflammation and narrowing of the airways, which is caused by a combination of environmental and genetic factors resulting in recurring periods of wheezing (a whistling sound while breathing), chest tightness, shortness of breath, mucus production and coughing. The symptoms appear due to a variety of triggers such as allergens, irritants, respiratory infections, weather changes, exercise, stress, reflux disease, medications, foods and emotional anxiety.",
+            "A chronic respiratory disease manifested as difficulty breathing due to the narrowing of bronchial passageways.",
+            "Asthma is characterized by increased responsiveness of the tracheobronchial tree to multiple stimuli, leading to narrowing of the air passages with resultant dyspnea, cough, and wheezing."
+        ],
+        "type": [
+            "biolink:Disease",
+            "biolink:DiseaseOrPhenotypicFeature",
+            "biolink:BiologicalEntity",
+            "biolink:ThingWithTaxon",
+            "biolink:NamedThing"
+        ],
+        "information_content": 77.3
+    },
+    "NCIT:C55060": {
+        "id": {
+            "identifier": "NCIT:C55060",
+            "label": "Hypertension, CTCAE",
+            "description": "A disorder characterized by a pathological increase in blood pressure."
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "NCIT:C55060",
+                "label": "Hypertension, CTCAE",
+                "description": "A disorder characterized by a pathological increase in blood pressure.",
+                "type": "biolink:PhenotypicFeature"
+            },
+            {
+                "identifier": "UMLS:C1963138",
+                "label": "Hypertension, CTCAE",
+                "type": "biolink:PhenotypicFeature"
+            }
+        ],
+        "descriptions": [
+            "A disorder characterized by a pathological increase in blood pressure."
+        ],
+        "type": [
+            "biolink:PhenotypicFeature",
+            "biolink:DiseaseOrPhenotypicFeature",
+            "biolink:BiologicalEntity",
+            "biolink:ThingWithTaxon",
+            "biolink:NamedThing"
+        ],
+        "information_content": 88.2
+    },
+    "FAKE:9999999": null
+}

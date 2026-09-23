@@ -1,0 +1,95 @@
+{
+    "NCIT:C34373": {
+        "id": {
+            "identifier": "MONDO:0004976",
+            "label": "amyotrophic lateral sclerosis",
+            "description": "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord."
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "MONDO:0004976",
+                "label": "amyotrophic lateral sclerosis",
+                "description": "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord.",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "DOID:332",
+                "label": "amyotrophic lateral sclerosis",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "orphanet:803",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "UMLS:C0002736",
+                "label": "Amyotrophic Lateral Sclerosis",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MESH:D000690",
+                "label": "Amyotrophic Lateral Sclerosis",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10002026",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10052889",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "MEDDRA:10090869",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "NCIT:C34373",
+                "label": "Amyotrophic Lateral Sclerosis",
+                "description": "A neurodegenerative disorder characterized by progressive degeneration of the motor neurons of the central nervous system. It results in weakness and atrophy of the muscles which leads to an inability to initiate and control voluntary movements.",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "SNOMEDCT:86044005",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "medgen:274",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "icd11.foundation:1982355687",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "ICD10:G12.21",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "ICD9:335.20",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "KEGG.DISEASE:05014",
+                "type": "biolink:Disease"
+            },
+            {
+                "identifier": "HP:0007354",
+                "label": "Amyotrophic lateral sclerosis",
+                "type": "biolink:Disease"
+            }
+        ],
+        "descriptions": [
+            "Amyotrophic lateral sclerosis (ALS) is a neurodegenerative disease characterized by progressive muscular paralysis reflecting degeneration of motor neurons in the primary motor cortex, corticospinal tracts, brainstem and spinal cord.",
+            "A neurodegenerative disorder characterized by progressive degeneration of the motor neurons of the central nervous system. It results in weakness and atrophy of the muscles which leads to an inability to initiate and control voluntary movements."
+        ],
+        "type": [
+            "biolink:Disease",
+            "biolink:DiseaseOrPhenotypicFeature",
+            "biolink:BiologicalEntity",
+            "biolink:ThingWithTaxon",
+            "biolink:NamedThing"
+        ],
+        "information_content": 74.9
+    }
+}

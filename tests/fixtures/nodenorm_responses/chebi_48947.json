@@ -1,0 +1,408 @@
+{
+    "CHEBI:48947": {
+        "id": {
+            "identifier": "CHEBI:48947",
+            "label": "Clavulanic acid",
+            "description": "Antibiotic isolated from Streptomyces clavuligerus. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes."
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "CHEBI:48947",
+                "label": "clavulanic acid",
+                "description": "Antibiotic isolated from Streptomyces clavuligerus. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes.",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:43442",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:3736",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "UNII:23521W1S24",
+                "label": "CLAVULANIC ACID",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "PUBCHEM.COMPOUND:5280980",
+                "label": "Clavulanic Acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEMBL.COMPOUND:CHEMBL777",
+                "label": "CLAVULANIC ACID",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "DRUGBANK:DB00766",
+                "label": "Clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "MESH:D019818",
+                "label": "Clavulanic Acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:1365254-41-6",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:261-069-2",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:58001-44-8",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "DrugCentral:669",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "GTOPDB:11128",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "HMDB:HMDB0014904",
+                "label": "Clavulanate",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "KEGG.COMPOUND:C06662",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "INCHIKEY:HZZVJAQRINQKSD-PBFISZAISA-N",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "UMLS:C0055860",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "RXCUI:21216",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:48947",
+                "label": "clavulanic acid",
+                "description": "Antibiotic isolated from Streptomyces clavuligerus. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes.",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:43442",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:3736",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "UNII:23521W1S24",
+                "label": "CLAVULANIC ACID",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "PUBCHEM.COMPOUND:5280980",
+                "label": "Clavulanic Acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEMBL.COMPOUND:CHEMBL777",
+                "label": "CLAVULANIC ACID",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "DRUGBANK:DB00766",
+                "label": "Clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "MESH:D019818",
+                "label": "Clavulanic Acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:1365254-41-6",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:261-069-2",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CAS:58001-44-8",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "DrugCentral:669",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "GTOPDB:11128",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "HMDB:HMDB0014904",
+                "label": "Clavulanate",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "KEGG.COMPOUND:C06662",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "INCHIKEY:HZZVJAQRINQKSD-PBFISZAISA-N",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "UMLS:C0055860",
+                "label": "clavulanic acid",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "RXCUI:21216",
+                "type": "biolink:SmallMolecule"
+            },
+            {
+                "identifier": "CHEBI:85264",
+                "label": "potassium clavulanate",
+                "description": "A potassium salt having clavulanate as the counterion. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes and has only weak anitbiotic activity when administered alone. However it can be used in combination with amoxicillin trihydrate (under the trade name Augmentin) for treatment of a variety of bacterial infections, where it prevents antibiotic inactivation by microbial lactamases.",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "UNII:Q42OMW3AT8",
+                "label": "CLAVULANATE POTASSIUM",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "PUBCHEM.COMPOUND:23665591",
+                "label": "Potassium Clavulanate",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "CHEMBL.COMPOUND:CHEMBL1003",
+                "label": "CLAVULANATE POTASSIUM",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "CAS:61177-45-5",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "INCHIKEY:ABVRVIZBZKUTMK-JSYANWSFSA-M",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "CHEBI:85264",
+                "label": "potassium clavulanate",
+                "description": "A potassium salt having clavulanate as the counterion. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes and has only weak anitbiotic activity when administered alone. However it can be used in combination with amoxicillin trihydrate (under the trade name Augmentin) for treatment of a variety of bacterial infections, where it prevents antibiotic inactivation by microbial lactamases.",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "UNII:Q42OMW3AT8",
+                "label": "CLAVULANATE POTASSIUM",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "PUBCHEM.COMPOUND:23665591",
+                "label": "Potassium Clavulanate",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "CHEMBL.COMPOUND:CHEMBL1003",
+                "label": "CLAVULANATE POTASSIUM",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "CAS:61177-45-5",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "INCHIKEY:ABVRVIZBZKUTMK-JSYANWSFSA-M",
+                "type": "biolink:MolecularMixture"
+            },
+            {
+                "identifier": "UMLS:C0110038",
+                "label": "clavulanate",
+                "type": "biolink:ChemicalEntity"
+            },
+            {
+                "identifier": "RXCUI:48203",
+                "type": "biolink:ChemicalEntity"
+            },
+            {
+                "identifier": "UMLS:C0137997",
+                "label": "clavulanate potassium",
+                "type": "biolink:ChemicalEntity"
+            },
+            {
+                "identifier": "RXCUI:831418",
+                "type": "biolink:ChemicalEntity"
+            },
+            {
+                "identifier": "RXCUI:345821",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1126575",
+                "label": "clavulanate 125 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:345822",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1178616",
+                "label": "clavulanate 31.2 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:346380",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1161326",
+                "label": "clavulanate 10 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617300",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1126105",
+                "label": "clavulanate 6.25 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617303",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1123175",
+                "label": "clavulanate 62.5 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617308",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1124803",
+                "label": "clavulanate 28.5 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617315",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1130127",
+                "label": "clavulanate 57 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617321",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1123169",
+                "label": "clavulanate 12.5 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617422",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1124804",
+                "label": "clavulanate 5.7 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617429",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1124182",
+                "label": "clavulanate 11.4 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:617992",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C1171095",
+                "label": "clavulanate 8.58 MG/ML",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:1810267",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C4283615",
+                "label": "clavulanate 12.5 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:1810269",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C4283617",
+                "label": "clavulanate 50 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:1810272",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C4283620",
+                "label": "clavulanate 75 MG",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "RXCUI:2105775",
+                "type": "biolink:Drug"
+            },
+            {
+                "identifier": "UMLS:C4741294",
+                "label": "clavulanate 25 MG",
+                "type": "biolink:Drug"
+            }
+        ],
+        "descriptions": [
+            "Antibiotic isolated from Streptomyces clavuligerus. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes.",
+            "A potassium salt having clavulanate as the counterion. It acts as a suicide inhibitor of bacterial beta-lactamase enzymes and has only weak anitbiotic activity when administered alone. However it can be used in combination with amoxicillin trihydrate (under the trade name Augmentin) for treatment of a variety of bacterial infections, where it prevents antibiotic inactivation by microbial lactamases."
+        ],
+        "type": [
+            "biolink:SmallMolecule",
+            "biolink:MolecularEntity",
+            "biolink:ChemicalEntity",
+            "biolink:PhysicalEssence",
+            "biolink:ChemicalOrDrugOrTreatment",
+            "biolink:ChemicalEntityOrGeneOrGeneProduct",
+            "biolink:ChemicalEntityOrProteinOrPolypeptide",
+            "biolink:NamedThing",
+            "biolink:PhysicalEssenceOrOccurrent",
+            "biolink:MolecularMixture",
+            "biolink:ChemicalMixture",
+            "biolink:Drug",
+            "biolink:OntologyClass"
+        ],
+        "information_content": 95.4
+    }
+}
