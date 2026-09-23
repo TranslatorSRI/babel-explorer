@@ -10,6 +10,9 @@ reads Babel's intermediate Parquet files through DuckDB and, optionally, enriche
 with labels from NodeNorm. It is a read-only diagnostic tool: it never writes to a Babel release
 and never changes what Babel decided.
 
+It also ships a static web site (`web/`, Astro + Vue) for the tools that need only a public API
+and so can run in the browser; see [Astro/Vue frontend](#astrovue-frontend-web).
+
 ## Domain context
 
 If you have not worked in the Translator ecosystem, read this before the code — the terms below are
@@ -270,6 +273,29 @@ before rejecting the run.
 - **Recursive expansion**: `--recurse` follows cross-references transitively in a single
   `WITH RECURSIVE` DuckDB query rather than a Python loop
 
+### Astro/Vue frontend (`web/`)
+
+A separate npm project, deployed to GitHub Pages at <https://translatorsri.github.io/babel-explorer/>
+by `.github/workflows/deploy.yml` (pushes to `main` touching `web/` or `config/`, releases, and
+`workflow_dispatch`). It has no Python dependency: each page in `web/src/pages/` hosts one Vue
+island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch()`.
+
+- **Instance URLs** come from `config/translator-endpoints.json`, imported at build time. That file
+  is the one place to add a deployment; the planned server API (#9) reads it too. The CLI does not:
+  it takes a single `NODENORM_URL` from `.env`.
+- **Tests** are Vitest + @vue/test-utils + happy-dom, co-located in `__tests__/` directories and
+  run by the `web` job in CI. Recorded API responses live in `tests/fixtures/` at the repo root so
+  Python tests can share them; `web/tests/README.md` catalogues them.
+- `web/README.md` covers development, the component layout and how to add a tool;
+  `web/FUTURE.md` lists deferred features.
+
+```bash
+cd web && npm install
+npm run dev     # http://localhost:4321/babel-explorer/
+npm test
+npm run build   # web/dist/
+```
+
 ## Testing
 
 ### Test Structure
@@ -368,3 +394,6 @@ since the initial commit. Consequences a future contributor will trip over:
 - DuckDB query spill: `<BABEL_LOCAL_DIR>/duckdb-spill/` (default `data/duckdb-spill/`)
 - Endpoint configuration: `.env` (gitignored), template in `env.default`
 - Entry point: `src/babel_explorer/cli.py`
+- Astro/Vue site: `web/` (pages in `web/src/pages/`, components in `web/src/components/`)
+- Shared deployment URLs for the web frontend: `config/translator-endpoints.json`
+- Recorded API responses shared by Python and TypeScript tests: `tests/fixtures/`

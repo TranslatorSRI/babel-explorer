@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import NodeNormApp from '../components/nodenorm/NodeNormApp.vue';
+---
+
+<BaseLayout title="NodeNorm - Babel Explorer" activePage="nodenorm">
+  <h2 class="mb-3">NodeNorm Lookup</h2>
+  <p class="mb-4">
+    Normalize CURIEs using the
+    <a href="https://nodenormalization-sri.renci.org/docs" target="_blank">NodeNormalization API</a>.
+    Inspect equivalent identifiers, labels, biolink types, and more.
+  </p>
+
+  <NodeNormApp client:only="vue" />
+</BaseLayout>

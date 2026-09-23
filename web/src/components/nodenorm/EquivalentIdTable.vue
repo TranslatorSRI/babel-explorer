@@ -1,0 +1,45 @@
+<script setup lang="ts">
+import type { NormalizedIdentifier } from '../../lib/types';
+import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
+import CurieLink from '../shared/CurieLink.vue';
+
+defineProps<{
+  identifiers: NormalizedIdentifier[];
+  visibleColumns: Set<string>;
+}>();
+
+function truncate(s: string | undefined, max = 80): string {
+  if (!s) return '';
+  return s.length > max ? s.slice(0, max) + '...' : s;
+}
+</script>
+
+<template>
+  <div class="table-responsive">
+    <table class="table table-striped table-sm mb-0">
+      <thead>
+        <tr>
+          <th>Identifier</th>
+          <th>Label</th>
+          <th v-if="visibleColumns.has('type')">Biolink Type</th>
+          <th v-if="visibleColumns.has('taxa')">Taxa</th>
+          <th v-if="visibleColumns.has('description')">Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- Not keyed by identifier alone: conflated cliques can list one twice. -->
+        <tr v-for="(id, i) in identifiers" :key="`${i}-${id.identifier}`">
+          <td><CurieLink :curie="id.identifier" /></td>
+          <td>{{ id.label }}</td>
+          <td v-if="visibleColumns.has('type')">
+            <BiolinkTypeLink v-if="id.type" :type="id.type" />
+          </td>
+          <td v-if="visibleColumns.has('taxa')">{{ id.taxa?.join(', ') }}</td>
+          <td v-if="visibleColumns.has('description')">
+            <span :title="id.description">{{ truncate(id.description) }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</template>
