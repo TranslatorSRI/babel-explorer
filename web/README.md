@@ -77,7 +77,7 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
 
-Instance keys: NodeNorm has `dev`, `exp`, `ci` (ElasticSearch-backed), `redis_ci` (Redis, kept for comparison until retired), `test`, `prod`; NameRes has `dev`, `exp`, `ci` (Solr-backed), `es_ci` (ElasticSearch, experimental), `test`, `prod`. The two services share the `ci` key but it points at different backends.
+Instance keys: NodeNorm has `dev`, `exp`, `ci` (ElasticSearch-backed), `redis_ci` (Redis, kept for comparison until retired), `test`, `prod`; NameRes has `dev`, `exp`, `ci` (Solr-backed), `es_ci` (ElasticSearch, experimental), `test`, `prod`. The two services share the `ci` key but it points at different backends. Saved defaults and `?target=` links are shared by every tool, so a key the current service lacks (`redis_ci` in NameRes, `es_ci` in NodeNorm) is ignored rather than treated as a custom URL — `resolveTarget()` in `src/lib/instance-prefs.ts`.
 
 Comparison tables always list instances in pipeline order — `ENV_ORDER` in `src/lib/instance-prefs.ts` (Exp, Dev, CI, ES CI, Redis CI, Test, Prod, then custom URLs). To add a named instance: (1) add it to `config/translator-endpoints.json`; (2) add the key to `PRIMARY_ENVS` in `InstanceSelector.vue` if it belongs in the main section rather than under "Extended environments"; (3) add it to `ENV_ORDER`; (4) add its label to `ENV_LABELS` in the App components and in `InstanceSelector.vue`, with a `labelHtml()` case there if the label needs an `<abbr>`.
 

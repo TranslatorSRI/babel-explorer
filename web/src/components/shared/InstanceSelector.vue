@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { sessionPrefs, savePrefs, loadPrefs } from '../../lib/instance-prefs';
+import { sessionPrefs, savePrefs, loadPrefs, resolveTarget } from '../../lib/instance-prefs';
 
 /**
  * Short, environment-level display names used inside the selector.
@@ -44,28 +44,16 @@ const emit = defineEmits<{
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
-/** Resolve an env key or raw URL to a full instance URL. */
-function resolveTarget(t: string): string {
-  return props.instances.find((i) => i.env === t || i.url === t)?.url ?? t;
-}
-
 /**
- * Resolve a saved-prefs array (env keys or custom URLs) back to
- * { urls: string[], customUrl: string | null }.
+ * Resolve targets (env keys or URLs, from the URL bar or saved prefs) to
+ * { urls, customUrl }. Env keys this service lacks are dropped; at most one
+ * custom URL is kept as the custom entry.
  */
 function resolvePrefs(prefs: string[]): { urls: string[]; customUrl: string | null } {
-  const urls: string[] = [];
-  let customUrl: string | null = null;
-  for (const pref of prefs) {
-    const inst = props.instances.find((i) => i.env === pref || i.url === pref);
-    if (inst) {
-      urls.push(inst.url);
-    } else {
-      // Unknown item — treat as custom URL (at most one custom at a time)
-      customUrl = pref;
-      urls.push(pref);
-    }
-  }
+  const urls = prefs
+    .map((p) => resolveTarget(props.instances, p))
+    .filter((u): u is string => u !== null);
+  const customUrl = urls.find((u) => !props.instances.some((i) => i.url === u)) ?? null;
   return { urls, customUrl };
 }
 
@@ -77,19 +65,11 @@ function resolvePrefs(prefs: string[]): { urls: string[]; customUrl: string | nu
  *   4. First instance as default
  */
 function determineInitial(): { urls: string[]; customUrl: string | null } {
-  if (props.initialTargets?.length) {
-    const urls = props.initialTargets.map(resolveTarget);
-    const customTarget = props.initialTargets.find(
-      (t) => !props.instances.find((i) => i.env === t || i.url === t),
-    );
-    return { urls, customUrl: customTarget ?? null };
-  }
-  if (sessionPrefs.value?.length) {
-    return resolvePrefs(sessionPrefs.value);
-  }
-  const saved = loadPrefs();
-  if (saved?.length) {
-    return resolvePrefs(saved);
+  // Fall through to the next source if nothing in one resolves for this service.
+  for (const source of [props.initialTargets, sessionPrefs.value, loadPrefs()]) {
+    if (!source?.length) continue;
+    const resolved = resolvePrefs(source);
+    if (resolved.urls.length) return resolved;
   }
   // Default: first primary instance (dev), falling back to instances[0]
   const firstPrimary = props.instances.find((i) => PRIMARY_ENVS.has(i.env));

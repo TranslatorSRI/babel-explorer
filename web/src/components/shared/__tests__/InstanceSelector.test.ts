@@ -171,6 +171,22 @@ describe('InstanceSelector — default selection', () => {
     expect(initial).toContain(ciInstance.url);
     expect(initial).toContain(prodInstance.url);
   });
+
+  it('drops env keys this service lacks instead of treating them as custom URLs', () => {
+    // Saved from NodeNorm, which has redis_ci; this instance list does not.
+    localStorage.setItem('babel-explorer:instance-prefs', JSON.stringify(['redis_ci', 'prod']));
+    const wrapper = mountSelector();
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    expect(emitted[0][0]).toEqual([prodInstance.url]);
+    expect(wrapper.find('details').attributes('open')).toBeUndefined();
+  });
+
+  it('falls through to the default when no saved key resolves', () => {
+    sessionPrefs.value = ['redis_ci'];
+    const wrapper = mountSelector({ initialTargets: ['redis_ci'] });
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    expect(emitted[0][0]).toEqual([devInstance.url]);
+  });
 });
 
 // ─── Checkbox interactions ────────────────────────────────────────────────────
