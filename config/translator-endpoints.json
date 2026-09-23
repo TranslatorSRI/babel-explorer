@@ -4,7 +4,7 @@
     "exp":      "https://nodenormalization-exp.apps.renci.org/",
     "ci":       "https://nodenorm-es.ci.transltr.io/",
     "redis_ci": "https://nodenorm.ci.transltr.io/",
-    "test":     "https://nodenorm.test.transltr.io/",
+    "test":     "https://nodenorm-es.test.transltr.io/",
     "prod":     "https://nodenorm.transltr.io/"
   },
   "nameres": {
