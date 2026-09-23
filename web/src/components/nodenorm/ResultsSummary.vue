@@ -17,16 +17,21 @@ const emit = defineEmits<{
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** CURIEs bucketed by how many queried instances found them: all, some, or none. */
+/**
+ * CURIEs bucketed by how many instances found them: all, some, or none.
+ * Only instances that answered count — a failed request is reported separately,
+ * not as every CURIE going missing.
+ */
 const coverage = computed(() => {
   const all: string[] = [];
   const partial: string[] = [];
   const none: string[] = [];
+  const responses = props.queriedInstances
+    .map((inst) => props.resultsByInstance.get(inst.url))
+    .filter((resp) => resp !== undefined);
   for (const c of props.curies) {
-    const hits = props.queriedInstances.filter(
-      (inst) => props.resultsByInstance.get(inst.url)?.[c] != null,
-    ).length;
-    (hits === 0 ? none : hits === props.queriedInstances.length ? all : partial).push(c);
+    const hits = responses.filter((resp) => resp[c] != null).length;
+    (hits === 0 ? none : hits === responses.length ? all : partial).push(c);
   }
   return { all, partial, none };
 });

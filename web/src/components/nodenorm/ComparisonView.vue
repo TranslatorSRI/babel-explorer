@@ -26,8 +26,17 @@ const allRows = computed(() =>
     curie,
     disagree: preferredIdsDisagree(curie, props.queriedInstances, props.resultsByInstance),
     cells: props.queriedInstances.map((inst) => {
-      const node = props.resultsByInstance.get(inst.url)?.[curie] ?? null;
-      return { inst, node, types: node ? getDirectTypes(node) : [] };
+      const resp = props.resultsByInstance.get(inst.url);
+      const node = resp?.[curie] ?? null;
+      return {
+        inst,
+        node,
+        // No response at all means the request failed, not that the CURIE is unknown.
+        failed: resp === undefined,
+        types: node ? getDirectTypes(node) : [],
+        // A malformed custom URL must not throw while rendering.
+        rawUrl: URL.canParse(inst.url) ? buildNodeNormUrl(inst.url, [curie], props.apiOptions) : null,
+      };
     }),
   })),
 );
@@ -99,6 +108,7 @@ function toggleRow(curie: string) {
               </template>
               <small class="text-muted">{{ cell.node.equivalent_identifiers.length }} equivalent IDs</small>
             </template>
+            <span v-else-if="cell.failed" class="text-danger">Request failed</span>
             <span v-else class="text-muted">Not found</span>
           </td>
         </tr>
@@ -117,7 +127,8 @@ function toggleRow(curie: string) {
                 <div class="fw-semibold text-muted small mb-2 d-flex align-items-center gap-1">
                   {{ cell.inst.name }}
                   <a
-                    :href="buildNodeNormUrl(cell.inst.url, [row.curie], apiOptions)"
+                    v-if="cell.rawUrl"
+                    :href="cell.rawUrl"
                     target="_blank"
                     rel="noopener"
                     class="text-muted"
@@ -125,7 +136,8 @@ function toggleRow(curie: string) {
                     @click.stop
                   >↗</a>
                 </div>
-                <CurieDetailPanel :node="cell.node" :visible-columns="visibleColumns" />
+                <p v-if="cell.failed" class="text-danger">The request to this instance failed.</p>
+                <CurieDetailPanel v-else :node="cell.node" :visible-columns="visibleColumns" />
               </div>
             </div>
           </td>

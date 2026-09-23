@@ -84,16 +84,20 @@ async function handleShare() {
 }
 
 function handleExport() {
+  // A failed instance has no results to export; list it separately rather than
+  // writing null for every CURIE, which would read as "not found".
+  const answered = queriedInstances.value.filter((i) => resultsByInstance.value.has(i.url));
   const data: Record<string, Record<string, NormalizedNode | null>> = {};
   for (const curie of queriedCuries.value) {
     data[curie] = {};
-    for (const inst of queriedInstances.value) {
-      data[curie][inst.name] = resultsByInstance.value.get(inst.url)?.[curie] ?? null;
+    for (const inst of answered) {
+      data[curie][inst.name] = resultsByInstance.value.get(inst.url)![curie] ?? null;
     }
   }
   const payload = {
     queried_curies: queriedCuries.value,
-    instances: queriedInstances.value.map((i) => i.name),
+    instances: answered.map((i) => i.name),
+    failed_instances: queriedInstances.value.filter((i) => !answered.includes(i)).map((i) => i.name),
     results: data,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });

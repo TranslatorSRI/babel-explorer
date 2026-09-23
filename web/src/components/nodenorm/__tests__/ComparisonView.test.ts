@@ -29,6 +29,22 @@ const defaultProps = {
 };
 
 describe('ComparisonView', () => {
+  it('shows "Request failed", not "Not found", for an instance that did not answer', async () => {
+    const custom: NodeNormInstance = { name: 'not a url', env: 'not a url', url: 'not a url' };
+    const wrapper = mount(ComparisonView, {
+      props: {
+        ...defaultProps,
+        queriedInstances: [devInstance, custom],
+        resultsByInstance: new Map([[devInstance.url, { 'MONDO:0004979': mondoFixture['MONDO:0004979'] }]]),
+      },
+    });
+    expect(wrapper.text()).toContain('Request failed');
+    expect(wrapper.text()).not.toContain('Not found');
+    // Expanding the row must not throw on the malformed URL.
+    await wrapper.find('tbody tr').trigger('click');
+    expect(wrapper.text()).toContain('The request to this instance failed.');
+  });
+
   it('renders instance names as column headers', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },
