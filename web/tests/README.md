@@ -30,14 +30,13 @@ web/src/
     __tests__/
       nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
       url-state.test.ts       # readQueryState + buildQueryUrl + round-trip
-      curie-links.test.ts     # parseCurie + getCurieUrl + loadPrefixMap
+      curie-links.test.ts     # parseCurie + getCurieUrl
       types.test.ts           # DEFAULT_API_OPTIONS smoke test
   components/
     nodenorm/
       __tests__/
         ResultsSummary.test.ts
         CurieDetailPanel.test.ts
-        CurieResultCard.test.ts
         ComparisonView.test.ts
     shared/
       __tests__/
@@ -49,7 +48,7 @@ web/src/
 Pure function tests with mocked `fetch()`. These cover:
 - **`nodenorm-api.ts`**: CURIE parsing (blank lines, comments, deduplication), API request construction, AbortSignal pass-through, and NodeNorm response shape assertions (executed as documentation of the API contract)
 - **`url-state.ts`**: `readQueryState` (no params, curie/target/option parsing), `buildQueryUrl` (default option omission, multi-target), and round-trip fidelity
-- **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map, cache behavior
+- **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map
 - **`types.ts`**: Default options constant
 
 ### Component tests
@@ -57,7 +56,6 @@ Pure function tests with mocked `fetch()`. These cover:
 Mount Vue components with `@vue/test-utils` and assert on rendered output and computed logic:
 - **`ResultsSummary`**: normalized/partial/not-found counts, disagreement detection across instances, type badge aggregation; disagreements tile hidden for single instance
 - **`CurieDetailPanel`**: description, types, IC score display; adaptive threshold (≤10 full table vs >10 prefix summary + expand); "Show all" / "Collapse" toggle
-- **`CurieResultCard`**: accordion header (preferred ID, label, type badges, equiv count); delegates body to CurieDetailPanel
 - **`ComparisonView`**: agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
 - **`CurieLink`**: conditional `<a>` vs `<span>` rendering
 
@@ -139,28 +137,6 @@ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 }));
 ```
 
-### Module cache isolation (`curie-links.ts`)
-
-`curie-links.ts` caches the prefix map in a module-level variable. Tests that exercise `loadPrefixMap()` must reset the module between tests:
-
-```typescript
-beforeEach(() => {
-  vi.resetModules();
-  vi.restoreAllMocks();
-});
-
-it('test case', async () => {
-  const { loadPrefixMap } = await import('../curie-links');
-  // ...
-});
-```
-
 ## Future Improvements
 
-- **Playwright e2e tests** — test the full page in a real browser (form submission, accordion interaction, Bootstrap JS)
-- **Integration tests** — call live NodeNorm API and verify response parsing end-to-end
-- **Coverage thresholds** — enforce minimum coverage via `vitest --coverage`
-- **CI integration** — run `npm test` in GitHub Actions alongside Python tests
-- **Snapshot tests** — if component markup stabilizes, add snapshots for regression detection
-- **NodeNormForm tests** — test checkbox selection, custom URL add/remove, submit payload, initial-value prop wiring from URL params
-- **NodeNormApp tests** — test orchestration logic (loading state, error handling, parallel fetch across instances, URL auto-submit on mount)
+See the Testing section of [`web/FUTURE.md`](../FUTURE.md).

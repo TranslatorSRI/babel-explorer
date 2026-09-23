@@ -11,14 +11,11 @@ The current comparison view shows preferred ID, label, types, and equiv count pe
 - Type reclassifications
 - Side-by-side diff view with expandable details per CURIE
 
-### URL State Persistence
-Encode form state (CURIEs, selected instance, API options) in URL query parameters so results are shareable and bookmarkable. This would also enable linking directly to a comparison.
-
 ### CSV/TSV Export
 Add download buttons for results. Use Blob URLs for client-side file generation.
 
 ### Keyboard Navigation
-- Arrow keys to navigate between accordion cards
+- Arrow keys to navigate between comparison rows
 - Enter to expand/collapse
 - Ctrl+A to expand all / collapse all
 
@@ -40,10 +37,11 @@ If multiple tool pages need shared state (e.g. a shared CURIE list across tools)
 
 ### Testing
 Vitest unit and component tests are implemented (see `web/tests/README.md`). Future testing work:
-- **Playwright E2E tests** for full-page interaction (form submission, accordion, Bootstrap JS)
+- **Playwright E2E tests** for full-page interaction (form submission, row expansion, Bootstrap JS)
 - **Integration tests** calling live NodeNorm API to verify response parsing end-to-end
 - **Coverage thresholds** via `vitest --coverage`
 - **NodeNormForm / NodeNormApp tests** — form validation, orchestration logic, error states
+- **Snapshot tests** once component markup stabilizes
 
 ### CORS Proxy Fallback
 If any NodeNorm instance blocks browser requests, add an optional lightweight CORS proxy mode (configurable in the UI).

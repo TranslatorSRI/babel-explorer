@@ -12,7 +12,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 
 ### NodeNorm Lookup (`/nodenorm`)
 
-- **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, individual types, taxa)
+- **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, taxa)
 - **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
@@ -56,7 +56,7 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
 
-CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), fetched at runtime from GitHub and cached. The biolink model version is configurable in `src/lib/curie-links.ts` (currently v4.3.7).
+CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. `src/lib/curie-links.ts` records which release it came from and how to update it.
 
 ## Architecture
 
@@ -78,7 +78,6 @@ src/
       NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
       ComparisonView.vue            # Results table with expandable per-CURIE rows
       CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
-      CurieResultCard.vue           # Accordion card wrapping CurieDetailPanel
       ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
@@ -87,7 +86,7 @@ src/
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
-    curie-links.ts                  # Biolink prefix map loader
+    curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
     url-state.ts                    # Encode/decode query state in URL params
     types.ts                        # TypeScript interfaces
 ```
