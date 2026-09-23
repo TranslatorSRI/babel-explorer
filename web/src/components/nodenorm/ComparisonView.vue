@@ -82,13 +82,20 @@ function toggleRow(curie: string) {
           @click="toggleRow(row.curie)"
         >
           <td class="text-center">
-            <span
+            <!-- The row is clickable too; this button is the keyboard and screen-reader way in. -->
+            <button
+              type="button"
+              class="btn btn-link btn-sm p-0 text-reset text-decoration-none"
+              :aria-expanded="expandedCuries.has(row.curie)"
+              :aria-label="`Details for ${row.curie}`"
+              @click.stop="toggleRow(row.curie)"
+            ><span
               :style="{
                 display: 'inline-block',
                 transform: expandedCuries.has(row.curie) ? 'rotate(90deg)' : '',
                 transition: 'transform 0.15s',
               }"
-            >›</span>
+            >›</span></button>
           </td>
           <td><strong>{{ row.curie }}</strong></td>
           <td v-for="cell in row.cells" :key="cell.inst.url">

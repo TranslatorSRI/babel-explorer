@@ -23,6 +23,7 @@ const columns = [
         :key="col.key"
         type="button"
         :class="['btn', visibleColumns.has(col.key) ? 'btn-secondary' : 'btn-outline-secondary']"
+        :aria-pressed="visibleColumns.has(col.key)"
         @click="emit('toggle', col.key)"
       >
         {{ col.label }}

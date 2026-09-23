@@ -253,3 +253,16 @@ describe('ComparisonView — type filtering', () => {
     expect(wrapper.text()).toContain('MONDO:0004979');
   });
 });
+
+describe('ComparisonView — keyboard access', () => {
+  it('expands a row from its toggle button and reports the expanded state', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const toggle = wrapper.find('button[aria-label="Details for MONDO:0004979"]');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2); // summary + detail, not toggled twice
+  });
+});
