@@ -37,9 +37,9 @@ describe('NodeNormForm — custom URLs', () => {
     expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
   });
 
-  it('disables Add for a malformed URL', async () => {
+  it.each(['not a url', 'foo:bar'])('disables Add for %s, which is not an http(s) URL', async (url) => {
     const wrapper = mountForm();
-    await wrapper.find('input[type="url"]').setValue('not a url');
+    await wrapper.find('input[type="url"]').setValue(url);
     expect(wrapper.find('input[type="url"] + button').attributes('disabled')).toBeDefined();
   });
 });

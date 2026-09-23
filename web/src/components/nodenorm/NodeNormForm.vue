@@ -48,7 +48,7 @@ const customUrlInput = ref('');
 const customUrls = ref([
   ...new Set((props.initialTargets ?? []).filter((t) => !findInstance(t))),
 ]);
-const customUrlValid = computed(() => URL.canParse(customUrlInput.value.trim()));
+const customUrlValid = computed(() => /^https?:\/\//i.test(customUrlInput.value.trim()) && URL.canParse(customUrlInput.value.trim()));
 
 // Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
 const shareStatus = ref<string | null>(null);
