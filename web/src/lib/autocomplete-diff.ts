@@ -7,7 +7,7 @@ export interface InstanceDiffs {
   presenceByInstance: Map<string, Set<string>>;
   /** For each instance URL, a map from CURIE → 0-based rank in its top-N. */
   rankByInstance: Map<string, Map<string, number>>;
-  /** For each CURIE, its rank in each instance (Infinity if missing). */
+  /** For each CURIE, its rank in each instance that has it; an instance without it has no entry. */
   rankByCurie: Map<string, Map<string, number>>;
   /** CURIEs whose label differs between instances (among instances that have the CURIE). */
   labelMismatch: Set<string>;
