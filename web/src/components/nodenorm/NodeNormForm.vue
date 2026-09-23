@@ -20,12 +20,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
   stop: [];
-  share: [];
 }>();
+
+function findInstance(target: string) {
+  return props.instances.find((i) => i.env === target || i.url === target);
+}
 
 /** Resolve a target (env key or full URL) to an instance URL. */
 function resolveTarget(target: string): string {
-  return props.instances.find((i) => i.env === target || i.url === target)?.url ?? target;
+  return findInstance(target)?.url ?? target;
 }
 
 // Form state
@@ -39,23 +42,16 @@ const selectedUrls = ref(new Set<string>(
     : [props.instances[0]?.url ?? ''],
 ));
 
-// Custom URL state
+// Custom URLs: every target that isn't a known env key or instance URL. Each gets its
+// own checkbox, so nothing can stay selected without a way to untick it.
 const customUrlInput = ref('');
-const customUrlAdded = ref<string | null>(null);
+const customUrls = ref([
+  ...new Set((props.initialTargets ?? []).filter((t) => !findInstance(t))),
+]);
+const customUrlValid = computed(() => URL.canParse(customUrlInput.value.trim()));
 
-// Detect custom URL in initialTargets (a target that isn't a known env key or instance URL)
-if (props.initialTargets?.length) {
-  const customTarget = props.initialTargets.find(
-    (t) => !props.instances.find((i) => i.env === t || i.url === t),
-  );
-  if (customTarget) {
-    customUrlAdded.value = customTarget;
-    selectedUrls.value.add(customTarget);
-  }
-}
-
-// Share button "Copied!" flash
-const copied = ref(false);
+// Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
+const shareStatus = ref<string | null>(null);
 
 function toggleUrl(url: string) {
   if (selectedUrls.value.has(url)) {
@@ -66,16 +62,16 @@ function toggleUrl(url: string) {
 }
 
 function addCustomUrl() {
-  const url = customUrlInput.value.trim();
-  if (!url) return;
-  customUrlAdded.value = url;
+  if (!customUrlValid.value) return;
+  const url = resolveTarget(customUrlInput.value.trim());
+  if (!findInstance(url) && !customUrls.value.includes(url)) customUrls.value.push(url);
   selectedUrls.value.add(url);
   customUrlInput.value = '';
 }
 
-function removeCustomUrl() {
-  if (customUrlAdded.value) selectedUrls.value.delete(customUrlAdded.value);
-  customUrlAdded.value = null;
+function removeCustomUrl(url: string) {
+  customUrls.value = customUrls.value.filter((u) => u !== url);
+  selectedUrls.value.delete(url);
 }
 
 function onSubmit() {
@@ -90,10 +86,15 @@ const hasNonDefaultAdvancedOptions = computed(() =>
   ADVANCED_KEYS.some((k) => options.value[k] !== DEFAULT_API_OPTIONS[k])
 );
 
-function onShare() {
-  copied.value = true;
-  setTimeout(() => { copied.value = false; }, 2000);
-  emit('share');
+async function onShare() {
+  try {
+    // navigator.clipboard is undefined outside a secure context, which lands here too.
+    await navigator.clipboard.writeText(window.location.href);
+    shareStatus.value = '✓ Copied!';
+  } catch {
+    shareStatus.value = 'Copy failed';
+  }
+  setTimeout(() => { shareStatus.value = null; }, 2000);
 }
 </script>
 
@@ -124,24 +125,24 @@ function onShare() {
           <label :for="`inst-${inst.env}`" class="form-check-label">{{ inst.name }}</label>
         </div>
 
-        <!-- Custom URL row (shown once one has been added) -->
-        <div v-if="customUrlAdded !== null" class="form-check mt-1">
+        <!-- One row per custom URL -->
+        <div v-for="(url, i) in customUrls" :key="url" class="form-check mt-1">
           <input
-            id="inst-custom"
+            :id="`inst-custom-${i}`"
             type="checkbox"
             class="form-check-input"
-            :checked="selectedUrls.has(customUrlAdded!)"
-            @change="toggleUrl(customUrlAdded!)"
+            :checked="selectedUrls.has(url)"
+            @change="toggleUrl(url)"
           />
-          <label for="inst-custom" class="form-check-label d-flex align-items-center gap-1">
+          <label :for="`inst-custom-${i}`" class="form-check-label d-flex align-items-center gap-1">
             <span>Custom:</span>
-            <span class="text-muted small text-truncate" style="max-width: 240px">{{ customUrlAdded }}</span>
+            <span class="text-muted small text-truncate" style="max-width: 240px">{{ url }}</span>
             <button
               type="button"
               class="btn-close"
               style="font-size: 0.65rem"
               aria-label="Remove custom URL"
-              @click.stop="removeCustomUrl()"
+              @click.stop="removeCustomUrl(url)"
             ></button>
           </label>
         </div>
@@ -158,7 +159,7 @@ function onShare() {
           <button
             type="button"
             class="btn btn-sm btn-outline-secondary"
-            :disabled="!customUrlInput.trim()"
+            :disabled="!customUrlValid"
             @click="addCustomUrl()"
           >
             Add
@@ -216,7 +217,7 @@ function onShare() {
         class="btn btn-outline-secondary"
         @click="onShare"
       >
-        {{ copied ? '✓ Copied!' : 'Share' }}
+        {{ shareStatus ?? 'Share' }}
       </button>
     </div>
   </form>

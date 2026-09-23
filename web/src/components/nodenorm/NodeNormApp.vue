@@ -79,10 +79,6 @@ function toggle(set: Set<string>, key: string) {
   if (!set.delete(key)) set.add(key);
 }
 
-async function handleShare() {
-  await navigator.clipboard.writeText(window.location.href);
-}
-
 function handleExport() {
   // A failed instance has no results to export; list it separately rather than
   // writing null for every CURIE, which would read as "not found".
@@ -182,7 +178,6 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
         :initial-options="urlState.options"
         @submit="handleSubmit"
         @stop="stopQuery"
-        @share="handleShare"
       />
     </div>
   </div>
