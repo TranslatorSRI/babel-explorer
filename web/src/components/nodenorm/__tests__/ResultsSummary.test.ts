@@ -296,3 +296,15 @@ describe('ResultsSummary — types tile', () => {
     expect(wrapper.emitted('clear-type-filter')).toBeTruthy();
   });
 });
+
+describe('ResultsSummary — types from every instance', () => {
+  it('offers a type that only the second instance reports', () => {
+    const geneOnly = { ...mondoNode, equivalent_identifiers: [{ identifier: 'X:1', type: 'biolink:Gene' }] };
+    const proteinOnly = { ...mondoNode, equivalent_identifiers: [{ identifier: 'X:1', type: 'biolink:Protein' }] };
+    const wrapper = mount(ResultsSummary, {
+      props: { ...twoInstanceResults({ 'X:1': geneOnly }, { 'X:1': proteinOnly }), curies: ['X:1'] },
+    });
+    expect(wrapper.text()).toContain('Gene');
+    expect(wrapper.text()).toContain('Protein');
+  });
+});

@@ -102,3 +102,12 @@ describe('CurieDetailPanel', () => {
     expect(wrapper.text()).toContain('Show all');
   });
 });
+
+describe('CurieDetailPanel — information content', () => {
+  it('shows an information content of 0 rather than hiding it', () => {
+    const wrapper = mount(CurieDetailPanel, {
+      props: { node: { ...smallCliqueNode, information_content: 0 }, ...defaultProps },
+    });
+    expect(wrapper.text()).toContain('Information Content: 0.0');
+  });
+});

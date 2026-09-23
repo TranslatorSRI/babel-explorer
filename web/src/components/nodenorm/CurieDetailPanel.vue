@@ -46,7 +46,7 @@ const prefixSummary = computed(() => {
           <BiolinkTypeLink :type="t" />
         </span>
       </div>
-      <div v-if="node.information_content" class="mb-1">
+      <div v-if="node.information_content != null" class="mb-1">
         <strong>Information Content:</strong> {{ node.information_content.toFixed(1) }}
       </div>
     </div>

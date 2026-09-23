@@ -47,8 +47,9 @@ const disagreements = computed(() =>
 );
 
 /**
- * Biolink types seen across all results, using the most-specific type (type[0])
- * per CURIE. Counts distinct CURIEs per type (not occurrences).
+ * Biolink types seen across all results: the direct types every instance reports for
+ * each CURIE, so a type only a later instance returns still gets a filter button.
+ * Counts distinct CURIEs per type (not occurrences).
  * Returns array of [biolink type, count] pairs sorted by count descending.
  */
 const typeCounts = computed((): [string, number][] => {
@@ -61,7 +62,6 @@ const typeCounts = computed((): [string, number][] => {
         if (!curiesByType.has(t)) curiesByType.set(t, new Set());
         curiesByType.get(t)!.add(curie);
       }
-      break; // take the first instance that finds this CURIE
     }
   }
   return [...curiesByType.entries()]

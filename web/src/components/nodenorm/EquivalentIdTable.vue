@@ -27,7 +27,8 @@ function truncate(s: string | undefined, max = 80): string {
         </tr>
       </thead>
       <tbody>
-        <tr v-for="id in identifiers" :key="id.identifier">
+        <!-- Not keyed by identifier alone: conflated cliques can list one twice. -->
+        <tr v-for="(id, i) in identifiers" :key="`${i}-${id.identifier}`">
           <td><CurieLink :curie="id.identifier" /></td>
           <td>{{ id.label }}</td>
           <td v-if="visibleColumns.has('type')">
