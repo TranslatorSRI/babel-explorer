@@ -60,6 +60,12 @@ describe('stripHighlightTags', () => {
   it('leaves other content alone', () => {
     expect(stripHighlightTags('plain text')).toBe('plain text');
   });
+
+  it('escapes any other markup, since the result goes to v-html', () => {
+    expect(stripHighlightTags('<em>a</em><img src=x onerror=alert(1)>')).toBe(
+      'a&lt;img src=x onerror=alert(1)&gt;',
+    );
+  });
 });
 
 describe('escapeHtml', () => {

@@ -24,7 +24,10 @@ export function sanitizeHighlight(input: string): string {
   return escaped.replace(/&lt;em&gt;/g, '<em>').replace(/&lt;\/em&gt;/g, '</em>');
 }
 
-/** Strip all tags (for when the user toggles highlighting off). */
+/**
+ * Drop the `<em>` tags and escape everything else, for when the user toggles
+ * highlighting off. The result still goes to `v-html`, so it must be escaped too.
+ */
 export function stripHighlightTags(input: string): string {
-  return input.replace(/<\/?em>/g, '');
+  return escapeHtml(input.replace(/<\/?em>/g, ''));
 }
