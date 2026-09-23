@@ -21,6 +21,13 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
+### NameRes Lookup (`/nameres`)
+
+- **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
+- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold
+- **Multi-instance comparison**: Same unified instance selector as NodeNorm
+- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; shareable URL state and JSON export
+
 ## Development
 
 ```bash
@@ -71,6 +78,7 @@ src/
   pages/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # Hosts NodeNormApp Vue island
+    nameres.astro                   # Hosts NameResApp Vue island
   components/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
@@ -81,14 +89,20 @@ src/
       ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
+    nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
     shared/
+      InstanceSelector.vue          # Deployment checkboxes + custom URL, remembered in localStorage
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
-    url-state.ts                    # Encode/decode query state in URL params
-    types.ts                        # TypeScript interfaces
+    url-state.ts                    # Encode/decode NodeNorm query state in URL params
+    types.ts                        # NodeNorm TypeScript interfaces
+    nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
+    nameres-types.ts                # NameRes interfaces and default options
+    nameres-url-state.ts            # Encode/decode NameRes query state
+    instance-prefs.ts               # localStorage helpers and canonical instance ordering
 ```
 
 ## Adding a New Tool

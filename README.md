@@ -57,8 +57,8 @@ pass `--allow-version-mismatch` to override.
 ## Web frontend
 
 Browser-only tools that need no download live in `web/`, an Astro + Vue site deployed to GitHub Pages
-at <https://translatorsri.github.io/babel-explorer/>. It currently offers a NodeNorm lookup that
-compares several NodeNorm deployments side by side. See [`web/README.md`](web/README.md) to run it
+at <https://translatorsri.github.io/babel-explorer/>. It currently offers NodeNorm and NameRes
+lookups that compare several deployments side by side. See [`web/README.md`](web/README.md) to run it
 locally. A server-side API over the commands below, so they can run without the multi-gigabyte
 download, is planned in [#9](https://github.com/TranslatorSRI/babel-explorer/issues/9).
 
