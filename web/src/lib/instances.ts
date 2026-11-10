@@ -22,7 +22,7 @@ const ENV_LABELS: Record<string, string> = {
  * Canonical form of an instance URL, or null if it is not an absolute http(s) URL.
  *
  * The path always ends in a slash and any fragment is dropped, so
- * `https://nodenorm.transltr.io` and `https://nodenorm.transltr.io/` compare equal and
+ * `https://nodenorm-es.transltr.io` and `https://nodenorm-es.transltr.io/` compare equal and
  * the same deployment is not queried twice under two spellings.
  */
 export function normalizeInstanceUrl(raw: string): string | null {
