@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseCuries, fetchNormalizedNodes, buildNodeNormUrl, preferredIdsDisagree } from '../nodenorm-api';
+import {
+  parseCuries,
+  fetchNormalizedNodes,
+  buildNodeNormUrl,
+  preferredIdsDisagree,
+  MAX_CONCURRENT_BATCHES,
+} from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
 import type { ApiOptions, NormalizedNode } from '../types';
 import mondoFixture from '../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
@@ -192,6 +198,51 @@ describe('fetchNormalizedNodes', () => {
     expect(mockFetch.mock.calls.length).toBeGreaterThan(1);
     for (const [url] of mockFetch.mock.calls) expect(url.length).toBeLessThan(8000);
     expect(Object.keys(result)).toEqual(curies);
+  });
+
+  // Enough CURIEs for several times MAX_CONCURRENT_BATCHES batches.
+  const manyCuries = Array.from({ length: 3000 }, (_, i) => `NCBIGene:${100000 + i}`);
+
+  it(`keeps at most ${MAX_CONCURRENT_BATCHES} batches in flight at once`, async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const mockFetch = vi.fn(async () => {
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+      return { ok: true, json: () => Promise.resolve({}) };
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await fetchNormalizedNodes('https://example.com/', manyCuries, DEFAULT_API_OPTIONS);
+
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(MAX_CONCURRENT_BATCHES);
+    expect(peak).toBe(MAX_CONCURRENT_BATCHES);
+  });
+
+  it('aborts the other batches once one fails, and reports the failure', async () => {
+    const signals: AbortSignal[] = [];
+    const mockFetch = vi.fn((_url: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      if (signals.length === 1) {
+        return Promise.resolve({ ok: false, status: 500, statusText: 'Internal Server Error' });
+      }
+      // Never resolves on its own; settles only when aborted.
+      return new Promise((_, reject) =>
+        init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        ),
+      );
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const err = await fetchNormalizedNodes(
+      'https://example.com/', manyCuries, DEFAULT_API_OPTIONS,
+    ).catch((e) => e);
+
+    expect(err.message).toContain('HTTP 500');
+    expect(signals.length).toBeLessThanOrEqual(MAX_CONCURRENT_BATCHES);
+    expect(signals.every((s) => s.aborted)).toBe(true);
   });
 
   it('throws AbortError when called with an already-aborted signal', async () => {

@@ -3,12 +3,18 @@ import type { ApiOptions, NormalizedNode, NodeNormInstance, NodeNormResponse } f
 // Keep each GET well under the ~8 KB request-line limit common to servers and proxies.
 const MAX_CURIE_PARAMS_LENGTH = 4000;
 
+// Batches in flight at once per instance. A few thousand CURIEs make dozens of
+// batches, and sending them all together invites HTTP 429s.
+export const MAX_CONCURRENT_BATCHES = 4;
+
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
  *
  * Long CURIE lists are split into several GET requests, since one URL carrying every
  * CURIE can exceed server limits (HTTP 414). GET rather than POST because a JSON POST
- * needs a CORS preflight, which not every deployment answers.
+ * needs a CORS preflight, which not every deployment answers. At most
+ * MAX_CONCURRENT_BATCHES requests are in flight at once, and the first failure aborts
+ * the rest, since their responses would be thrown away.
  *
  * @param baseUrl  NodeNorm instance URL
  * @param curies   List of CURIEs to normalize
@@ -33,15 +39,36 @@ export async function fetchNormalizedNodes(
     length += cost;
   }
 
-  const responses = await Promise.all(
-    batches.map(async (batch) => {
-      const resp = await fetch(buildNodeNormUrl(baseUrl, batch, options), { signal });
+  // Linked by hand rather than with AbortSignal.any, which Safari gained only in 17.4.
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+
+  const responses: NodeNormResponse[] = new Array(batches.length);
+  let next = 0;
+  async function worker() {
+    while (next < batches.length) {
+      const i = next++;
+      const resp = await fetch(buildNodeNormUrl(baseUrl, batches[i], options), {
+        signal: controller.signal,
+      });
       if (!resp.ok) {
         throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
       }
-      return resp.json() as Promise<NodeNormResponse>;
-    }),
-  );
+      responses[i] = (await resp.json()) as NodeNormResponse;
+    }
+  }
+
+  try {
+    const workers = Math.min(MAX_CONCURRENT_BATCHES, batches.length);
+    await Promise.all(Array.from({ length: workers }, worker));
+  } catch (err) {
+    controller.abort();
+    throw err;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
   return Object.assign({}, ...responses);
 }
 
