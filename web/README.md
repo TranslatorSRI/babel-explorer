@@ -51,6 +51,10 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 ## Deployment
 
 `.github/workflows/deploy.yml` builds the site and pushes it to the `gh-pages` branch on every push to `main` that touches `web/` or `config/`, on published releases, and on demand (`workflow_dispatch`). GitHub Pages serves it at `https://translatorsri.github.io/babel-explorer/`.
+Each deploy copies the build over what is already on `gh-pages` (`keep_files: true`) rather
+than replacing the branch, because some tools are deployed there from branches that are not
+on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
+when to switch back to `force_orphan`.
 
 ## Shared Configuration
 
@@ -85,7 +89,8 @@ src/
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
-    nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
+    nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
+    instances.ts                    # Target (env key or URL) → instance URL; the one http(s) check
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
     url-state.ts                    # Encode/decode query state in URL params
     types.ts                        # TypeScript interfaces

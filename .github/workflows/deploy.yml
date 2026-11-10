@@ -39,6 +39,10 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: web/dist
-          # force_orphan replaces the entire gh-pages branch on every deploy,
-          # ensuring no previously-deployed files are left behind.
-          force_orphan: true
+          # Copy this build over what is already on gh-pages instead of replacing the
+          # branch. The NameRes and Autocomplete pages (#23, #24) are live there from
+          # their own branches but not yet on main, and force_orphan: true would delete
+          # them on the first deploy from main. The cost is that stale files are never
+          # removed: once every tool on gh-pages is built from main, restore
+          # force_orphan: true (and drop keep_files, which conflicts with it).
+          keep_files: true
