@@ -4,8 +4,9 @@ name: Update Biolink prefix map
 # release. When a release changes it, this opens (or updates) one draft PR from
 # bot/biolink-prefix-map listing the added, changed and removed prefixes.
 #
-# Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull
-# requests" turned on; without it the last step fails.
+# If the last step fails with "GitHub Actions is not permitted to create or approve pull
+# requests", Settings → Actions → General → "Allow GitHub Actions to create and approve
+# pull requests" has been turned off (it was on from 2026-11-10).
 
 on:
   schedule:

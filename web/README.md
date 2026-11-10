@@ -62,7 +62,7 @@ Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-
 
 CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. It is an exact copy of one release, named in `src/lib/biolink-prefix-map.version`; update both with `npm run update-prefix-map` (latest release) or `npm run update-prefix-map -- <tag>`.
 
-`.github/workflows/update-prefix-map.yml` runs that script every Monday and, when the map changes, opens or updates a draft PR from `bot/biolink-prefix-map` whose description lists the added, changed and (first) removed prefixes. A removed prefix that NodeNorm still emits loses its link-out, so read that list before merging. The job runs the tests and the build itself, because a PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`. It needs **Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"** turned on; without it the job fails at the PR step.
+`.github/workflows/update-prefix-map.yml` runs that script every Monday and, when the map changes, opens or updates a draft PR from `bot/biolink-prefix-map` whose description lists the added, changed and (first) removed prefixes. A removed prefix that NodeNorm still emits loses its link-out, so read that list before merging. The job runs the tests and the build itself, because a PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`.
 
 ## Architecture
 
