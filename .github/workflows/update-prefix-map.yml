@@ -1,0 +1,86 @@
+name: Update Biolink prefix map
+
+# Keeps web/src/lib/biolink-prefix-map.json an exact copy of the latest Biolink Model
+# release. When a release changes it, this opens (or updates) one draft PR from
+# bot/biolink-prefix-map listing the added, changed and removed prefixes.
+#
+# Needs Settings → Actions → General → "Allow GitHub Actions to create and approve pull
+# requests" turned on; without it the last step fails.
+
+on:
+  schedule:
+    - cron: "0 14 * * 1"  # Mondays 14:00 UTC, clear of ci.yml's Tuesday run
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Biolink Model release tag, e.g. v4.4.6 (default: the latest release)"
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Update the prefix map
+        id: update
+        working-directory: web
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          npm run update-prefix-map -- ${TAG:+"$TAG"} --summary "$RUNNER_TEMP/summary.md"
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "tag=$(cat src/lib/biolink-prefix-map.version)" >> "$GITHUB_OUTPUT"
+          cat >> "$RUNNER_TEMP/summary.md" <<'EOF'
+
+          ---
+
+          Opened by `.github/workflows/update-prefix-map.yml`, which ran the web tests and the build before opening it. A PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`; push a commit to this branch to run it.
+          EOF
+
+      # Run here because ci.yml will not run on a PR this workflow opens.
+      - name: Test
+        if: steps.update.outputs.changed == 'true'
+        run: npm test
+        working-directory: web
+
+      - name: Build
+        if: steps.update.outputs.changed == 'true'
+        run: npm run build
+        working-directory: web
+
+      - name: Open or update the draft PR
+        if: steps.update.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bot/biolink-prefix-map
+          delete-branch: true
+          draft: true
+          add-paths: |
+            web/src/lib/biolink-prefix-map.json
+            web/src/lib/biolink-prefix-map.version
+          title: Update the Biolink prefix map to ${{ steps.update.outputs.tag }}
+          commit-message: |
+            Update the Biolink prefix map to ${{ steps.update.outputs.tag }}
+
+            Written by .github/workflows/update-prefix-map.yml.
+          body-path: ${{ runner.temp }}/summary.md
