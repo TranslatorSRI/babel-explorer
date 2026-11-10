@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue';
 import type { NodeNormInstance, ApiOptions } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
+import { findInstance, normalizeInstanceUrl, resolveTarget } from '../../lib/instances';
 
 const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
 
@@ -22,33 +23,30 @@ const emit = defineEmits<{
   stop: [];
 }>();
 
-function findInstance(target: string) {
-  return props.instances.find((i) => i.env === target || i.url === target);
-}
-
-/** Resolve a target (env key or full URL) to an instance URL. */
-function resolveTarget(target: string): string {
-  return findInstance(target)?.url ?? target;
-}
-
 // Form state
 const curies = ref(props.initialCuries ?? DEFAULT_CURIES);
 const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOptions });
 
+// Targets from the page URL, resolved to instance URLs. Anything that is neither a
+// known instance nor an http(s) URL is dropped here; NodeNormApp reports it.
+const initialUrls = [
+  ...new Set(
+    (props.initialTargets ?? [])
+      .map((t) => resolveTarget(props.instances, t))
+      .filter((u): u is string => u !== null),
+  ),
+];
+
 // Unified instance selection — always checkboxes
 const selectedUrls = ref(new Set<string>(
-  props.initialTargets?.length
-    ? props.initialTargets.map(resolveTarget)
-    : [props.instances[0]?.url ?? ''],
+  initialUrls.length ? initialUrls : [props.instances[0]?.url ?? ''],
 ));
 
-// Custom URLs: every target that isn't a known env key or instance URL. Each gets its
-// own checkbox, so nothing can stay selected without a way to untick it.
+// Custom URLs: every target that isn't a known instance. Each gets its own checkbox,
+// so nothing can stay selected without a way to untick it.
 const customUrlInput = ref('');
-const customUrls = ref([
-  ...new Set((props.initialTargets ?? []).filter((t) => !findInstance(t))),
-]);
-const customUrlValid = computed(() => /^https?:\/\//i.test(customUrlInput.value.trim()) && URL.canParse(customUrlInput.value.trim()));
+const customUrls = ref(initialUrls.filter((u) => !findInstance(props.instances, u)));
+const customUrlValid = computed(() => normalizeInstanceUrl(customUrlInput.value) !== null);
 
 // Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
 const shareStatus = ref<string | null>(null);
@@ -62,9 +60,13 @@ function toggleUrl(url: string) {
 }
 
 function addCustomUrl() {
-  if (!customUrlValid.value) return;
-  const url = resolveTarget(customUrlInput.value.trim());
-  if (!findInstance(url) && !customUrls.value.includes(url)) customUrls.value.push(url);
+  const url = resolveTarget(props.instances, customUrlInput.value);
+  if (url === null) return;
+  // A known instance typed as a URL (with or without its trailing slash) ticks that
+  // instance rather than adding a second row for the same server.
+  if (!findInstance(props.instances, url) && !customUrls.value.includes(url)) {
+    customUrls.value.push(url);
+  }
   selectedUrls.value.add(url);
   customUrlInput.value = '';
 }

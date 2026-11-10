@@ -37,6 +37,21 @@ describe('NodeNormForm — custom URLs', () => {
     expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
   });
 
+  it('drops targets from the page URL that are not http(s) URLs', () => {
+    const wrapper = mountForm(['ftp://h/', '//evil.example', 'https://a.example/']);
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(1);
+    expect(wrapper.text()).not.toContain('ftp://');
+  });
+
+  it('ticks a known instance typed without its trailing slash instead of adding it again', async () => {
+    const wrapper = mountForm([]);
+    await wrapper.find('#inst-dev').trigger('change'); // untick, so the Add is what ticks it
+    await wrapper.find('input[type="url"]').setValue('https://dev.example.com');
+    await wrapper.find('input[type="url"] + button').trigger('click');
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(0);
+    expect(await submittedUrls(wrapper)).toEqual(['https://dev.example.com/']);
+  });
+
   it.each(['not a url', 'foo:bar'])('disables Add for %s, which is not an http(s) URL', async (url) => {
     const wrapper = mountForm();
     await wrapper.find('input[type="url"]').setValue(url);
