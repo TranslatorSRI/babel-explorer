@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import NodeNormForm from '../NodeNormForm.vue';
-import type { NodeNormInstance } from '../../../lib/types';
+import type { NodeNormInstance, NodeNormQuery } from '../../../lib/types';
 
 const instances: NodeNormInstance[] = [
   { name: 'Dev', env: 'dev', url: 'https://dev.example.com/' },
@@ -15,7 +15,7 @@ function mountForm(initialTargets?: string[]) {
 
 async function submittedUrls(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.find('form').trigger('submit');
-  return wrapper.emitted('submit')!.at(-1)![0].instanceUrls;
+  return wrapper.emitted<[NodeNormQuery]>('submit')!.at(-1)![0].instanceUrls;
 }
 
 describe('NodeNormForm — custom URLs', () => {

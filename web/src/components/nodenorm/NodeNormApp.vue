@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount } from 'vue';
-import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
+import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
 import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
@@ -129,12 +129,12 @@ function handleExport() {
   setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
 
-function onFormSubmit(payload: { curies: string; instanceUrls: string[]; options: ApiOptions }) {
+function onFormSubmit(payload: NodeNormQuery) {
   ignoredTargets.value = [];
   void handleSubmit(payload);
 }
 
-async function handleSubmit(payload: { curies: string; instanceUrls: string[]; options: ApiOptions }) {
+async function handleSubmit(payload: NodeNormQuery) {
   const curies = parseCuries(payload.curies);
   if (curies.length === 0) {
     error.value = 'No valid CURIEs provided.';

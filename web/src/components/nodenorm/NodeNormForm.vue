@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { NodeNormInstance, ApiOptions } from '../../lib/types';
+import type { NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { findInstance, normalizeInstanceUrl, resolveTarget } from '../../lib/instances';
 
@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
+  submit: [payload: NodeNormQuery];
   stop: [];
 }>();
 
