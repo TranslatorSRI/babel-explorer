@@ -34,12 +34,13 @@ export function readQueryState(): QueryState {
   const curies = params.getAll('curie');
   const targets = params.getAll('target');
 
+  // Only a recognisable boolean overrides a default. Anything else (conflate=0 used to
+  // turn conflation *on*, since only the literal "false" counted as false) is ignored.
   const options: Partial<ApiOptions> = {};
   for (const key of OPTION_KEYS) {
-    const val = params.get(key);
-    if (val !== null) {
-      options[key] = val !== 'false';
-    }
+    const val = params.get(key)?.toLowerCase();
+    if (val === 'true' || val === '1') options[key] = true;
+    else if (val === 'false' || val === '0') options[key] = false;
   }
 
   return { curies, targets, options };

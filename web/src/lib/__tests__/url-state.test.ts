@@ -89,6 +89,22 @@ describe('readQueryState', () => {
     expect(state.options.conflate).toBe(true);
   });
 
+  it.each([
+    ['0', false],
+    ['1', true],
+    ['FALSE', false],
+  ])('parses conflate=%s as %s', async (value, expected) => {
+    setLocation(`?conflate=${value}`);
+    const { readQueryState } = await import('../url-state');
+    expect(readQueryState().options.conflate).toBe(expected);
+  });
+
+  it('ignores an option value that is not a boolean, leaving the default', async () => {
+    setLocation('?conflate=maybe');
+    const { readQueryState } = await import('../url-state');
+    expect('conflate' in readQueryState().options).toBe(false);
+  });
+
   it('omits option keys that are absent from the URL', async () => {
     setLocation('?conflate=false');
     const { readQueryState } = await import('../url-state');
