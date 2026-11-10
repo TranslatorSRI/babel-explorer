@@ -12,7 +12,8 @@ export const MAX_CONCURRENT_BATCHES = 4;
  *
  * Long CURIE lists are split into several GET requests, since one URL carrying every
  * CURIE can exceed server limits (HTTP 414). GET rather than POST because a JSON POST
- * needs a CORS preflight, which not every deployment answers. At most
+ * needs a CORS preflight, which a custom NodeNorm URL may not answer (every deployment
+ * in translator-endpoints.json did when checked on 2026-11-10). At most
  * MAX_CONCURRENT_BATCHES requests are in flight at once, and the first failure aborts
  * the rest, since their responses would be thrown away.
  *
