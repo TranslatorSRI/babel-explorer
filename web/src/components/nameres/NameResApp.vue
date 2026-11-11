@@ -38,7 +38,8 @@ const initialOptions = ref<Partial<NameResApiOptions> | undefined>(
 );
 const initialThreshold = ref<number | undefined>(urlState?.threshold);
 
-// Results: instanceUrl → searchText → results array
+// Results: instanceUrl → searchText → results array. A lookup that failed has no entry,
+// so the views can tell it from one that answered with nothing.
 const resultsByInstance = ref<Map<string, Map<string, NameResResult[]>>>(new Map());
 const queriedInstances = ref<NameResInstance[]>([]);
 const hasResults = computed(() => resultsByInstance.value.size > 0);
@@ -179,7 +180,6 @@ async function handleSubmit(payload: {
         resultMap.get(instanceUrl)!.set(text, result.value);
       } else {
         errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
-        resultMap.get(instanceUrl)!.set(text, []);
       }
     }
 

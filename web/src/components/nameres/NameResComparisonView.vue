@@ -24,26 +24,35 @@ function toggleRow(text: string) {
   }
 }
 
-function getResults(text: string, instanceUrl: string): NameResResult[] {
-  return props.resultsByInstance.get(instanceUrl)?.get(text) ?? [];
+/** The lookup's results, or undefined if the lookup failed (not the same as no results). */
+function getResults(text: string, instanceUrl: string): NameResResult[] | undefined {
+  return props.resultsByInstance.get(instanceUrl)?.get(text);
+}
+
+function lookupFailed(text: string, instanceUrl: string): boolean {
+  return getResults(text, instanceUrl) === undefined;
+}
+
+/** Instances whose lookup for this term answered; a failed one is no evidence either way. */
+function answeredInstances(text: string): NameResInstance[] {
+  return props.queriedInstances.filter((inst) => !lookupFailed(text, inst.url));
 }
 
 function getTopResult(text: string, instanceUrl: string): NameResResult | null {
-  const results = getResults(text, instanceUrl);
-  return results.length > 0 ? results[0] : null;
+  return getResults(text, instanceUrl)?.[0] ?? null;
 }
 
 function getValidation(term: ParsedSearchTerm, instanceUrl: string): ExpectedCurieValidation {
-  const results = getResults(term.text, instanceUrl);
+  const results = getResults(term.text, instanceUrl) ?? [];
   return validateExpectedCuries(results, term.expectedCuries, props.threshold);
 }
 
 /**
- * Check if all instances agree on the top result CURIE for a search term.
+ * Check if the instances that answered agree on the top result CURIE for a search term.
  */
 function allAgree(text: string): boolean {
   const curies = new Set<string>();
-  for (const inst of props.queriedInstances) {
+  for (const inst of answeredInstances(text)) {
     const top = getTopResult(text, inst.url);
     curies.add(top?.curie ?? '(no results)');
   }
@@ -58,7 +67,8 @@ function getRowClass(term: ParsedSearchTerm): string {
     return allAgree(term.text) ? '' : 'table-warning';
   }
 
-  const validations = props.queriedInstances.map((inst) => getValidation(term, inst.url));
+  const validations = answeredInstances(term.text).map((inst) => getValidation(term, inst.url));
+  if (validations.length === 0) return '';
 
   // All success → green
   if (validations.every((v) => v.status === 'success')) return 'table-success';
@@ -72,7 +82,7 @@ function getRowClass(term: ParsedSearchTerm): string {
  * Get a short status indicator for a cell.
  */
 function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCurieValidation | null {
-  if (term.expectedCuries.length === 0) return null;
+  if (term.expectedCuries.length === 0 || lookupFailed(term.text, instanceUrl)) return null;
   return getValidation(term, instanceUrl);
 }
 </script>
@@ -138,7 +148,7 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
                 ><BiolinkTypeLink :type="t" /></span>
                 <br />
               </template>
-              <small class="text-muted">{{ getResults(term.text, inst.url).length }} results</small>
+              <small class="text-muted">{{ getResults(term.text, inst.url)!.length }} results</small>
 
               <!-- Expected CURIE status indicator -->
               <template v-if="getCellStatus(term, inst.url)">
@@ -160,6 +170,7 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
                 >&#10007; not found</span>
               </template>
             </template>
+            <span v-else-if="lookupFailed(term.text, inst.url)" class="text-danger">Request failed</span>
             <span v-else class="text-muted">No results</span>
           </td>
         </tr>
@@ -176,8 +187,12 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
                 :style="{ minWidth: `${100 / queriedInstances.length}%`, maxWidth: `${100 / queriedInstances.length}%` }"
               >
                 <div class="fw-semibold text-muted small mb-2">{{ inst.name }}</div>
+                <p v-if="lookupFailed(term.text, inst.url)" class="text-danger">
+                  The lookup on this instance failed.
+                </p>
                 <NameResDetailPanel
-                  :results="getResults(term.text, inst.url)"
+                  v-else
+                  :results="getResults(term.text, inst.url)!"
                   :expected-curies="term.expectedCuries"
                 />
               </div>

@@ -12,24 +12,36 @@ const props = defineProps<{
 
 // ── Resolved tile ────────────────────────────────────────────────────────────
 
-/** Terms with at least one result on every queried instance. */
+/**
+ * Each answered lookup's results for a term. A failed lookup has no entry in
+ * resultsByInstance and is left out: it is reported separately, not counted as a term
+ * that found nothing.
+ */
+function answeredResults(term: ParsedSearchTerm): NameResResult[][] {
+  return props.queriedInstances
+    .map((inst) => props.resultsByInstance.get(inst.url)?.get(term.text))
+    .filter((results): results is NameResResult[] => results !== undefined);
+}
+
+/** Terms with at least one result on every instance that answered. */
 const resolvedByAll = computed(() =>
-  props.terms.filter((t) =>
-    props.queriedInstances.every((inst) => {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      return results != null && results.length > 0;
-    }),
-  ),
+  props.terms.filter((t) => {
+    const answered = answeredResults(t);
+    return answered.length > 0 && answered.every((results) => results.length > 0);
+  }),
 );
 
-/** Terms with no results on any instance. */
+/** Terms with no results on any instance that answered. */
 const noResultsAny = computed(() =>
-  props.terms.filter((t) =>
-    props.queriedInstances.every((inst) => {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      return results == null || results.length === 0;
-    }),
-  ),
+  props.terms.filter((t) => {
+    const answered = answeredResults(t);
+    return answered.length > 0 && answered.every((results) => results.length === 0);
+  }),
+);
+
+/** Terms whose lookup failed on at least one instance. */
+const failedTerms = computed(() =>
+  props.terms.filter((t) => answeredResults(t).length < props.queriedInstances.length),
 );
 
 // ── Agreement tile ───────────────────────────────────────────────────────────
@@ -39,9 +51,8 @@ const disagreements = computed(() => {
   if (props.queriedInstances.length < 2) return [];
   return props.terms.filter((t) => {
     const curies = new Set<string>();
-    for (const inst of props.queriedInstances) {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      curies.add(results && results.length > 0 ? results[0].curie : '(no results)');
+    for (const results of answeredResults(t)) {
+      curies.add(results.length > 0 ? results[0].curie : '(no results)');
     }
     return curies.size > 1;
   });
@@ -53,13 +64,14 @@ const annotatedTerms = computed(() => props.terms.filter((t) => t.expectedCuries
 const hasAnnotations = computed(() => annotatedTerms.value.length > 0);
 
 /**
- * For each annotated term, get the "worst" status across all instances.
- * success < partial < failure (worst wins).
+ * For each annotated term, get the "worst" status across the instances that answered.
+ * success < partial < failure (worst wins). Null when no instance answered.
  */
-function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus {
+function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus | null {
+  const answered = answeredResults(term);
+  if (answered.length === 0) return null;
   let worst: ExpectedCurieStatus = 'success';
-  for (const inst of props.queriedInstances) {
-    const results = props.resultsByInstance.get(inst.url)?.get(term.text) ?? [];
+  for (const results of answered) {
     const v = validateExpectedCuries(results, term.expectedCuries, props.threshold);
     if (v.status === 'failure') return 'failure';
     if (v.status === 'partial') worst = 'partial';
@@ -102,6 +114,10 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div v-if="noResultsAny.length > 0" class="text-danger small mt-1">
           {{ noResultsAny.length }} no results
           <span class="text-muted">({{ formatTermList(noResultsAny) }})</span>
+        </div>
+        <div v-if="failedTerms.length > 0" class="text-danger small mt-1">
+          {{ failedTerms.length }} with a failed lookup
+          <span class="text-muted">({{ formatTermList(failedTerms) }})</span>
         </div>
       </div>
     </div>

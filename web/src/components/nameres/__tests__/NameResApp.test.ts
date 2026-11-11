@@ -131,3 +131,22 @@ describe('NameResApp — stop and replaced queries', () => {
     expect(wrapper.text()).not.toContain('Looking up');
   });
 });
+
+describe('NameResApp — failed lookups', () => {
+  it('shows a lookup that failed as failed, not as finding nothing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.startsWith(endpoints.nameres.prod)
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : respond(url),
+    ));
+    setSearch('?term=asthma&target=dev&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    const row = wrapper.find('table tbody tr');
+    expect(row.text()).toContain('X:asthma');
+    expect(row.text()).toContain('Request failed');
+    expect(row.text()).not.toContain('No results');
+    expect(wrapper.text()).toContain('Some lookups failed');
+  });
+});
