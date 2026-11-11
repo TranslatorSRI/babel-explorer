@@ -14,6 +14,13 @@ on:
 permissions:
   contents: write
 
+# One deploy at a time, so two runs cannot push to gh-pages together. Not
+# cancel-in-progress: a deploy stopped half-way through its push is worse than a short
+# wait. GitHub keeps only the newest pending run, so the last change still wins.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
