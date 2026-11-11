@@ -150,3 +150,42 @@ describe('NameResApp — failed lookups', () => {
     expect(wrapper.text()).toContain('Some lookups failed');
   });
 });
+
+describe('NameResApp — Download JSON', () => {
+  it('clicks an attached link, keeps the blob alive, and lists failed lookups separately', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.startsWith(endpoints.nameres.prod)
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : respond(url),
+    ));
+    setSearch('?term=asthma&target=dev&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    let blob: Blob | undefined;
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, {
+      createObjectURL: (b: Blob) => { blob = b; return 'blob:test'; },
+      revokeObjectURL: vi.fn(),
+    }));
+    let attached: boolean | undefined;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      attached = this.isConnected;
+    });
+    vi.useFakeTimers();
+    try {
+      await wrapper.findAll('button').find((b) => b.text() === 'Download JSON')!.trigger('click');
+      expect(click).toHaveBeenCalledOnce();
+      expect(attached).toBe(true);
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(40_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test');
+    } finally {
+      vi.useRealTimers();
+      click.mockRestore();
+    }
+
+    const payload = JSON.parse(await blob!.text());
+    expect(payload.failed_lookups).toEqual([{ term: 'asthma', instance: 'NameRes Production' }]);
+    expect(Object.keys(payload.results.asthma)).toEqual(['NameRes Dev']);
+  });
+});

@@ -86,16 +86,22 @@ function stopQuery() {
 }
 
 function handleExport() {
+  // A failed lookup has no results to export; list it separately rather than writing
+  // an empty array, which would read as "found nothing".
   const data: Record<string, Record<string, NameResResult[]>> = {};
+  const failed: { term: string; instance: string }[] = [];
   for (const term of queriedTerms.value) {
     data[term.text] = {};
     for (const inst of queriedInstances.value) {
-      data[term.text][inst.name] = resultsByInstance.value.get(inst.url)?.get(term.text) ?? [];
+      const results = resultsByInstance.value.get(inst.url)?.get(term.text);
+      if (results === undefined) failed.push({ term: term.text, instance: inst.name });
+      else data[term.text][inst.name] = results;
     }
   }
   const payload = {
     queried_terms: queriedTerms.value.map((t) => ({ text: t.text, expectedCuries: t.expectedCuries })),
     instances: queriedInstances.value.map((i) => i.name),
+    failed_lookups: failed,
     results: data,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
@@ -103,8 +109,13 @@ function handleExport() {
   const a = document.createElement('a');
   a.href = url;
   a.download = 'nameres.json';
+  // Firefox ignores click() on a detached anchor, and Firefox and Safari read the blob
+  // after click() returns, so revoking it at once can cancel the download. 40 s is the
+  // delay FileSaver.js settled on.
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
 
 function onFormSubmit(payload: Parameters<typeof handleSubmit>[0]) {
