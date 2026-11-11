@@ -7,34 +7,11 @@ import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-u
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
 import NameResResultsSummary from './NameResResultsSummary.vue';
+import { buildInstances, instanceForUrl, resolveTarget, resolveTargets, urlToTarget } from '../../lib/instances';
+import { initialSelection } from '../../lib/instance-prefs';
 import endpoints from '../../../../config/translator-endpoints.json';
 
-// Build instance list from shared config
-const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  test: 'Test',
-  prod: 'Production',
-};
-
-const instances: NameResInstance[] = Object.entries(endpoints.nameres).map(
-  ([env, url]) => ({
-    name: `NameRes ${ENV_LABELS[env] ?? env}`,
-    env,
-    url: url as string,
-  }),
-);
-
-/** Resolve a target (env key or full URL) to an instance URL. */
-function resolveTarget(target: string): string {
-  return instances.find((i) => i.env === target || i.url === target)?.url ?? target;
-}
-
-/** Convert instance URLs back to env keys (or full URL if custom) for the URL bar. */
-function urlsToTargets(urls: string[]): string[] {
-  return urls.map((url) => instances.find((i) => i.url === url)?.env ?? url);
-}
+const instances: NameResInstance[] = buildInstances('NameRes', endpoints.nameres);
 
 // State
 const loading = ref(false);
@@ -44,6 +21,10 @@ const threshold = ref(DEFAULT_NAMERES_OPTIONS.limit);
 
 // Read URL state synchronously so NameResForm receives correct initial values
 const urlState = typeof window !== 'undefined' ? readNameResQueryState() : null;
+/** Targets in the page URL that are neither known instances nor http(s) URLs. */
+const ignoredTargets = ref<string[]>(
+  urlState?.targets.filter((t) => resolveTarget(instances, t) === null) ?? [],
+);
 const initialTerms = ref<string | undefined>(
   urlState?.terms.length ? urlState.terms.join('\n') : undefined,
 );
@@ -65,9 +46,12 @@ let abortController: AbortController | null = null;
 
 onMounted(async () => {
   if (urlState?.terms.length) {
-    const instanceUrls = urlState.targets.length > 0
-      ? urlState.targets.map(resolveTarget)
-      : [instances[0].url];
+    const resolved = resolveTargets(instances, urlState.targets);
+    // A link naming only unusable targets would otherwise silently query another
+    // instance; the warning explains why nothing ran.
+    if (urlState.targets.length > 0 && resolved.length === 0) return;
+    // No targets in the link: the same instances the form starts with ticked.
+    const instanceUrls = resolved.length > 0 ? resolved : initialSelection(instances);
     const opts = { ...DEFAULT_NAMERES_OPTIONS, ...urlState.options };
     const thresh = urlState.threshold ?? opts.limit;
     await handleSubmit({
@@ -107,6 +91,11 @@ function handleExport() {
   a.download = 'nameres.json';
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function onFormSubmit(payload: Parameters<typeof handleSubmit>[0]) {
+  ignoredTargets.value = [];
+  void handleSubmit(payload);
 }
 
 async function handleSubmit(payload: {
@@ -160,17 +149,14 @@ async function handleSubmit(payload: {
         resultMap.get(instanceUrl)!.set(text, result.value);
       } else {
         if ((result.reason as Error)?.name !== 'AbortError') {
-          const inst = instances.find((inst) => inst.url === instanceUrl);
-          errors.push(`${inst?.name ?? instanceUrl} / "${text}": ${result.reason}`);
+          errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
         }
         resultMap.get(instanceUrl)!.set(text, []);
       }
     }
 
     resultsByInstance.value = resultMap;
-    queriedInstances.value = payload.instanceUrls
-      .map((url) => instances.find((inst) => inst.url === url) ?? { name: url, env: url, url })
-      .filter((inst): inst is NameResInstance => inst != null);
+    queriedInstances.value = payload.instanceUrls.map((url) => instanceForUrl(instances, url));
 
     if (errors.length > 0) {
       error.value = `Some lookups failed: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? ` (+${errors.length - 5} more)` : ''}`;
@@ -179,7 +165,7 @@ async function handleSubmit(payload: {
     // Update URL to reflect the submitted query (only if not aborted)
     if (!signal.aborted) {
       const rawTerms = terms.map((t) => t.raw);
-      const targets = urlsToTargets(payload.instanceUrls);
+      const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
       window.history.replaceState(
         null,
         '',
@@ -210,13 +196,18 @@ async function handleSubmit(payload: {
         :initial-targets="initialTargets"
         :initial-options="initialOptions"
         :initial-threshold="initialThreshold"
-        @submit="handleSubmit"
+        @submit="onFormSubmit"
         @stop="stopQuery"
         @share="handleShare"
       />
     </div>
   </div>
 
+  <div v-if="ignoredTargets.length" class="alert alert-warning">
+    Ignored {{ ignoredTargets.length === 1 ? 'a target' : 'targets' }} in the link that
+    {{ ignoredTargets.length === 1 ? 'is' : 'are' }} neither a known instance nor an http(s)
+    URL: {{ ignoredTargets.join(', ') }}
+  </div>
   <div v-if="error" class="alert alert-danger">{{ error }}</div>
 
   <div v-if="resultsByInstance.size > 0" class="card">

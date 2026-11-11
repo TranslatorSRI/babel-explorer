@@ -47,7 +47,7 @@ function onSubmit() {
   if (selectedUrls.value.length === 0) return;
   emit('submit', {
     rawTerms: terms.value,
-    instanceUrls: selectedUrls.value,
+    instanceUrls: [...selectedUrls.value],
     options: { ...options.value },
     threshold: threshold.value,
   });
@@ -66,7 +66,9 @@ function onShare() {
 </script>
 
 <template>
-  <form @submit.prevent="onSubmit">
+  <!-- novalidate: the browser's own check on InstanceSelector's custom-URL box would
+       otherwise block the search whenever that box holds a half-typed URL. -->
+  <form novalidate @submit.prevent="onSubmit">
     <div class="mb-3">
       <label for="terms" class="form-label">
         Search terms (one per line, use <code>[[CURIE]]</code> to annotate expected results)
