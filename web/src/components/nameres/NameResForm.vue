@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
 import InstanceSelector from '../shared/InstanceSelector.vue';
@@ -28,7 +28,6 @@ const emit = defineEmits<{
     threshold: number;
   }];
   stop: [];
-  share: [];
 }>();
 
 // Form state
@@ -39,8 +38,8 @@ const threshold = ref(props.initialThreshold ?? options.value.limit);
 // Instance selection driven by InstanceSelector via v-model
 const selectedUrls = ref<string[]>([]);
 
-// Share button "Copied!" flash
-const copied = ref(false);
+// Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
+const shareStatus = ref<string | null>(null);
 
 function onSubmit() {
   if (!terms.value.trim()) return;
@@ -53,15 +52,23 @@ function onSubmit() {
   });
 }
 
+// Open "Advanced options" when the form starts with any of them changed, so a share
+// link's settings are visible. Decided once: binding :open to a live computed would
+// snap the section shut under the user the moment they restored the defaults.
 const ADVANCED_KEYS = ['biolink_type', 'only_prefixes', 'exclude_prefixes', 'only_taxa'] as const;
-const hasNonDefaultAdvancedOptions = computed(() =>
-  ADVANCED_KEYS.some((k) => options.value[k] !== DEFAULT_NAMERES_OPTIONS[k]),
+const advancedInitiallyOpen = ADVANCED_KEYS.some(
+  (k) => options.value[k] !== DEFAULT_NAMERES_OPTIONS[k],
 );
 
-function onShare() {
-  copied.value = true;
-  setTimeout(() => { copied.value = false; }, 2000);
-  emit('share');
+async function onShare() {
+  try {
+    // navigator.clipboard is undefined outside a secure context, which lands here too.
+    await navigator.clipboard.writeText(window.location.href);
+    shareStatus.value = '✓ Copied!';
+  } catch {
+    shareStatus.value = 'Copy failed';
+  }
+  setTimeout(() => { shareStatus.value = null; }, 2000);
 }
 </script>
 
@@ -127,7 +134,7 @@ function onShare() {
     </div>
 
     <!-- Advanced API options -->
-    <details class="mb-3" :open="hasNonDefaultAdvancedOptions">
+    <details class="mb-3" :open="advancedInitiallyOpen">
       <summary class="text-muted small" style="cursor: pointer">Advanced options</summary>
       <div class="d-flex flex-wrap gap-3 mt-2 align-items-end">
         <div>
@@ -199,7 +206,7 @@ function onShare() {
         class="btn btn-outline-secondary"
         @click="onShare"
       >
-        {{ copied ? '✓ Copied!' : 'Share' }}
+        {{ shareStatus ?? 'Share' }}
       </button>
     </div>
   </form>

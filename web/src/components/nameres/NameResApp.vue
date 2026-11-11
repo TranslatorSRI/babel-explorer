@@ -67,10 +67,6 @@ function stopQuery() {
   abortController?.abort();
 }
 
-async function handleShare() {
-  await navigator.clipboard.writeText(window.location.href);
-}
-
 function handleExport() {
   const data: Record<string, Record<string, NameResResult[]>> = {};
   for (const term of queriedTerms.value) {
@@ -198,7 +194,6 @@ async function handleSubmit(payload: {
         :initial-threshold="initialThreshold"
         @submit="onFormSubmit"
         @stop="stopQuery"
-        @share="handleShare"
       />
     </div>
   </div>
