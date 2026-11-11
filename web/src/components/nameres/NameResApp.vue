@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { NameResResult, NameResInstance, NameResApiOptions, ParsedSearchTerm } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
 import { parseSearchTerms, fetchNameResLookup } from '../../lib/nameres-api';
@@ -16,6 +16,8 @@ const instances: NameResInstance[] = buildInstances('NameRes', endpoints.nameres
 // State
 const loading = ref(false);
 const error = ref<string | null>(null);
+/** Informational message, such as "Query stopped". */
+const notice = ref<string | null>(null);
 const queriedTerms = ref<ParsedSearchTerm[]>([]);
 const threshold = ref(DEFAULT_NAMERES_OPTIONS.limit);
 
@@ -41,8 +43,21 @@ const resultsByInstance = ref<Map<string, Map<string, NameResResult[]>>>(new Map
 const queriedInstances = ref<NameResInstance[]>([]);
 const hasResults = computed(() => resultsByInstance.value.size > 0);
 
-// Abort controller for in-flight requests
+// Controller for the query in flight, if any. A newer query aborts the older one.
 let abortController: AbortController | null = null;
+
+/**
+ * Drop the query in flight without letting it touch the page again. Clearing
+ * abortController first is what does that: the aborted query then sees it no longer
+ * owns the page, rather than taking the "stopped by the user" path. Stop, which the
+ * user did ask for, aborts without this.
+ */
+function cancelQuery() {
+  const controller = abortController;
+  abortController = null;
+  controller?.abort();
+  loading.value = false;
+}
 
 onMounted(async () => {
   if (urlState?.terms.length) {
@@ -62,6 +77,8 @@ onMounted(async () => {
     });
   }
 });
+
+onBeforeUnmount(cancelQuery);
 
 function stopQuery() {
   abortController?.abort();
@@ -102,18 +119,23 @@ async function handleSubmit(payload: {
 }) {
   const terms = parseSearchTerms(payload.rawTerms);
   if (terms.length === 0) {
+    // Cancel any query still running: it would otherwise finish under this error and
+    // leave it above results it has nothing to do with.
+    cancelQuery();
     error.value = 'No valid search terms provided.';
     return;
   }
 
-  abortController = new AbortController();
-  const { signal } = abortController;
+  abortController?.abort();
+  const controller = new AbortController();
+  abortController = controller;
+  const { signal } = controller;
 
+  // The previous results stay on screen until this query replaces them, so Stop can
+  // fall back to them.
   loading.value = true;
   error.value = null;
-  resultsByInstance.value = new Map();
-  queriedTerms.value = terms;
-  threshold.value = payload.threshold;
+  notice.value = null;
 
   try {
     // Build all (instance, term) fetch promises
@@ -130,6 +152,18 @@ async function handleSubmit(payload: {
 
     const settled = await Promise.allSettled(jobs.map((j) => j.promise));
 
+    // A newer query replaced this one; it owns the page now.
+    if (abortController !== controller) return;
+
+    // Stopped: leave the previous query's results, and the URL that describes them,
+    // in place rather than a table of half-finished lookups.
+    if (signal.aborted) {
+      notice.value = hasResults.value
+        ? 'Query stopped. Showing the results of the previous query.'
+        : 'Query stopped.';
+      return;
+    }
+
     const resultMap = new Map<string, Map<string, NameResResult[]>>();
     const errors: string[] = [];
 
@@ -144,38 +178,33 @@ async function handleSubmit(payload: {
       if (result.status === 'fulfilled') {
         resultMap.get(instanceUrl)!.set(text, result.value);
       } else {
-        if ((result.reason as Error)?.name !== 'AbortError') {
-          errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
-        }
+        errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
         resultMap.get(instanceUrl)!.set(text, []);
       }
     }
 
     resultsByInstance.value = resultMap;
+    queriedTerms.value = terms;
+    threshold.value = payload.threshold;
     queriedInstances.value = payload.instanceUrls.map((url) => instanceForUrl(instances, url));
 
     if (errors.length > 0) {
       error.value = `Some lookups failed: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? ` (+${errors.length - 5} more)` : ''}`;
     }
 
-    // Update URL to reflect the submitted query (only if not aborted)
-    if (!signal.aborted) {
-      const rawTerms = terms.map((t) => t.raw);
-      const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
-      window.history.replaceState(
-        null,
-        '',
-        buildNameResQueryUrl(rawTerms, targets, payload.options, payload.threshold),
-      );
-    }
-  } catch (e) {
-    if ((e as Error)?.name === 'AbortError') {
-      // User clicked Stop — clear loading silently
-    } else {
-      error.value = e instanceof Error ? e.message : String(e);
-    }
+    // Update URL to reflect the submitted query.
+    const rawTerms = terms.map((t) => t.raw);
+    const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
+    window.history.replaceState(
+      null,
+      '',
+      buildNameResQueryUrl(rawTerms, targets, payload.options, payload.threshold),
+    );
   } finally {
-    loading.value = false;
+    if (abortController === controller) {
+      abortController = null;
+      loading.value = false;
+    }
   }
 }
 </script>
@@ -204,6 +233,7 @@ async function handleSubmit(payload: {
     URL: {{ ignoredTargets.join(', ') }}
   </div>
   <div v-if="error" class="alert alert-danger">{{ error }}</div>
+  <div v-if="notice" class="alert alert-secondary">{{ notice }}</div>
 
   <div v-if="resultsByInstance.size > 0" class="card">
     <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
