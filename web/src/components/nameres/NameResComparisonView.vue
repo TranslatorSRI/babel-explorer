@@ -165,6 +165,13 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
                   class="badge bg-warning text-dark"
                   style="font-size: 0.65em"
                 >#{{ getCellStatus(term, inst.url)!.rank + 1 }}</span>
+                <!-- A failure with a rank was found, just not within the threshold. -->
+                <span
+                  v-else-if="getCellStatus(term, inst.url)!.status === 'failure' && getCellStatus(term, inst.url)!.rank >= 0"
+                  class="badge bg-danger"
+                  style="font-size: 0.65em"
+                  :title="`Found at #${getCellStatus(term, inst.url)!.rank + 1}, outside the top ${threshold}`"
+                >&#10007; #{{ getCellStatus(term, inst.url)!.rank + 1 }}</span>
                 <span
                   v-else-if="getCellStatus(term, inst.url)!.status === 'failure'"
                   class="badge bg-danger"

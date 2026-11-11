@@ -258,3 +258,33 @@ describe('NameResApp — repeated search text', () => {
     expect(window.location.hash).toContain('MONDO%3A0005015');
   });
 });
+
+describe('NameResApp — expected CURIE badges', () => {
+  /** A response listing X:1 … X:n in rank order. */
+  function ranked(n: number) {
+    const body = Array.from({ length: n }, (_, i) => ({
+      curie: `X:${i + 1}`, label: `x${i + 1}`, types: [], taxa: [], synonyms: [], score: n - i, clique_identifier_count: 1,
+    }));
+    return vi.fn(async () => ({ ok: true, json: () => Promise.resolve(body) }));
+  }
+
+  it('shows the rank of an expected CURIE found outside the threshold', async () => {
+    vi.stubGlobal('fetch', ranked(10));
+    setUrl(`#${new URLSearchParams([['term', 'x [[X:5]]'], ['target', 'prod'], ['limit', '10'], ['threshold', '3']])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    const badge = wrapper.find('table tbody tr .badge.bg-danger');
+    expect(badge.text()).toBe('✗ #5');
+    expect(badge.attributes('title')).toBe('Found at #5, outside the top 3');
+  });
+
+  it('says not found when the expected CURIE is absent', async () => {
+    vi.stubGlobal('fetch', ranked(10));
+    setUrl(`#${new URLSearchParams([['term', 'x [[Y:1]]'], ['target', 'prod'], ['limit', '10']])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(wrapper.find('table tbody tr .badge.bg-danger').text()).toBe('✗ not found');
+  });
+});
