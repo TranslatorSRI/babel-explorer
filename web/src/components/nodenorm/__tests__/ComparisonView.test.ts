@@ -45,6 +45,19 @@ describe('ComparisonView', () => {
     expect(wrapper.text()).toContain('The request to this instance failed.');
   });
 
+  it('links each instance in an expanded row to its raw API response', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    expect(wrapper.find('a[title="Open raw API response"]').exists()).toBe(false);
+    await wrapper.find('tbody tr').trigger('click');
+    const hrefs = wrapper.findAll('a[title="Open raw API response"]').map((a) => a.attributes('href'));
+    expect(hrefs).toEqual([
+      'https://dev.example.com/get_normalized_nodes?curie=MONDO%3A0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true',
+      'https://prod.example.com/get_normalized_nodes?curie=MONDO%3A0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true',
+    ]);
+  });
+
   it('renders instance names as column headers', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },

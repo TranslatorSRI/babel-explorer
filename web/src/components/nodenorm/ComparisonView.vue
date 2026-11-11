@@ -34,8 +34,6 @@ const allRows = computed(() =>
         // No response at all means the request failed, not that the CURIE is unknown.
         failed: resp === undefined,
         types: node ? getDirectTypes(node) : [],
-        // A malformed custom URL must not throw while rendering.
-        rawUrl: URL.canParse(inst.url) ? buildNodeNormUrl(inst.url, [curie], props.apiOptions) : null,
       };
     }),
   })),
@@ -48,6 +46,15 @@ const rows = computed(() =>
         row.cells.some((cell) => cell.types.some((t) => props.typeFilter.has(t))),
       ),
 );
+
+/**
+ * Link to one instance's raw API response for one CURIE. Built only when a detail row
+ * renders, not for every cell, since a large query has thousands of cells and almost
+ * none are ever expanded. A malformed URL must not throw while rendering.
+ */
+function rawUrl(inst: NodeNormInstance, curie: string): string | null {
+  return URL.canParse(inst.url) ? buildNodeNormUrl(inst.url, [curie], props.apiOptions) : null;
+}
 
 function toggleRow(curie: string) {
   const set = expandedCuries.value;
@@ -134,8 +141,8 @@ function toggleRow(curie: string) {
                 <div class="fw-semibold text-muted small mb-2 d-flex align-items-center gap-1">
                   {{ cell.inst.name }}
                   <a
-                    v-if="cell.rawUrl"
-                    :href="cell.rawUrl"
+                    v-if="rawUrl(cell.inst, row.curie)"
+                    :href="rawUrl(cell.inst, row.curie)!"
                     target="_blank"
                     rel="noopener"
                     class="text-muted"
