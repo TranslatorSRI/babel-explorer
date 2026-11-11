@@ -55,13 +55,20 @@ jobs:
 
           ---
 
-          Opened by `.github/workflows/update-prefix-map.yml`, which ran the web tests and the build before opening it. A PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`; push a commit to this branch to run it.
+          Opened by `.github/workflows/update-prefix-map.yml`, which ran the web tests, the type check and the build before opening it. A PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`; push a commit to this branch to run it.
           EOF
 
       # Run here because ci.yml will not run on a PR this workflow opens.
       - name: Test
         if: steps.update.outputs.changed == 'true'
         run: npm test
+        working-directory: web
+
+      # Before the build, as in ci.yml: the type check must not depend on what a build
+      # generates (see src/env.d.ts).
+      - name: Type check
+        if: steps.update.outputs.changed == 'true'
+        run: npm run typecheck
         working-directory: web
 
       - name: Build
