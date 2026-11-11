@@ -46,6 +46,13 @@ export interface ApiOptions {
   include_taxa: boolean;
 }
 
+/** What NodeNormForm emits on submit: the raw textarea, the instances to query, and the options. */
+export interface NodeNormQuery {
+  curies: string;
+  instanceUrls: string[];
+  options: ApiOptions;
+}
+
 /** Default API options — all enabled. */
 export const DEFAULT_API_OPTIONS: ApiOptions = {
   conflate: true,

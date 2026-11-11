@@ -4,7 +4,9 @@ import {
   fetchNormalizedNodes,
   buildNodeNormUrl,
   preferredIdsDisagree,
+  getDirectTypes,
   MAX_CONCURRENT_BATCHES,
+  BATCH_TIMEOUT_MS,
 } from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
 import type { ApiOptions, NormalizedNode } from '../types';
@@ -245,6 +247,50 @@ describe('fetchNormalizedNodes', () => {
     expect(signals.every((s) => s.aborted)).toBe(true);
   });
 
+  it('fails an instance whose batch takes longer than the timeout, leaving the caller alone', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never resolves on its own; settles only when aborted.
+      vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
+        new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      ));
+      const caller = new AbortController();
+      const result = fetchNormalizedNodes(
+        'https://example.com/', manyCuries, DEFAULT_API_OPTIONS, caller.signal,
+      ).catch((e) => e);
+
+      await vi.advanceTimersByTimeAsync(BATCH_TIMEOUT_MS - 1);
+      expect(caller.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const err = await result;
+      expect(err.message).toBe(`NodeNorm did not answer within ${BATCH_TIMEOUT_MS / 1000} s`);
+      expect(caller.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives each batch its own deadline, not the whole lookup', async () => {
+    vi.useFakeTimers();
+    try {
+      // Each batch answers just inside the timeout, so the lookup as a whole takes longer.
+      vi.stubGlobal('fetch', vi.fn(() =>
+        new Promise((resolve) => setTimeout(
+          () => resolve({ ok: true, json: () => Promise.resolve({}) }),
+          BATCH_TIMEOUT_MS - 1,
+        )),
+      ));
+      const result = fetchNormalizedNodes('https://example.com/', manyCuries, DEFAULT_API_OPTIONS);
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('throws AbortError when called with an already-aborted signal', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -393,5 +439,29 @@ describe('preferredIdsDisagree', () => {
   it('skips an instance whose request failed', () => {
     const results = new Map([[a.url, { X: node('P:1') }]]);
     expect(preferredIdsDisagree('X', [a, b], results)).toBe(false);
+  });
+});
+
+describe('getDirectTypes', () => {
+  const conflated = meshConflatedFixture['MESH:D014867'] as NormalizedNode;
+
+  it('lists each identifier type once, in first-appearance order', () => {
+    const types = getDirectTypes(conflated);
+    expect(new Set(types)).toEqual(new Set(['biolink:SmallMolecule', 'biolink:Drug', 'biolink:ChemicalEntity']));
+    expect(types).toHaveLength(3);
+  });
+
+  it('falls back to the most specific clique type when identifiers carry none', () => {
+    const node: NormalizedNode = {
+      id: { identifier: 'X:1' },
+      equivalent_identifiers: [{ identifier: 'X:1' }],
+      type: ['biolink:Gene', 'biolink:NamedThing'],
+    };
+    expect(getDirectTypes(node)).toEqual(['biolink:Gene']);
+  });
+
+  it('computes a node once, however many components ask', () => {
+    const node = structuredClone(conflated);
+    expect(getDirectTypes(node)).toBe(getDirectTypes(node));
   });
 });

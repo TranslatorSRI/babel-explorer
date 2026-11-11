@@ -18,7 +18,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
-- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, non-default options), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
+- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, any non-default option the form offers; `individual_types` is always on and never read from a link), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via the [biolink-model prefix map](https://github.com/biolink/biolink-model), at the release named in `src/lib/biolink-prefix-map.version`
 
 ## Development
@@ -36,9 +36,10 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ```bash
 npm test            # Run the Vitest unit + component tests
 npm run test:watch  # Watch mode
+npm run typecheck   # vue-tsc over the .ts and .vue files
 ```
 
-Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`). See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it.
+Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`), along with the type check. Vitest and the Astro build strip types without checking them, so a type error passes both; only `npm run typecheck` catches it. TypeScript stays on 5.x because Astro's `tsconfck` requires `^5.0.0`. See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it.
 
 ## Building
 
@@ -55,6 +56,8 @@ Each deploy copies the build over what is already on `gh-pages` (`keep_files: tr
 than replacing the branch, because some tools are deployed there from branches that are not
 on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
 when to switch back to `force_orphan`.
+Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
+together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
 ## Shared Configuration
 

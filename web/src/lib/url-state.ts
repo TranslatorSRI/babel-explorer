@@ -18,7 +18,15 @@ export interface QueryState {
   options: Partial<ApiOptions>;
 }
 
-const OPTION_KEYS = Object.keys(DEFAULT_API_OPTIONS) as (keyof ApiOptions)[];
+/**
+ * The API options a link may carry: those the form has a control for. individual_types
+ * is left out because the app depends on it (getDirectTypes reads the per-identifier
+ * types it returns) and the form offers no way to turn it back on, so a link setting it
+ * to false would silently strip the type badges from every later query on that page.
+ */
+const OPTION_KEYS = (Object.keys(DEFAULT_API_OPTIONS) as (keyof ApiOptions)[]).filter(
+  (key) => key !== 'individual_types',
+);
 
 /**
  * Read the query state from the current URL.

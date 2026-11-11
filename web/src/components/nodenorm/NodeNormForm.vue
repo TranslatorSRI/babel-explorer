@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { NodeNormInstance, ApiOptions } from '../../lib/types';
+import type { NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { findInstance, normalizeInstanceUrl, resolveTarget } from '../../lib/instances';
 
@@ -19,7 +19,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
+  submit: [payload: NodeNormQuery];
   stop: [];
 }>();
 
@@ -83,9 +83,12 @@ function onSubmit() {
   emit('submit', { curies: curies.value, instanceUrls: urls, options: { ...options.value } });
 }
 
+// Open "Advanced options" when the form starts with any of them changed, so a share
+// link's settings are visible. Decided once: binding :open to a live computed would
+// snap the section shut under the user the moment they restored the defaults.
 const ADVANCED_KEYS = ['description', 'include_taxa'] as const;
-const hasNonDefaultAdvancedOptions = computed(() =>
-  ADVANCED_KEYS.some((k) => options.value[k] !== DEFAULT_API_OPTIONS[k])
+const advancedInitiallyOpen = ADVANCED_KEYS.some(
+  (k) => options.value[k] !== DEFAULT_API_OPTIONS[k],
 );
 
 async function onShare() {
@@ -101,7 +104,9 @@ async function onShare() {
 </script>
 
 <template>
-  <form @submit.prevent="onSubmit">
+  <!-- novalidate: the browser's own check on the custom-URL box below would otherwise
+       block Normalize whenever that box holds a half-typed URL. addCustomUrl validates it. -->
+  <form novalidate @submit.prevent="onSubmit">
     <div class="mb-3">
       <label for="curies" class="form-label">CURIEs (one per line)</label>
       <textarea
@@ -157,6 +162,7 @@ async function onShare() {
             class="form-control form-control-sm"
             placeholder="Add custom URL…"
             style="max-width: 280px"
+            @keydown.enter.prevent="addCustomUrl()"
           />
           <button
             type="button"
@@ -183,7 +189,7 @@ async function onShare() {
     </div>
 
     <!-- Advanced API options -->
-    <details class="mb-3" :open="hasNonDefaultAdvancedOptions">
+    <details class="mb-3" :open="advancedInitiallyOpen">
       <summary class="text-muted small" style="cursor: pointer">Advanced options</summary>
       <div class="d-flex flex-wrap gap-3 mt-2">
         <div class="form-check">

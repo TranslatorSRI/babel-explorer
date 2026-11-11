@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import NodeNormForm from '../NodeNormForm.vue';
-import type { NodeNormInstance } from '../../../lib/types';
+import type { NodeNormInstance, NodeNormQuery } from '../../../lib/types';
 
 const instances: NodeNormInstance[] = [
   { name: 'Dev', env: 'dev', url: 'https://dev.example.com/' },
@@ -15,7 +15,7 @@ function mountForm(initialTargets?: string[]) {
 
 async function submittedUrls(wrapper: ReturnType<typeof mountForm>) {
   await wrapper.find('form').trigger('submit');
-  return wrapper.emitted('submit')!.at(-1)![0].instanceUrls;
+  return wrapper.emitted<[NodeNormQuery]>('submit')!.at(-1)![0].instanceUrls;
 }
 
 describe('NodeNormForm — custom URLs', () => {
@@ -52,10 +52,43 @@ describe('NodeNormForm — custom URLs', () => {
     expect(await submittedUrls(wrapper)).toEqual(['https://dev.example.com/']);
   });
 
+  it('adds the custom URL on Enter instead of submitting the query', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('input[type="url"]').setValue('https://a.example/');
+    await wrapper.find('input[type="url"]').trigger('keydown', { key: 'Enter' });
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(1);
+  });
+
+  it('leaves the browser no reason to block Normalize over a half-typed custom URL', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('input[type="url"]').setValue('nodenorm.example');
+    expect(wrapper.find('form').attributes('novalidate')).toBeDefined();
+    expect(await submittedUrls(wrapper)).toEqual(['https://dev.example.com/']);
+  });
+
   it.each(['not a url', 'foo:bar'])('disables Add for %s, which is not an http(s) URL', async (url) => {
     const wrapper = mountForm();
     await wrapper.find('input[type="url"]').setValue(url);
     expect(wrapper.find('input[type="url"] + button').attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('NodeNormForm — advanced options', () => {
+  it('opens when the page URL changes an advanced option', () => {
+    const wrapper = mount(NodeNormForm, {
+      props: { instances, loading: false, hasResults: false, initialOptions: { description: false } },
+    });
+    expect((wrapper.find('details').element as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('stays open when the user restores the defaults', async () => {
+    const wrapper = mountForm();
+    const details = wrapper.find('details').element as HTMLDetailsElement;
+    details.open = true;
+    await wrapper.find('#opt-desc').setValue(false);
+    await wrapper.find('#opt-desc').setValue(true);
+    expect(details.open).toBe(true);
   });
 });
 

@@ -14,6 +14,13 @@ on:
 permissions:
   contents: write
 
+# One deploy at a time, so two runs cannot push to gh-pages together. Not
+# cancel-in-progress: a deploy stopped half-way through its push is worse than a short
+# wait. GitHub keeps only the newest pending run, so the last change still wins.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -44,5 +51,6 @@ jobs:
           # their own branches but not yet on main, and force_orphan: true would delete
           # them on the first deploy from main. The cost is that stale files are never
           # removed: once every tool on gh-pages is built from main, restore
-          # force_orphan: true (and drop keep_files, which conflicts with it).
+          # force_orphan: true (and drop keep_files, which conflicts with it). Tracked
+          # in #39, to be done in #24.
           keep_files: true

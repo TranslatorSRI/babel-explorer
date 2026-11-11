@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount } from 'vue';
-import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions } from '../../lib/types';
+import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
 import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
@@ -40,6 +40,28 @@ const typeFilter = reactive(new Set<string>());
 // Controller for the query in flight, if any. A newer query aborts the older one.
 let abortController: AbortController | null = null;
 
+/**
+ * Drop the query in flight without letting it touch the page again. Clearing
+ * abortController first is what does that: the aborted query then sees it no longer
+ * owns the page, rather than taking the "stopped by the user" path. Stop, which the
+ * user did ask for, aborts without this.
+ */
+function cancelQuery() {
+  const controller = abortController;
+  abortController = null;
+  controller?.abort();
+  loading.value = false;
+}
+
+/** Cancel any query and show an empty page, for a link that describes no runnable query. */
+function clearQuery() {
+  cancelQuery();
+  resultsByInstance.value = new Map();
+  resultsUrl = null;
+  error.value = null;
+  notice.value = null;
+}
+
 /** Run (or clear) the query that the page URL describes. */
 async function applyUrlState() {
   const { curies, targets, options } = urlState.value;
@@ -48,15 +70,17 @@ async function applyUrlState() {
   const instanceUrls = [...new Set(resolved.filter((u): u is string => u !== null))];
 
   if (curies.length === 0) {
-    abortController?.abort();
-    resultsByInstance.value = new Map();
-    error.value = null;
-    notice.value = null;
+    clearQuery();
     return;
   }
   // A link naming only unusable targets would otherwise silently query the default
-  // instance instead; the warning below explains why nothing ran.
-  if (targets.length > 0 && instanceUrls.length === 0) return;
+  // instance instead; the warning below explains why nothing ran. Clearing matters:
+  // a query still running would otherwise land under that warning and overwrite the
+  // pasted link with its own.
+  if (targets.length > 0 && instanceUrls.length === 0) {
+    clearQuery();
+    return;
+  }
 
   await handleSubmit({
     curies: curies.join('\n'),
@@ -69,6 +93,17 @@ async function applyUrlState() {
 // wrote itself is not run again. Browsers fire no hashchange for replaceState, but
 // happy-dom (the test DOM) does.
 let shownHash = window.location.hash;
+
+// The URL of the results on screen, put back when a query is stopped. A query started
+// by a pasted link or Back has already changed the address bar, so without this Share
+// would copy the stopped query's link beside the previous query's results.
+let resultsUrl: string | null = null;
+
+/** Show url in the address bar without a navigation, or a hashchange that re-runs it. */
+function showUrl(url: string) {
+  shownHash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
+  window.history.replaceState(null, '', url);
+}
 
 // The browser does not reload for a fragment-only navigation, so a share link pasted
 // into a tab already on this page, or Back, arrives only as a hashchange.
@@ -87,7 +122,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', onHashChange);
-  abortController?.abort();
+  cancelQuery();
 });
 
 function stopQuery() {
@@ -129,14 +164,17 @@ function handleExport() {
   setTimeout(() => URL.revokeObjectURL(url), 40_000);
 }
 
-function onFormSubmit(payload: { curies: string; instanceUrls: string[]; options: ApiOptions }) {
+function onFormSubmit(payload: NodeNormQuery) {
   ignoredTargets.value = [];
   void handleSubmit(payload);
 }
 
-async function handleSubmit(payload: { curies: string; instanceUrls: string[]; options: ApiOptions }) {
+async function handleSubmit(payload: NodeNormQuery) {
   const curies = parseCuries(payload.curies);
   if (curies.length === 0) {
+    // Cancel any query still running: it would otherwise finish under this error and
+    // leave it above results it has nothing to do with.
+    cancelQuery();
     error.value = 'No valid CURIEs provided.';
     return;
   }
@@ -164,6 +202,7 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
     // Stopped: leave the previous query's results, and the URL that describes them,
     // in place rather than a blank page or a comparison missing some instances.
     if (signal.aborted) {
+      if (resultsUrl !== null) showUrl(resultsUrl);
       notice.value = hasResults.value
         ? 'Query stopped. Showing the results of the previous query.'
         : 'Query stopped.';
@@ -193,11 +232,11 @@ async function handleSubmit(payload: { curies: string; instanceUrls: string[]; o
       error.value = `Some instances failed: ${errors.join('; ')}`;
     }
 
-    // Update URL to reflect the submitted query. replaceState fires no hashchange.
+    // Update URL to reflect the submitted query.
     const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
     const queryUrl = buildQueryUrl(curies, targets, payload.options);
-    shownHash = queryUrl.includes('#') ? queryUrl.slice(queryUrl.indexOf('#')) : '';
-    window.history.replaceState(null, '', queryUrl);
+    resultsUrl = queryUrl;
+    showUrl(queryUrl);
   } finally {
     if (abortController === controller) {
       abortController = null;

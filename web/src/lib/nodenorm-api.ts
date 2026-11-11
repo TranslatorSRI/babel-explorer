@@ -7,6 +7,12 @@ const MAX_CURIE_PARAMS_LENGTH = 4000;
 // batches, and sending them all together invites HTTP 429s.
 export const MAX_CONCURRENT_BATCHES = 4;
 
+// How long one batch may take, from request to parsed body, before its instance is
+// reported as failed. Without a deadline, an instance that never answers holds back
+// every other instance's results, since NodeNormApp waits for all of them. Generous
+// because a batch is a few hundred CURIEs and conflated cliques make large responses.
+export const BATCH_TIMEOUT_MS = 60_000;
+
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
  *
@@ -15,7 +21,8 @@ export const MAX_CONCURRENT_BATCHES = 4;
  * needs a CORS preflight, which a custom NodeNorm URL may not answer (every deployment
  * in translator-endpoints.json did when checked on 2026-11-10). At most
  * MAX_CONCURRENT_BATCHES requests are in flight at once, and the first failure aborts
- * the rest, since their responses would be thrown away.
+ * the rest, since their responses would be thrown away. A batch that takes longer than
+ * BATCH_TIMEOUT_MS fails this instance only; the caller's signal is left alone.
  *
  * @param baseUrl  NodeNorm instance URL
  * @param curies   List of CURIEs to normalize
@@ -48,16 +55,27 @@ export async function fetchNormalizedNodes(
 
   const responses: NodeNormResponse[] = new Array(batches.length);
   let next = 0;
+  // Set before the abort, so whichever batch's rejection reaches Promise.all first, the
+  // failure is reported as the timeout rather than as an anonymous AbortError.
+  let timedOut = false;
   async function worker() {
     while (next < batches.length) {
       const i = next++;
-      const resp = await fetch(buildNodeNormUrl(baseUrl, batches[i], options), {
-        signal: controller.signal,
-      });
-      if (!resp.ok) {
-        throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, BATCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(buildNodeNormUrl(baseUrl, batches[i], options), {
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        responses[i] = (await resp.json()) as NodeNormResponse;
+      } finally {
+        clearTimeout(timer);
       }
-      responses[i] = (await resp.json()) as NodeNormResponse;
     }
   }
 
@@ -66,6 +84,9 @@ export async function fetchNormalizedNodes(
     await Promise.all(Array.from({ length: workers }, worker));
   } catch (err) {
     controller.abort();
+    if (timedOut && !signal?.aborted) {
+      throw new Error(`NodeNorm did not answer within ${BATCH_TIMEOUT_MS / 1000} s`);
+    }
     throw err;
   } finally {
     signal?.removeEventListener('abort', onAbort);
@@ -130,8 +151,17 @@ export function preferredIdsDisagree(
  *
  * Falls back to [node.type[0]] if no individual types are present (e.g. if the API
  * was called without individual_types=true).
+ *
+ * Memoised per node, since ComparisonView, ResultsSummary and CurieDetailPanel each
+ * ask for the same node's types and a conflated clique can list hundreds of
+ * identifiers. That relies on nodes never being mutated: NodeNormApp replaces a
+ * response whole rather than editing it. The result is shared, hence readonly.
  */
-export function getDirectTypes(node: NormalizedNode): string[] {
+const directTypesCache = new WeakMap<NormalizedNode, readonly string[]>();
+
+export function getDirectTypes(node: NormalizedNode): readonly string[] {
+  const cached = directTypesCache.get(node);
+  if (cached) return cached;
   const seen = new Set<string>();
   const result: string[] = [];
   for (const id of node.equivalent_identifiers) {
@@ -140,7 +170,9 @@ export function getDirectTypes(node: NormalizedNode): string[] {
       result.push(id.type);
     }
   }
-  return result.length > 0 ? result : node.type.slice(0, 1);
+  const types = result.length > 0 ? result : node.type.slice(0, 1);
+  directTypesCache.set(node, types);
+  return types;
 }
 
 /**
