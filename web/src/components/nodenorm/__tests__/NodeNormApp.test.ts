@@ -87,3 +87,82 @@ describe('NodeNormApp — stop', () => {
     expect(window.location.hash).toBe(sharedUrl);
   });
 });
+
+/**
+ * A fetch that hangs until release() is called, then answers like respond(). An
+ * aborted request rejects as fetch does, so a test can tell a query that was cancelled
+ * from one that finished.
+ */
+function heldFetch() {
+  const pending: (() => void)[] = [];
+  const fetchMock = vi.fn((url: string, init: RequestInit) =>
+    new Promise((resolve, reject) => {
+      init.signal!.addEventListener('abort', () =>
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+      );
+      pending.push(() => resolve(respond(url)));
+    }),
+  );
+  return {
+    fetchMock,
+    release: async () => {
+      pending.splice(0).forEach((r) => r());
+      await flushPromises();
+    },
+  };
+}
+
+async function navigateTo(fragment: string) {
+  setFragment(fragment);
+  window.dispatchEvent(new HashChangeEvent('hashchange'));
+  await flushPromises();
+}
+
+describe('NodeNormApp — a new link while a query is running', () => {
+  it('cancels the running query when the link names only unusable targets', async () => {
+    const { fetchMock, release } = heldFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    setFragment('#curie=MONDO%3A0004979&target=prod');
+    const wrapper = mountApp();
+    await flushPromises();
+
+    const pasted = '#curie=CHEBI%3A48947&target=ftp%3A%2F%2Fbad';
+    await navigateTo(pasted);
+    await release();
+
+    expect(wrapper.text()).toContain('neither a known instance nor an http(s)');
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(window.location.hash).toBe(pasted);
+  });
+
+  it('does not report "Query stopped" for a link with no CURIEs', async () => {
+    const { fetchMock, release } = heldFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    setFragment('#curie=MONDO%3A0004979&target=prod');
+    const wrapper = mountApp();
+    await flushPromises();
+
+    await navigateTo('#target=prod');
+    await release();
+
+    expect(wrapper.text()).not.toContain('Query stopped');
+    expect(wrapper.text()).toContain('Normalize');
+    expect(wrapper.text()).not.toContain('Normalizing');
+  });
+
+  it('cancels the running query when a submission has no valid CURIEs', async () => {
+    const { fetchMock, release } = heldFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    setFragment('#curie=MONDO%3A0004979&target=prod');
+    const wrapper = mountApp();
+    await flushPromises();
+
+    await wrapper.find('textarea').setValue('# note');
+    await wrapper.find('form').trigger('submit');
+    await release();
+
+    expect(wrapper.text()).toContain('No valid CURIEs provided.');
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Normalizing');
+  });
+});

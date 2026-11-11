@@ -40,6 +40,27 @@ const typeFilter = reactive(new Set<string>());
 // Controller for the query in flight, if any. A newer query aborts the older one.
 let abortController: AbortController | null = null;
 
+/**
+ * Drop the query in flight without letting it touch the page again. Clearing
+ * abortController first is what does that: the aborted query then sees it no longer
+ * owns the page, rather than taking the "stopped by the user" path. Stop, which the
+ * user did ask for, aborts without this.
+ */
+function cancelQuery() {
+  const controller = abortController;
+  abortController = null;
+  controller?.abort();
+  loading.value = false;
+}
+
+/** Cancel any query and show an empty page, for a link that describes no runnable query. */
+function clearQuery() {
+  cancelQuery();
+  resultsByInstance.value = new Map();
+  error.value = null;
+  notice.value = null;
+}
+
 /** Run (or clear) the query that the page URL describes. */
 async function applyUrlState() {
   const { curies, targets, options } = urlState.value;
@@ -48,15 +69,17 @@ async function applyUrlState() {
   const instanceUrls = [...new Set(resolved.filter((u): u is string => u !== null))];
 
   if (curies.length === 0) {
-    abortController?.abort();
-    resultsByInstance.value = new Map();
-    error.value = null;
-    notice.value = null;
+    clearQuery();
     return;
   }
   // A link naming only unusable targets would otherwise silently query the default
-  // instance instead; the warning below explains why nothing ran.
-  if (targets.length > 0 && instanceUrls.length === 0) return;
+  // instance instead; the warning below explains why nothing ran. Clearing matters:
+  // a query still running would otherwise land under that warning and overwrite the
+  // pasted link with its own.
+  if (targets.length > 0 && instanceUrls.length === 0) {
+    clearQuery();
+    return;
+  }
 
   await handleSubmit({
     curies: curies.join('\n'),
@@ -87,7 +110,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('hashchange', onHashChange);
-  abortController?.abort();
+  cancelQuery();
 });
 
 function stopQuery() {
@@ -137,6 +160,9 @@ function onFormSubmit(payload: NodeNormQuery) {
 async function handleSubmit(payload: NodeNormQuery) {
   const curies = parseCuries(payload.curies);
   if (curies.length === 0) {
+    // Cancel any query still running: it would otherwise finish under this error and
+    // leave it above results it has nothing to do with.
+    cancelQuery();
     error.value = 'No valid CURIEs provided.';
     return;
   }
