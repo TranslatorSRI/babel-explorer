@@ -113,6 +113,7 @@ src/
     nameres-types.ts                # NameRes interfaces and default options
     nameres-url-state.ts            # Encode/decode NameRes query state
     instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
+    use-share-link.ts               # The Share button: copy the page URL, report success or failure
 ```
 
 ## Adding a New Tool

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import type { NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import InstanceSelector from '../shared/InstanceSelector.vue';
+import { useShareLink } from '../../lib/use-share-link';
 
 const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
 
@@ -32,8 +33,8 @@ const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOption
 // NodeNormApp reports those.
 const selectedUrls = ref<string[]>([]);
 
-// Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
-const shareStatus = ref<string | null>(null);
+// Share button: copies the page URL, then says "✓ Copied!" or "Copy failed" for a moment
+const { shareStatus, share } = useShareLink();
 
 function onSubmit() {
   if (!curies.value.trim()) return;
@@ -48,17 +49,6 @@ const ADVANCED_KEYS = ['description', 'include_taxa'] as const;
 const advancedInitiallyOpen = ADVANCED_KEYS.some(
   (k) => options.value[k] !== DEFAULT_API_OPTIONS[k],
 );
-
-async function onShare() {
-  try {
-    // navigator.clipboard is undefined outside a secure context, which lands here too.
-    await navigator.clipboard.writeText(window.location.href);
-    shareStatus.value = '✓ Copied!';
-  } catch {
-    shareStatus.value = 'Copy failed';
-  }
-  setTimeout(() => { shareStatus.value = null; }, 2000);
-}
 </script>
 
 <template>
@@ -134,7 +124,7 @@ async function onShare() {
         v-if="hasResults && !loading"
         type="button"
         class="btn btn-outline-secondary"
-        @click="onShare"
+        @click="share"
       >
         {{ shareStatus ?? 'Share' }}
       </button>

@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
 import InstanceSelector from '../shared/InstanceSelector.vue';
+import { useShareLink } from '../../lib/use-share-link';
 
 const DEFAULT_TERMS = 'asthma [[MONDO:0004979]]\ndiabetes type 2 [[MONDO:0005148]]\ndiabetes\nheart failure';
 
@@ -38,8 +39,8 @@ const threshold = ref(props.initialThreshold ?? options.value.limit);
 // Instance selection driven by InstanceSelector via v-model
 const selectedUrls = ref<string[]>([]);
 
-// Share button feedback ("✓ Copied!" or "Copy failed"), cleared after a moment
-const shareStatus = ref<string | null>(null);
+// Share button: copies the page URL, then says "✓ Copied!" or "Copy failed" for a moment
+const { shareStatus, share } = useShareLink();
 
 function onSubmit() {
   if (!terms.value.trim()) return;
@@ -59,17 +60,6 @@ const ADVANCED_KEYS = ['biolink_type', 'only_prefixes', 'exclude_prefixes', 'onl
 const advancedInitiallyOpen = ADVANCED_KEYS.some(
   (k) => options.value[k] !== DEFAULT_NAMERES_OPTIONS[k],
 );
-
-async function onShare() {
-  try {
-    // navigator.clipboard is undefined outside a secure context, which lands here too.
-    await navigator.clipboard.writeText(window.location.href);
-    shareStatus.value = '✓ Copied!';
-  } catch {
-    shareStatus.value = 'Copy failed';
-  }
-  setTimeout(() => { shareStatus.value = null; }, 2000);
-}
 </script>
 
 <template>
@@ -204,7 +194,7 @@ async function onShare() {
         v-if="hasResults && !loading"
         type="button"
         class="btn btn-outline-secondary"
-        @click="onShare"
+        @click="share"
       >
         {{ shareStatus ?? 'Share' }}
       </button>
