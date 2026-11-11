@@ -89,6 +89,50 @@ export async function fetchNameResLookup(
 }
 
 /**
+ * Lookups in flight at once per instance. A regression list of a few hundred terms
+ * against every instance would otherwise start a thousand requests together, which the
+ * browser queues anyway and the servers may answer with HTTP 429 or 503, showing up as
+ * failed lookups unrelated to the regression being checked. Matches NodeNorm's
+ * MAX_CONCURRENT_BATCHES.
+ */
+export const MAX_CONCURRENT_LOOKUPS = 4;
+
+/**
+ * Look up several texts on one instance, at most MAX_CONCURRENT_LOOKUPS at a time.
+ *
+ * Returns one settled result per text, in the same order. A failed lookup fails only
+ * its own text, so a single 500 does not hide the rest. One GET per text rather than a
+ * bulk request: a JSON POST needs a CORS preflight that a custom NameRes URL may not
+ * answer, and a bulk request that fails takes every term with it.
+ */
+export async function fetchNameResLookups(
+  baseUrl: string,
+  texts: string[],
+  options: NameResApiOptions,
+  signal?: AbortSignal,
+): Promise<PromiseSettledResult<NameResResult[]>[]> {
+  const settled: PromiseSettledResult<NameResResult[]>[] = new Array(texts.length);
+  let next = 0;
+  async function worker() {
+    while (next < texts.length) {
+      const i = next++;
+      // Once stopped, fail the rest without starting them.
+      if (signal?.aborted) {
+        settled[i] = { status: 'rejected', reason: signal.reason };
+        continue;
+      }
+      try {
+        settled[i] = { status: 'fulfilled', value: await fetchNameResLookup(baseUrl, texts[i], options, signal) };
+      } catch (reason) {
+        settled[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_LOOKUPS, texts.length) }, worker));
+  return settled;
+}
+
+/**
  * Validate expected CURIEs against actual search results.
  *
  * Uses "any match" semantics: success if ANY expected CURIE is the #1 result,

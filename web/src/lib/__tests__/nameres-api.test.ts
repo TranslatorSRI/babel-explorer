@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, validateExpectedCuries } from '../nameres-api';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions, NameResResult } from '../nameres-types';
 import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
@@ -333,5 +333,55 @@ describe('NameRes API response shape', () => {
     const first = asthmaFixture[0] as NameResResult;
     expect(typeof first.clique_identifier_count).toBe('number');
     expect(first.clique_identifier_count).toBeGreaterThan(0);
+  });
+});
+
+describe('fetchNameResLookups', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it(`never has more than MAX_CONCURRENT_LOOKUPS requests in flight`, async () => {
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+      return { ok: true, json: () => Promise.resolve([]) };
+    }));
+    const texts = Array.from({ length: 20 }, (_, i) => `t${i}`);
+    const settled = await fetchNameResLookups('https://nr.example/', texts, DEFAULT_NAMERES_OPTIONS);
+    expect(settled).toHaveLength(20);
+    expect(settled.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(peak).toBe(MAX_CONCURRENT_LOOKUPS);
+  });
+
+  it('fails only the lookup that failed, keeping results in order', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      new URL(url).searchParams.get('string') === 'bad'
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : { ok: true, json: () => Promise.resolve([{ curie: new URL(url).searchParams.get('string') }]) },
+    ));
+    const settled = await fetchNameResLookups('https://nr.example/', ['a', 'bad', 'c'], DEFAULT_NAMERES_OPTIONS);
+    expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+    expect((settled[2] as PromiseFulfilledResult<{ curie: string }[]>).value[0].curie).toBe('c');
+  });
+});
+
+describe('fetchNameResLookups — abort', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('starts no further lookups once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => {
+      controller.abort();
+      return { ok: true, json: () => Promise.resolve([]) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const texts = Array.from({ length: 20 }, (_, i) => `t${i}`);
+    const settled = await fetchNameResLookups('https://nr.example/', texts, DEFAULT_NAMERES_OPTIONS, controller.signal);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(MAX_CONCURRENT_LOOKUPS);
+    expect(settled).toHaveLength(20);
+    expect(settled.at(-1)!.status).toBe('rejected');
   });
 });

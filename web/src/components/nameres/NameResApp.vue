@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { NameResResult, NameResInstance, NameResApiOptions, ParsedSearchTerm } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
-import { parseSearchTerms, fetchNameResLookup, uniqueSearchTexts } from '../../lib/nameres-api';
+import { parseSearchTerms, fetchNameResLookups, uniqueSearchTexts } from '../../lib/nameres-api';
 import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-url-state';
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
@@ -205,20 +205,12 @@ async function handleSubmit(payload: {
   notice.value = null;
 
   try {
-    // Build all (instance, search text) fetch promises. Two lines with the same text
-    // but different expected CURIEs share one lookup.
-    const jobs: { instanceUrl: string; text: string; promise: Promise<NameResResult[]> }[] = [];
-    for (const instanceUrl of payload.instanceUrls) {
-      for (const text of uniqueSearchTexts(terms)) {
-        jobs.push({
-          instanceUrl,
-          text,
-          promise: fetchNameResLookup(instanceUrl, text, payload.options, signal),
-        });
-      }
-    }
-
-    const settled = await Promise.allSettled(jobs.map((j) => j.promise));
+    // Each instance in parallel, a few lookups at a time on each. Two lines with the
+    // same text but different expected CURIEs share one lookup.
+    const texts = uniqueSearchTexts(terms);
+    const settledByInstance = await Promise.all(
+      payload.instanceUrls.map((url) => fetchNameResLookups(url, texts, payload.options, signal)),
+    );
 
     // A newer query replaced this one; it owns the page now.
     if (abortController !== controller) return;
@@ -236,20 +228,18 @@ async function handleSubmit(payload: {
     const resultMap = new Map<string, Map<string, NameResResult[]>>();
     const errors: string[] = [];
 
-    for (let i = 0; i < jobs.length; i++) {
-      const { instanceUrl, text } = jobs[i];
-      const result = settled[i];
-
-      if (!resultMap.has(instanceUrl)) {
-        resultMap.set(instanceUrl, new Map());
-      }
-
-      if (result.status === 'fulfilled') {
-        resultMap.get(instanceUrl)!.set(text, result.value);
-      } else {
-        errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
-      }
-    }
+    payload.instanceUrls.forEach((instanceUrl, i) => {
+      const byText = new Map<string, NameResResult[]>();
+      resultMap.set(instanceUrl, byText);
+      texts.forEach((text, j) => {
+        const result = settledByInstance[i][j];
+        if (result.status === 'fulfilled') {
+          byText.set(text, result.value);
+        } else {
+          errors.push(`${instanceForUrl(instances, instanceUrl).name} / "${text}": ${result.reason}`);
+        }
+      });
+    });
 
     resultsByInstance.value = resultMap;
     queriedTerms.value = terms;

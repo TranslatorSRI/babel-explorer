@@ -110,7 +110,7 @@ src/
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
     url-state.ts                    # Encode/decode NodeNorm query state in the URL fragment
     types.ts                        # NodeNorm TypeScript interfaces
-    nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
+    nameres-api.ts                  # NameRes /lookup wrapper (bounded concurrency, AbortSignal); parseSearchTerms; validateExpectedCuries
     nameres-types.ts                # NameRes interfaces and default options
     nameres-url-state.ts            # Encode/decode NameRes query state in the URL fragment
     instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
