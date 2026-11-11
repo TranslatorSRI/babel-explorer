@@ -12,7 +12,8 @@
     "astro": "astro",
     "test": "vitest run",
     "typecheck": "vue-tsc --noEmit",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "update-prefix-map": "node scripts/update-prefix-map.mjs"
   },
   "dependencies": {
     "@astrojs/vue": "^6.0.1",

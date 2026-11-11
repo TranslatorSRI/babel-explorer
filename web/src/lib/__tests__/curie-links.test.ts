@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseCurie, getCurieUrl } from '../curie-links';
 import prefixMapSubset from '../../../../tests/fixtures/prefix_map_subset.json';
+import prefixMapVersion from '../biolink-prefix-map.version?raw';
 
 // ---------------------------------------------------------------------------
 // parseCurie
@@ -70,5 +71,15 @@ describe('getCurieUrl', () => {
 
   it('defaults to the vendored biolink prefix map', () => {
     expect(getCurieUrl('MONDO:0004979')).toBe('http://purl.obolibrary.org/obo/MONDO_0004979');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The vendored map's release record
+// ---------------------------------------------------------------------------
+
+describe('biolink-prefix-map.version', () => {
+  it('names one Biolink release tag, as scripts/update-prefix-map.mjs writes it', () => {
+    expect(prefixMapVersion).toMatch(/^v\d+\.\d+\.\d+\n$/);
   });
 });

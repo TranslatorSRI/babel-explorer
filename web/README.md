@@ -19,7 +19,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
 - **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, any non-default option the form offers; `individual_types` is always on and never read from a link), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
-- **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
+- **CURIE link-outs**: Identifiers link to external resources via the [biolink-model prefix map](https://github.com/biolink/biolink-model), at the release named in `src/lib/biolink-prefix-map.version`
 
 ## Development
 
@@ -63,7 +63,9 @@ together; a deploy that arrives while one is running waits, and only the newest 
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
 
-CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. `src/lib/curie-links.ts` records which release it came from and how to update it.
+CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. It is an exact copy of one release, named in `src/lib/biolink-prefix-map.version`; update both with `npm run update-prefix-map` (latest release) or `npm run update-prefix-map -- <tag>`.
+
+`.github/workflows/update-prefix-map.yml` runs that script every Monday and, when the map changes, opens or updates a draft PR from `bot/biolink-prefix-map` whose description lists the added, changed and (first) removed prefixes. A removed prefix that NodeNorm still emits loses its link-out, so read that list before merging. The job runs the tests, the type check and the build itself, because a PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`.
 
 ## Architecture
 

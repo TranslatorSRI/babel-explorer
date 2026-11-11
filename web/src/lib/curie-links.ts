@@ -5,9 +5,11 @@
  * These IRIs generally resolve via 303/302 redirects to useful browseable pages
  * (OLS, identifiers.org, GenNames, etc.).
  *
- * biolink-prefix-map.json is a vendored copy of biolink-model v4.3.7's
+ * biolink-prefix-map.json is an exact copy of one Biolink Model release's
  * src/biolink_model/prefixmaps/biolink-model-prefix-map.json, bundled at build time.
- * To update it, download that file from the new release tag over the vendored copy.
+ * biolink-prefix-map.version names the release. Update both with
+ * `npm run update-prefix-map [-- <tag>]`, never by hand; a weekly workflow
+ * (.github/workflows/update-prefix-map.yml) opens a draft PR when a release changes it.
  */
 
 import PREFIX_MAP from './biolink-prefix-map.json';
