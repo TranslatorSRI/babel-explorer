@@ -4,6 +4,7 @@ import {
   fetchNormalizedNodes,
   buildNodeNormUrl,
   preferredIdsDisagree,
+  getDirectTypes,
   MAX_CONCURRENT_BATCHES,
 } from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
@@ -393,5 +394,29 @@ describe('preferredIdsDisagree', () => {
   it('skips an instance whose request failed', () => {
     const results = new Map([[a.url, { X: node('P:1') }]]);
     expect(preferredIdsDisagree('X', [a, b], results)).toBe(false);
+  });
+});
+
+describe('getDirectTypes', () => {
+  const conflated = meshConflatedFixture['MESH:D014867'] as NormalizedNode;
+
+  it('lists each identifier type once, in first-appearance order', () => {
+    const types = getDirectTypes(conflated);
+    expect(new Set(types)).toEqual(new Set(['biolink:SmallMolecule', 'biolink:Drug', 'biolink:ChemicalEntity']));
+    expect(types).toHaveLength(3);
+  });
+
+  it('falls back to the most specific clique type when identifiers carry none', () => {
+    const node: NormalizedNode = {
+      id: { identifier: 'X:1' },
+      equivalent_identifiers: [{ identifier: 'X:1' }],
+      type: ['biolink:Gene', 'biolink:NamedThing'],
+    };
+    expect(getDirectTypes(node)).toEqual(['biolink:Gene']);
+  });
+
+  it('computes a node once, however many components ask', () => {
+    const node = structuredClone(conflated);
+    expect(getDirectTypes(node)).toBe(getDirectTypes(node));
   });
 });

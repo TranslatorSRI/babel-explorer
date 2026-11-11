@@ -130,8 +130,17 @@ export function preferredIdsDisagree(
  *
  * Falls back to [node.type[0]] if no individual types are present (e.g. if the API
  * was called without individual_types=true).
+ *
+ * Memoised per node, since ComparisonView, ResultsSummary and CurieDetailPanel each
+ * ask for the same node's types and a conflated clique can list hundreds of
+ * identifiers. That relies on nodes never being mutated: NodeNormApp replaces a
+ * response whole rather than editing it. The result is shared, hence readonly.
  */
-export function getDirectTypes(node: NormalizedNode): string[] {
+const directTypesCache = new WeakMap<NormalizedNode, readonly string[]>();
+
+export function getDirectTypes(node: NormalizedNode): readonly string[] {
+  const cached = directTypesCache.get(node);
+  if (cached) return cached;
   const seen = new Set<string>();
   const result: string[] = [];
   for (const id of node.equivalent_identifiers) {
@@ -140,7 +149,9 @@ export function getDirectTypes(node: NormalizedNode): string[] {
       result.push(id.type);
     }
   }
-  return result.length > 0 ? result : node.type.slice(0, 1);
+  const types = result.length > 0 ? result : node.type.slice(0, 1);
+  directTypesCache.set(node, types);
+  return types;
 }
 
 /**
