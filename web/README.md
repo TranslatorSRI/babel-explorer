@@ -18,7 +18,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
-- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, non-default options), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
+- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, any non-default option the form offers; `individual_types` is always on and never read from a link), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
 
 ## Development
@@ -56,6 +56,8 @@ Each deploy copies the build over what is already on `gh-pages` (`keep_files: tr
 than replacing the branch, because some tools are deployed there from branches that are not
 on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
 when to switch back to `force_orphan`.
+Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
+together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
 ## Shared Configuration
 
