@@ -13,7 +13,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, taxa)
-- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus any number of custom http(s) URLs, each with its own checkbox; any combination can be queried together. The selection is shared between tools for the session and can be saved as a default
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
@@ -92,7 +92,7 @@ src/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
       NodeNormApp.vue               # Root island: orchestrates form + results
-      NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
+      NodeNormForm.vue              # CURIE input, InstanceSelector, API options
       ComparisonView.vue            # Results table with expandable per-CURIE rows
       CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
       ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
@@ -100,19 +100,19 @@ src/
       ColumnVisibility.vue          # Column show/hide controls
     nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
     shared/
-      InstanceSelector.vue          # Deployment checkboxes + custom URL, remembered in localStorage
+      InstanceSelector.vue          # Deployment checkboxes + custom URLs, shared by every tool
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
-    instances.ts                    # Target (env key or URL) → instance URL; the one http(s) check
+    instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
     url-state.ts                    # Encode/decode NodeNorm query state in URL params
     types.ts                        # NodeNorm TypeScript interfaces
     nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
     nameres-types.ts                # NameRes interfaces and default options
     nameres-url-state.ts            # Encode/decode NameRes query state
-    instance-prefs.ts               # localStorage helpers and canonical instance ordering
+    instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
 ```
 
 ## Adding a New Tool
@@ -121,4 +121,4 @@ src/
 2. Create a root Vue island component in `src/components/<tool-name>/`
 3. Add a nav link in `src/components/Navbar.astro`
 4. Add a card on the landing page in `src/pages/index.astro`
-5. If the tool needs deployment URLs, import from `config/translator-endpoints.json`
+5. If the tool needs deployment URLs, build its instance list with `buildInstances` from `config/translator-endpoints.json`, and select instances with `InstanceSelector`. Start a link-driven query from `initialSelection`, so it runs against the instances the form shows ticked, and resolve every target through `instances.ts`, so an unusable one is reported rather than fetched
