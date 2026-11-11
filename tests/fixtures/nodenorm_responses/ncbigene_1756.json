@@ -1,0 +1,183 @@
+{
+    "NCBIGene:1756": {
+        "id": {
+            "identifier": "NCBIGene:1756",
+            "label": "DMD",
+            "description": "dystrophin"
+        },
+        "equivalent_identifiers": [
+            {
+                "identifier": "NCBIGene:1756",
+                "label": "DMD",
+                "description": "dystrophin",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Gene"
+            },
+            {
+                "identifier": "ENSEMBL:ENSG00000198947",
+                "type": "biolink:Gene"
+            },
+            {
+                "identifier": "HGNC:2928",
+                "label": "DMD",
+                "type": "biolink:Gene"
+            },
+            {
+                "identifier": "OMIM:300377",
+                "type": "biolink:Gene"
+            },
+            {
+                "identifier": "UMLS:C1414083",
+                "label": "DMD gene",
+                "type": "biolink:Gene"
+            },
+            {
+                "identifier": "UniProtKB:A0A087WV90",
+                "label": "A0A087WV90_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A0S2Z3B5",
+                "label": "A0A0S2Z3B5_HUMAN Dystrophin isoform 2 (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A0S2Z3J7",
+                "label": "A0A0S2Z3J7_HUMAN Dystrophin isoform 1 (Fragment) (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A5H1ZRP9",
+                "label": "A0A5H1ZRP9_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A5H1ZRQ1",
+                "label": "A0A5H1ZRQ1_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A5H1ZRQ8",
+                "label": "A0A5H1ZRQ8_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A5H1ZRR9",
+                "label": "A0A5H1ZRR9_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A0A804HKY9",
+                "label": "A0A804HKY9_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:A7E212",
+                "label": "A7E212_HUMAN Dystrophin (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:P11532",
+                "label": "DMD_HUMAN Dystrophin (sprot)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "PR:P11532",
+                "label": "dystrophin (human)",
+                "description": "A dystrophin that is encoded in the genome of human.",
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UMLS:C1437024",
+                "label": "DMD protein, human",
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "MESH:C484258",
+                "label": "DMD protein, human",
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:Q16484",
+                "label": "Q16484_HUMAN DMD protein (Fragment) (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "UniProtKB:Q4G0X0",
+                "label": "Q4G0X0_HUMAN DMD protein (trembl)",
+                "taxa": [
+                    "NCBITaxon:9606"
+                ],
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "ENSEMBL:ENSP00000288447",
+                "type": "biolink:Protein"
+            },
+            {
+                "identifier": "ENSEMBL:ENSP00000288447.4",
+                "type": "biolink:Protein"
+            }
+        ],
+        "descriptions": [
+            "dystrophin",
+            "A dystrophin that is encoded in the genome of human."
+        ],
+        "taxa": [
+            "NCBITaxon:9606"
+        ],
+        "type": [
+            "biolink:Gene",
+            "biolink:GeneOrGeneProduct",
+            "biolink:GenomicEntity",
+            "biolink:ChemicalEntityOrGeneOrGeneProduct",
+            "biolink:PhysicalEssence",
+            "biolink:OntologyClass",
+            "biolink:BiologicalEntity",
+            "biolink:ThingWithTaxon",
+            "biolink:NamedThing",
+            "biolink:PhysicalEssenceOrOccurrent",
+            "biolink:MacromolecularMachineMixin",
+            "biolink:Protein",
+            "biolink:GeneProductMixin",
+            "biolink:Polypeptide",
+            "biolink:ChemicalEntityOrProteinOrPolypeptide"
+        ],
+        "information_content": 79.9
+    }
+}
