@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import CurieLink from '../CurieLink.vue';
 
@@ -34,5 +34,16 @@ describe('CurieLink', () => {
       props: { curie: 'UNKNOWN:123' },
     });
     expect(unlinked.text()).toBe('UNKNOWN:123');
+  });
+
+  it('does not let a click on the link reach a clickable parent row', async () => {
+    const onRowClick = vi.fn();
+    const wrapper = mount({
+      components: { CurieLink },
+      template: '<div @click="onRowClick"><CurieLink curie="MONDO:0004979" /></div>',
+      setup: () => ({ onRowClick }),
+    });
+    await wrapper.find('a').trigger('click');
+    expect(onRowClick).not.toHaveBeenCalled();
   });
 });

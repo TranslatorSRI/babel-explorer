@@ -46,6 +46,21 @@ describe('ResultsSummary — normalized tile', () => {
     expect(wrapper.text()).toContain('/ 1');
   });
 
+  it('counts coverage only over instances that answered', () => {
+    // Prod was queried but its request failed, so it has no entry in resultsByInstance.
+    const wrapper = mount(ResultsSummary, {
+      props: {
+        resultsByInstance: new Map([[devInstance.url, { 'MONDO:0004979': mondoNode }]]),
+        queriedInstances: [devInstance, prodInstance],
+        selectedTypes: new Set<string>(),
+        curies: ['MONDO:0004979'],
+      },
+    });
+    expect(wrapper.text()).toContain('/ 1');
+    expect(wrapper.text()).not.toContain('partial');
+    expect(wrapper.text()).not.toContain('not found');
+  });
+
   it('shows "not found" detail when a CURIE is missing from all instances', () => {
     const wrapper = mount(ResultsSummary, {
       props: {
@@ -279,5 +294,17 @@ describe('ResultsSummary — types tile', () => {
     const clearBtn = wrapper.findAll('button').find((b) => b.text() === 'clear')!;
     await clearBtn.trigger('click');
     expect(wrapper.emitted('clear-type-filter')).toBeTruthy();
+  });
+});
+
+describe('ResultsSummary — types from every instance', () => {
+  it('offers a type that only the second instance reports', () => {
+    const geneOnly = { ...mondoNode, equivalent_identifiers: [{ identifier: 'X:1', type: 'biolink:Gene' }] };
+    const proteinOnly = { ...mondoNode, equivalent_identifiers: [{ identifier: 'X:1', type: 'biolink:Protein' }] };
+    const wrapper = mount(ResultsSummary, {
+      props: { ...twoInstanceResults({ 'X:1': geneOnly }, { 'X:1': proteinOnly }), curies: ['X:1'] },
+    });
+    expect(wrapper.text()).toContain('Gene');
+    expect(wrapper.text()).toContain('Protein');
   });
 });

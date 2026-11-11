@@ -283,10 +283,10 @@ describe('InstanceSelector — custom URL', () => {
 
   it('shows custom URL checkbox after adding', async () => {
     const wrapper = mountSelector({ initialTargets: ['dev'] });
-    expect(wrapper.find('#inst-custom').exists()).toBe(false);
+    expect(wrapper.find('#inst-custom-0').exists()).toBe(false);
     await wrapper.find('input[type="url"]').setValue('https://custom.example.com/');
     await wrapper.find('button.btn-outline-secondary').trigger('click');
-    expect(wrapper.find('#inst-custom').exists()).toBe(true);
+    expect(wrapper.find('#inst-custom-0').exists()).toBe(true);
   });
 });
 
@@ -320,5 +320,96 @@ describe('InstanceSelector — save as default', () => {
     expect(wrapper.text()).toContain('Save as default');
     expect(wrapper.text()).not.toContain('✓ Saved as default');
     vi.useRealTimers();
+  });
+});
+
+// ─── Unusable targets ─────────────────────────────────────────────────────────
+
+function initialSelectionOf(wrapper: ReturnType<typeof mountSelector>): string[] {
+  return (wrapper.emitted('update:modelValue') as string[][])[0][0] as unknown as string[];
+}
+
+describe('InstanceSelector — unusable targets', () => {
+  it('gives no checkbox to a link target that is not an http(s) URL', () => {
+    const wrapper = mountSelector({ initialTargets: ['dev', 'ftp://h/', '//evil.example'] });
+    expect(initialSelectionOf(wrapper)).toEqual([devInstance.url]);
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(0);
+  });
+
+  it('falls back to the session selection when no link target is usable', () => {
+    sessionPrefs.value = ['prod'];
+    const wrapper = mountSelector({ initialTargets: ['ftp://h/'] });
+    expect(initialSelectionOf(wrapper)).toEqual([prodInstance.url]);
+  });
+
+  it('drops saved preferences that are neither known keys nor http(s) URLs', () => {
+    localStorage.setItem('babel-explorer:instance-prefs', JSON.stringify(['ftp://h/', 'es_ci', 'ci']));
+    const wrapper = mountSelector();
+    expect(initialSelectionOf(wrapper)).toEqual([ciInstance.url]);
+  });
+
+  it('falls back to the first primary instance when nothing saved is usable', () => {
+    localStorage.setItem('babel-explorer:instance-prefs', JSON.stringify(['ftp://h/']));
+    const wrapper = mountSelector();
+    expect(initialSelectionOf(wrapper)).toEqual([devInstance.url]);
+  });
+
+  it.each(['ftp://h/', 'not a url', 'foo:bar'])('disables Add for %s', async (url) => {
+    const wrapper = mountSelector();
+    await wrapper.find('input[type="url"]').setValue(url);
+    expect(wrapper.find('input[type="url"] + button').attributes('disabled')).toBeDefined();
+  });
+});
+
+// ─── Several custom URLs ──────────────────────────────────────────────────────
+
+describe('InstanceSelector — several custom URLs', () => {
+  async function add(wrapper: ReturnType<typeof mountSelector>, url: string) {
+    await wrapper.find('input[type="url"]').setValue(url);
+    await wrapper.find('input[type="url"] + button').trigger('click');
+  }
+
+  function lastSelection(wrapper: ReturnType<typeof mountSelector>): string[] {
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    return emitted[emitted.length - 1][0] as unknown as string[];
+  }
+
+  it('keeps a checkbox for each, so none is queried invisibly', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await add(wrapper, 'https://a.example/');
+    await add(wrapper, 'https://b.example/');
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
+
+    await wrapper.find('#inst-custom-0').trigger('change'); // untick A
+    expect(lastSelection(wrapper)).toEqual([devInstance.url, 'https://b.example/']);
+  });
+
+  it('restores every custom URL in the link', () => {
+    const wrapper = mountSelector({ initialTargets: ['https://a.example/', 'https://b.example'] });
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
+    expect(initialSelectionOf(wrapper)).toEqual(['https://a.example/', 'https://b.example/']);
+  });
+
+  it('ticks a known instance typed as a URL instead of adding a custom row', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await add(wrapper, 'https://prod.example.com');
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(0);
+    expect(lastSelection(wrapper)).toContain(prodInstance.url);
+  });
+
+  it('adds the URL on Enter', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await wrapper.find('input[type="url"]').setValue('https://a.example/');
+    await wrapper.find('input[type="url"]').trigger('keydown', { key: 'Enter' });
+    expect(lastSelection(wrapper)).toContain('https://a.example/');
+  });
+
+  it('saves custom URLs as URLs and known instances as keys', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev', 'https://a.example/'] });
+    await wrapper.find('button.btn-link.text-muted').trigger('click');
+    expect(JSON.parse(localStorage.getItem('babel-explorer:instance-prefs')!)).toEqual([
+      'dev',
+      'https://a.example/',
+    ]);
   });
 });

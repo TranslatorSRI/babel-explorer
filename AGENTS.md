@@ -291,9 +291,10 @@ island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch
 
 ```bash
 cd web && npm install
-npm run dev     # http://localhost:4321/babel-explorer/
+npm run dev        # http://localhost:4321/babel-explorer/
 npm test
-npm run build   # web/dist/
+npm run typecheck  # vue-tsc; tests and build do not check types
+npm run build      # web/dist/
 ```
 
 ## Testing

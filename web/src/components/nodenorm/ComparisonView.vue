@@ -26,8 +26,15 @@ const allRows = computed(() =>
     curie,
     disagree: preferredIdsDisagree(curie, props.queriedInstances, props.resultsByInstance),
     cells: props.queriedInstances.map((inst) => {
-      const node = props.resultsByInstance.get(inst.url)?.[curie] ?? null;
-      return { inst, node, types: node ? getDirectTypes(node) : [] };
+      const resp = props.resultsByInstance.get(inst.url);
+      const node = resp?.[curie] ?? null;
+      return {
+        inst,
+        node,
+        // No response at all means the request failed, not that the CURIE is unknown.
+        failed: resp === undefined,
+        types: node ? getDirectTypes(node) : [],
+      };
     }),
   })),
 );
@@ -39,6 +46,15 @@ const rows = computed(() =>
         row.cells.some((cell) => cell.types.some((t) => props.typeFilter.has(t))),
       ),
 );
+
+/**
+ * Link to one instance's raw API response for one CURIE. Built only when a detail row
+ * renders, not for every cell, since a large query has thousands of cells and almost
+ * none are ever expanded. A malformed URL must not throw while rendering.
+ */
+function rawUrl(inst: NodeNormInstance, curie: string): string | null {
+  return URL.canParse(inst.url) ? buildNodeNormUrl(inst.url, [curie], props.apiOptions) : null;
+}
 
 function toggleRow(curie: string) {
   const set = expandedCuries.value;
@@ -73,13 +89,20 @@ function toggleRow(curie: string) {
           @click="toggleRow(row.curie)"
         >
           <td class="text-center">
-            <span
+            <!-- The row is clickable too; this button is the keyboard and screen-reader way in. -->
+            <button
+              type="button"
+              class="btn btn-link btn-sm p-0 text-reset text-decoration-none"
+              :aria-expanded="expandedCuries.has(row.curie)"
+              :aria-label="`Details for ${row.curie}`"
+              @click.stop="toggleRow(row.curie)"
+            ><span
               :style="{
                 display: 'inline-block',
                 transform: expandedCuries.has(row.curie) ? 'rotate(90deg)' : '',
                 transition: 'transform 0.15s',
               }"
-            >›</span>
+            >›</span></button>
           </td>
           <td><strong>{{ row.curie }}</strong></td>
           <td v-for="cell in row.cells" :key="cell.inst.url">
@@ -99,6 +122,7 @@ function toggleRow(curie: string) {
               </template>
               <small class="text-muted">{{ cell.node.equivalent_identifiers.length }} equivalent IDs</small>
             </template>
+            <span v-else-if="cell.failed" class="text-danger">Request failed</span>
             <span v-else class="text-muted">Not found</span>
           </td>
         </tr>
@@ -117,7 +141,8 @@ function toggleRow(curie: string) {
                 <div class="fw-semibold text-muted small mb-2 d-flex align-items-center gap-1">
                   {{ cell.inst.name }}
                   <a
-                    :href="buildNodeNormUrl(cell.inst.url, [row.curie], apiOptions)"
+                    v-if="rawUrl(cell.inst, row.curie)"
+                    :href="rawUrl(cell.inst, row.curie)!"
                     target="_blank"
                     rel="noopener"
                     class="text-muted"
@@ -125,7 +150,8 @@ function toggleRow(curie: string) {
                     @click.stop
                   >↗</a>
                 </div>
-                <CurieDetailPanel :node="cell.node" :visible-columns="visibleColumns" />
+                <p v-if="cell.failed" class="text-danger">The request to this instance failed.</p>
+                <CurieDetailPanel v-else :node="cell.node" :visible-columns="visibleColumns" />
               </div>
             </div>
           </td>
