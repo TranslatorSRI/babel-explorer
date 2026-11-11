@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { sessionPrefs, savePrefs, initialSelection, PRIMARY_ENVS } from '../../lib/instance-prefs';
+import { rememberSelection, savePrefs, initialSelection, PRIMARY_ENVS } from '../../lib/instance-prefs';
 import { findInstance, normalizeInstanceUrl, resolveTarget, urlToTarget, type Instance } from '../../lib/instances';
 
 /**
@@ -17,13 +17,18 @@ const ENV_LABELS: Record<string, string> = {
 };
 
 const props = defineProps<{
+  /**
+   * The service these instances belong to ('nodenorm', 'nameres'). Remembered custom
+   * URLs are kept per service, so one tool's custom server never becomes another's.
+   */
+  service: string;
   /** Full list of known instances (dev, exp, ci, test, prod). */
   instances: Instance[];
   /** Currently selected URLs — parent binds this via v-model. */
   modelValue: string[];
   /**
    * Env keys or raw URLs from URL state (e.g. ['dev', 'prod']).
-   * Takes priority over session/localStorage. Only used on mount.
+   * Takes priority over the session's and the saved selection. Only used on mount.
    */
   initialTargets?: string[];
 }>();
@@ -36,7 +41,7 @@ const emit = defineEmits<{
 
 // Resolved through lib/instances, so a target that is not an http(s) URL never gets a
 // checkbox, whether it came from a share link or from saved preferences.
-const initUrls = initialSelection(props.instances, props.initialTargets);
+const initUrls = initialSelection(props.service, props.instances, props.initialTargets);
 
 const selectedUrls = ref<Set<string>>(new Set(initUrls));
 // Every selected URL that isn't a known instance gets its own row and checkbox, so
@@ -65,14 +70,14 @@ function selectionTargets(): string[] {
 // ─── Reactivity ──────────────────────────────────────────────────────────────
 
 /**
- * On every selection change: update sessionPrefs (so both NodeNorm and NameRes
- * stay in sync within the session) and emit to the parent v-model.
+ * On every selection change: remember it for this tab's session (so the next tool
+ * opened in the tab starts with the same environments) and emit to the parent v-model.
  * immediate: true also emits the initial value on mount.
  */
 watch(
   selectedUrls,
   (urls) => {
-    sessionPrefs.value = selectionTargets();
+    rememberSelection(props.service, selectionTargets());
     emit('update:modelValue', [...urls]);
   },
   { immediate: true },
@@ -133,7 +138,7 @@ function removeCustomUrl(url: string) {
 }
 
 function saveDefault() {
-  savePrefs(selectionTargets());
+  savePrefs(props.service, selectionTargets());
   savedFlash.value = true;
   setTimeout(() => {
     savedFlash.value = false;

@@ -67,7 +67,7 @@ onMounted(async () => {
     // instance; the warning explains why nothing ran.
     if (urlState.targets.length > 0 && resolved.length === 0) return;
     // No targets in the link: the same instances the form starts with ticked.
-    const instanceUrls = resolved.length > 0 ? resolved : initialSelection(instances);
+    const instanceUrls = resolved.length > 0 ? resolved : initialSelection('nameres', instances);
     const opts = { ...DEFAULT_NAMERES_OPTIONS, ...urlState.options };
     const thresh = urlState.threshold ?? opts.limit;
     await handleSubmit({

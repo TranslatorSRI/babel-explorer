@@ -70,6 +70,7 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
       <div class="col-md-6">
         <label class="form-label">NodeNorm Instances</label>
         <InstanceSelector
+          service="nodenorm"
           v-model="selectedUrls"
           :instances="instances"
           :initial-targets="initialTargets"

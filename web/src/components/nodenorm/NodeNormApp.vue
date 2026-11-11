@@ -86,7 +86,7 @@ async function applyUrlState() {
   await handleSubmit({
     curies: curies.join('\n'),
     // No targets in the link: the same instances the form starts with ticked.
-    instanceUrls: instanceUrls.length > 0 ? instanceUrls : initialSelection(instances),
+    instanceUrls: instanceUrls.length > 0 ? instanceUrls : initialSelection('nodenorm', instances),
     options: { ...DEFAULT_API_OPTIONS, ...options },
   });
 }

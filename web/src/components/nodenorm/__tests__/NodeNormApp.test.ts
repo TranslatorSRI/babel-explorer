@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
 import NodeNormApp from '../NodeNormApp.vue';
 import endpoints from '../../../../../config/translator-endpoints.json';
-import { sessionPrefs } from '../../../lib/instance-prefs';
+import { rememberSelection } from '../../../lib/instance-prefs';
 
 /** A NodeNorm response naming each requested CURIE as its own preferred ID. */
 function respond(url: string) {
@@ -24,7 +24,6 @@ function mountApp() {
 enableAutoUnmount(afterEach);
 
 afterEach(() => {
-  sessionPrefs.value = null;
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
   setFragment('');
@@ -47,7 +46,7 @@ describe('NodeNormApp — share links', () => {
   it('queries the instances the form shows ticked when the link names none', async () => {
     const fetchMock = vi.fn(async (url: string) => respond(url));
     vi.stubGlobal('fetch', fetchMock);
-    sessionPrefs.value = ['prod'];
+    rememberSelection('nodenorm', ['prod']);
     setFragment('#curie=MONDO%3A0004979');
 
     const wrapper = mountApp();

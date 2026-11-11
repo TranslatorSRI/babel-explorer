@@ -84,6 +84,7 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
       <div class="col-md-6">
         <label class="form-label">NameRes Instances</label>
         <InstanceSelector
+          service="nameres"
           :instances="instances"
           v-model="selectedUrls"
           :initial-targets="initialTargets"

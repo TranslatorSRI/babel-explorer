@@ -1,7 +1,6 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import NameResForm from '../NameResForm.vue';
-import { sessionPrefs } from '../../../lib/instance-prefs';
 import type { NameResInstance } from '../../../lib/nameres-types';
 
 const instances: NameResInstance[] = [
@@ -19,10 +18,6 @@ function advancedDetails(wrapper: ReturnType<typeof mountForm>) {
   return wrapper.findAll('details').find((d) => d.find('summary').text() === 'Advanced options')!
     .element as HTMLDetailsElement;
 }
-
-beforeEach(() => {
-  sessionPrefs.value = null;
-});
 
 afterEach(() => vi.unstubAllGlobals());
 

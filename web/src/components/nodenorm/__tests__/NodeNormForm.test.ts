@@ -1,18 +1,11 @@
-import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import NodeNormForm from '../NodeNormForm.vue';
 import type { NodeNormInstance, NodeNormQuery } from '../../../lib/types';
-import { sessionPrefs } from '../../../lib/instance-prefs';
 
 const instances: NodeNormInstance[] = [
   { name: 'Dev', env: 'dev', url: 'https://dev.example.com/' },
 ];
-
-// InstanceSelector shares this session's selection across every mount; without a reset
-// one test's ticks become the next test's starting selection.
-beforeEach(() => {
-  sessionPrefs.value = null;
-});
 
 function mountForm(initialTargets?: string[]) {
   return mount(NodeNormForm, {

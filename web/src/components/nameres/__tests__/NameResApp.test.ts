@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
 import NameResApp from '../NameResApp.vue';
-import { sessionPrefs } from '../../../lib/instance-prefs';
 import endpoints from '../../../../../config/translator-endpoints.json';
 
 function setSearch(search: string) {
@@ -11,7 +10,6 @@ function setSearch(search: string) {
 enableAutoUnmount(afterEach);
 
 afterEach(() => {
-  sessionPrefs.value = null;
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
   setSearch('');

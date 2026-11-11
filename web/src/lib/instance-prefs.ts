@@ -1,47 +1,102 @@
-import { ref } from 'vue';
-import { resolveTargets, type Instance } from './instances';
+import { normalizeInstanceUrl, resolveTargets, type Instance } from './instances';
 
+/**
+ * Where the selection is remembered: localStorage for "Save as default", sessionStorage
+ * for the selection this tab last used. The site is a multi-page Astro site, so moving
+ * from one tool to another is a full page load; anything held only in memory would be
+ * gone by the time the next tool reads it.
+ */
 const STORAGE_KEY = 'babel-explorer:instance-prefs';
 
 /** Environments the instance selector shows without expanding "Extended environments". */
 export const PRIMARY_ENVS = new Set(['dev', 'ci', 'prod']);
 
 /**
- * Shared in-memory selection state for the current browser session.
- * Stored as env keys (e.g. ['dev', 'ci']) or raw custom URLs.
- * Cleared on page reload. Updated automatically whenever the user changes
- * instance selection in any tool.
+ * A remembered selection. Env keys ('dev', 'ci', …) name the same environment in every
+ * service, so they are shared: ticking CI and Prod in NodeNorm carries over to NameRes.
+ * A custom URL is one service's server, so each service keeps its own: a local NodeNorm
+ * saved as the default must never become a NameRes target.
  */
-export const sessionPrefs = ref<string[] | null>(null);
+interface StoredSelection {
+  envs: string[];
+  custom: Record<string, string[]>;
+}
 
-/**
- * Save the current instance selection to localStorage and update sessionPrefs.
- * Each item is either an env key ('dev', 'ci', 'prod', …) or a custom URL.
- * Storage can be unavailable (a private window, blocked site data); the session
- * still keeps the choice.
- */
-export function savePrefs(selection: string[]): void {
-  sessionPrefs.value = [...selection];
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(selection));
-  } catch {
-    // Not saved across reloads; nothing else to do.
-  }
+function isUrl(target: string): boolean {
+  return normalizeInstanceUrl(target) !== null;
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
 }
 
 /**
- * Load the saved instance selection from localStorage.
- * Returns null if nothing has been saved or the stored value is invalid.
+ * Read a stored selection, or null if there is none or it is unreadable. Storage can be
+ * unavailable (a private window, blocked site data), which reads as nothing stored.
+ *
+ * A bare array is the format earlier builds of this branch wrote, without the service
+ * that chose each URL; only its env keys are trusted.
  */
-export function loadPrefs(): string[] | null {
+function read(storage: () => Storage): StoredSelection | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage().getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((p): p is string => typeof p === 'string') : null;
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return { envs: strings(parsed).filter((t) => !isUrl(t)), custom: {} };
+    }
+    if (typeof parsed !== 'object' || parsed === null) return null;
+    const { envs, custom } = parsed as Record<string, unknown>;
+    const customByService: Record<string, string[]> = {};
+    if (typeof custom === 'object' && custom !== null) {
+      for (const [service, urls] of Object.entries(custom)) customByService[service] = strings(urls);
+    }
+    return { envs: strings(envs), custom: customByService };
   } catch {
     return null;
   }
+}
+
+/** Record one service's selection, keeping the other services' custom URLs. */
+function write(storage: () => Storage, service: string, targets: string[]): void {
+  try {
+    const stored = read(storage) ?? { envs: [], custom: {} };
+    stored.envs = targets.filter((t) => !isUrl(t));
+    stored.custom[service] = targets.filter(isUrl);
+    storage().setItem(STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // Not remembered; nothing else to do.
+  }
+}
+
+/** The targets a stored selection gives one service: the shared envs and its own URLs. */
+function targetsFor(stored: StoredSelection | null, service: string): string[] {
+  return stored ? [...stored.envs, ...(stored.custom[service] ?? [])] : [];
+}
+
+/**
+ * Remember a service's current selection for the rest of this tab's session, so the
+ * next tool opened in the tab starts with the same environments. Each item is an env
+ * key or a custom URL.
+ */
+export function rememberSelection(service: string, targets: string[]): void {
+  write(() => sessionStorage, service, targets);
+}
+
+/** Save a service's selection as the default for new sessions, and for this one. */
+export function savePrefs(service: string, targets: string[]): void {
+  rememberSelection(service, targets);
+  write(() => localStorage, service, targets);
+}
+
+/** This session's selection for a service, or an empty list. */
+export function loadSessionPrefs(service: string): string[] {
+  return targetsFor(read(() => sessionStorage), service);
+}
+
+/** The saved default selection for a service, or an empty list. */
+export function loadPrefs(service: string): string[] {
+  return targetsFor(read(() => localStorage), service);
 }
 
 /**
@@ -51,14 +106,19 @@ export function loadPrefs(): string[] | null {
  *
  * Every source goes through resolveTargets, so a target that is neither a known
  * instance nor an http(s) URL is dropped wherever it came from: a share link, or a
- * value another tool, or an older version of this one, left in storage. Keys a service
- * lacks are dropped too, which is what lets one saved default serve every tool.
+ * value an older version of this site left in storage. Env keys a service lacks are
+ * dropped too, and custom URLs never cross from one service to another (see
+ * StoredSelection), which is what lets one saved default serve every tool.
  *
  * The app and its form both call this, so the instances a link-driven query runs
  * against are the ones the form shows as ticked.
  */
-export function initialSelection(instances: Instance[], targets: string[] = []): string[] {
-  for (const source of [targets, sessionPrefs.value ?? [], loadPrefs() ?? []]) {
+export function initialSelection(
+  service: string,
+  instances: Instance[],
+  targets: string[] = [],
+): string[] {
+  for (const source of [targets, loadSessionPrefs(service), loadPrefs(service)]) {
     const urls = resolveTargets(instances, source);
     if (urls.length > 0) return urls;
   }
