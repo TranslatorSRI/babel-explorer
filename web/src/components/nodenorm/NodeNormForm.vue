@@ -101,7 +101,9 @@ async function onShare() {
 </script>
 
 <template>
-  <form @submit.prevent="onSubmit">
+  <!-- novalidate: the browser's own check on the custom-URL box below would otherwise
+       block Normalize whenever that box holds a half-typed URL. addCustomUrl validates it. -->
+  <form novalidate @submit.prevent="onSubmit">
     <div class="mb-3">
       <label for="curies" class="form-label">CURIEs (one per line)</label>
       <textarea
@@ -157,6 +159,7 @@ async function onShare() {
             class="form-control form-control-sm"
             placeholder="Add custom URL…"
             style="max-width: 280px"
+            @keydown.enter.prevent="addCustomUrl()"
           />
           <button
             type="button"

@@ -52,6 +52,21 @@ describe('NodeNormForm — custom URLs', () => {
     expect(await submittedUrls(wrapper)).toEqual(['https://dev.example.com/']);
   });
 
+  it('adds the custom URL on Enter instead of submitting the query', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('input[type="url"]').setValue('https://a.example/');
+    await wrapper.find('input[type="url"]').trigger('keydown', { key: 'Enter' });
+    expect(wrapper.emitted('submit')).toBeUndefined();
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(1);
+  });
+
+  it('leaves the browser no reason to block Normalize over a half-typed custom URL', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('input[type="url"]').setValue('nodenorm.example');
+    expect(wrapper.find('form').attributes('novalidate')).toBeDefined();
+    expect(await submittedUrls(wrapper)).toEqual(['https://dev.example.com/']);
+  });
+
   it.each(['not a url', 'foo:bar'])('disables Add for %s, which is not an http(s) URL', async (url) => {
     const wrapper = mountForm();
     await wrapper.find('input[type="url"]').setValue(url);
