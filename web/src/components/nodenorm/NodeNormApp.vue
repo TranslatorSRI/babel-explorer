@@ -57,6 +57,7 @@ function cancelQuery() {
 function clearQuery() {
   cancelQuery();
   resultsByInstance.value = new Map();
+  resultsUrl = null;
   error.value = null;
   notice.value = null;
 }
@@ -92,6 +93,17 @@ async function applyUrlState() {
 // wrote itself is not run again. Browsers fire no hashchange for replaceState, but
 // happy-dom (the test DOM) does.
 let shownHash = window.location.hash;
+
+// The URL of the results on screen, put back when a query is stopped. A query started
+// by a pasted link or Back has already changed the address bar, so without this Share
+// would copy the stopped query's link beside the previous query's results.
+let resultsUrl: string | null = null;
+
+/** Show url in the address bar without a navigation, or a hashchange that re-runs it. */
+function showUrl(url: string) {
+  shownHash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
+  window.history.replaceState(null, '', url);
+}
 
 // The browser does not reload for a fragment-only navigation, so a share link pasted
 // into a tab already on this page, or Back, arrives only as a hashchange.
@@ -190,6 +202,7 @@ async function handleSubmit(payload: NodeNormQuery) {
     // Stopped: leave the previous query's results, and the URL that describes them,
     // in place rather than a blank page or a comparison missing some instances.
     if (signal.aborted) {
+      if (resultsUrl !== null) showUrl(resultsUrl);
       notice.value = hasResults.value
         ? 'Query stopped. Showing the results of the previous query.'
         : 'Query stopped.';
@@ -219,11 +232,11 @@ async function handleSubmit(payload: NodeNormQuery) {
       error.value = `Some instances failed: ${errors.join('; ')}`;
     }
 
-    // Update URL to reflect the submitted query. replaceState fires no hashchange.
+    // Update URL to reflect the submitted query.
     const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
     const queryUrl = buildQueryUrl(curies, targets, payload.options);
-    shownHash = queryUrl.includes('#') ? queryUrl.slice(queryUrl.indexOf('#')) : '';
-    window.history.replaceState(null, '', queryUrl);
+    resultsUrl = queryUrl;
+    showUrl(queryUrl);
   } finally {
     if (abortController === controller) {
       abortController = null;

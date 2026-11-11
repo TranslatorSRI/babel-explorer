@@ -166,3 +166,24 @@ describe('NodeNormApp — a new link while a query is running', () => {
     expect(wrapper.text()).not.toContain('Normalizing');
   });
 });
+
+describe('NodeNormApp — stop after a new link', () => {
+  it('puts back the URL of the results it keeps', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => respond(url)));
+    setFragment('#curie=MONDO%3A0004979&target=prod');
+    const wrapper = mountApp();
+    await flushPromises();
+    const shownUrl = window.location.hash;
+
+    const { fetchMock } = heldFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    await navigateTo('#curie=CHEBI%3A48947&target=prod');
+    const stop = wrapper.findAll('button').find((b) => b.text() === 'Stop')!;
+    await stop.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Query stopped');
+    expect(wrapper.find('table').text()).toContain('MONDO:0004979');
+    expect(window.location.hash).toBe(shownUrl);
+  });
+});
