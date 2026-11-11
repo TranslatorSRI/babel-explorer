@@ -115,9 +115,9 @@ describe('readQueryState', () => {
     expect('include_taxa' in state.options).toBe(false);
   });
 
-  it('parses all option keys when present', async () => {
+  it('parses every option the form can change', async () => {
     setLocation(
-      '?conflate=false&drug_chemical_conflate=false&description=false&individual_types=false&include_taxa=false',
+      '?conflate=false&drug_chemical_conflate=false&description=false&include_taxa=false',
     );
     const { readQueryState } = await import('../url-state');
     const state = readQueryState();
@@ -125,9 +125,14 @@ describe('readQueryState', () => {
       conflate: false,
       drug_chemical_conflate: false,
       description: false,
-      individual_types: false,
       include_taxa: false,
     });
+  });
+
+  it('ignores individual_types, which the form cannot turn back on', async () => {
+    setLocation('?individual_types=false');
+    const { readQueryState } = await import('../url-state');
+    expect('individual_types' in readQueryState().options).toBe(false);
   });
 });
 
