@@ -68,3 +68,32 @@ describe('NameResForm — share', () => {
     expect(shareButton(wrapper).text()).toBe('Copy failed');
   });
 });
+
+describe('NameResForm — Limit and "Fail if in top"', () => {
+  it.each(['#opt-limit', '#opt-threshold'])('blocks the lookup while %s is empty', async (id) => {
+    const wrapper = mountForm();
+    await wrapper.find(id).setValue('');
+    expect(wrapper.find(id).classes()).toContain('is-invalid');
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined();
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.emitted('submit')).toBeUndefined();
+  });
+
+  it.each(['0', '101', '2.5'])('blocks the lookup for a limit of %s', async (value) => {
+    const wrapper = mountForm();
+    await wrapper.find('#opt-limit').setValue(value);
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.emitted('submit')).toBeUndefined();
+  });
+
+  it('submits valid numbers', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('#opt-limit').setValue('10');
+    await wrapper.find('#opt-threshold').setValue('3');
+    expect(wrapper.find('#opt-limit').classes()).not.toContain('is-invalid');
+    await wrapper.find('form').trigger('submit');
+    const [payload] = wrapper.emitted<[{ options: { limit: number }; threshold: number }]>('submit')!.at(-1)!;
+    expect(payload.options.limit).toBe(10);
+    expect(payload.threshold).toBe(3);
+  });
+});

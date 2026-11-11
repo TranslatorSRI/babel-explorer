@@ -1,5 +1,18 @@
 import type { NameResResult, NameResApiOptions, ParsedSearchTerm, ExpectedCurieValidation } from './nameres-types';
 
+/** The largest Limit or "Fail if in top" value the form accepts. */
+export const MAX_RESULT_COUNT = 100;
+
+/**
+ * True for a usable Limit or "Fail if in top" value: a whole number from 1 to
+ * MAX_RESULT_COUNT. An emptied number input binds as '' through v-model.number, which
+ * would otherwise reach the API as `limit=` (a 422 on every lookup) or, as a threshold,
+ * make every partial match compare as a failure.
+ */
+export function isValidResultCount(value: unknown): value is number {
+  return Number.isInteger(value) && (value as number) >= 1 && (value as number) <= MAX_RESULT_COUNT;
+}
+
 /**
  * Parse textarea input into search terms with optional expected CURIEs.
  *

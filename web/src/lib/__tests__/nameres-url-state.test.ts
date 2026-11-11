@@ -80,6 +80,16 @@ describe('readNameResQueryState', () => {
   });
 });
 
+describe('readNameResQueryState — unusable numbers', () => {
+  it.each(['0', '-3', '101', '2.5', 'abc', ''])('ignores %j as a limit or threshold', async (value) => {
+    setLocation('', '/nameres', `#term=asthma&limit=${value}&threshold=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    const state = readNameResQueryState();
+    expect(state.options.limit).toBeUndefined();
+    expect(state.threshold).toBeUndefined();
+  });
+});
+
 describe('readNameResQueryState — fragment', () => {
   it('reads the state from the fragment', async () => {
     setLocation('', '/nameres', '#term=asthma&target=prod');

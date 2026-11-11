@@ -1,5 +1,6 @@
 import type { NameResApiOptions } from './nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from './nameres-types';
+import { isValidResultCount } from './nameres-api';
 
 /** Parsed state from the URL fragment (or, for older links, the query string) for NameRes. */
 export interface NameResQueryState {
@@ -36,10 +37,12 @@ export function readNameResQueryState(): NameResQueryState {
 
   const options: Partial<NameResApiOptions> = {};
 
+  // A limit or threshold the form would refuse (0, negative, over the maximum) is
+  // ignored, falling back to the default, rather than sent to NameRes.
   const limitVal = params.get('limit');
   if (limitVal !== null) {
-    const parsed = parseInt(limitVal, 10);
-    if (!isNaN(parsed)) options.limit = parsed;
+    const parsed = Number(limitVal);
+    if (isValidResultCount(parsed)) options.limit = parsed;
   }
 
   const autoVal = params.get('autocomplete');
@@ -57,8 +60,8 @@ export function readNameResQueryState(): NameResQueryState {
   let threshold: number | undefined;
   const threshVal = params.get('threshold');
   if (threshVal !== null) {
-    const parsed = parseInt(threshVal, 10);
-    if (!isNaN(parsed)) threshold = parsed;
+    const parsed = Number(threshVal);
+    if (isValidResultCount(parsed)) threshold = parsed;
   }
 
   return { terms, targets, options, threshold };

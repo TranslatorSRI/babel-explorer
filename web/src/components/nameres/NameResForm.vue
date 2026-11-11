@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
+import { isValidResultCount, MAX_RESULT_COUNT } from '../../lib/nameres-api';
 import InstanceSelector from '../shared/InstanceSelector.vue';
 import { useShareLink } from '../../lib/use-share-link';
 
@@ -42,9 +43,14 @@ const selectedUrls = ref<string[]>([]);
 // Share button: copies the page URL, then says "✓ Copied!" or "Copy failed" for a moment
 const { shareStatus, share } = useShareLink();
 
+// An emptied or out-of-range box is marked invalid and blocks the lookup.
+const limitValid = computed(() => isValidResultCount(options.value.limit));
+const thresholdValid = computed(() => isValidResultCount(threshold.value));
+
 function onSubmit() {
   if (!terms.value.trim()) return;
   if (selectedUrls.value.length === 0) return;
+  if (!limitValid.value || !thresholdValid.value) return;
   emit('submit', {
     rawTerms: terms.value,
     instanceUrls: [...selectedUrls.value],
@@ -101,10 +107,12 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
           v-model.number="options.limit"
           type="number"
           class="form-control form-control-sm"
+          :class="{ 'is-invalid': !limitValid }"
           min="1"
-          max="100"
+          :max="MAX_RESULT_COUNT"
           style="width: 80px"
         />
+        <div class="invalid-feedback">1–{{ MAX_RESULT_COUNT }}</div>
       </div>
       <div class="form-check">
         <input id="opt-autocomplete" v-model="options.autocomplete" type="checkbox" class="form-check-input" />
@@ -117,10 +125,12 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
           v-model.number="threshold"
           type="number"
           class="form-control form-control-sm"
+          :class="{ 'is-invalid': !thresholdValid }"
           min="1"
-          max="100"
+          :max="MAX_RESULT_COUNT"
           style="width: 80px"
         />
+        <div class="invalid-feedback">1–{{ MAX_RESULT_COUNT }}</div>
       </div>
     </div>
 
@@ -177,7 +187,7 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
 
     <!-- Action buttons -->
     <div class="d-flex align-items-center gap-2 flex-wrap">
-      <button type="submit" class="btn btn-primary" :disabled="loading">
+      <button type="submit" class="btn btn-primary" :disabled="loading || !limitValid || !thresholdValid">
         <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status"></span>
         {{ loading ? 'Looking up…' : 'Lookup' }}
       </button>
