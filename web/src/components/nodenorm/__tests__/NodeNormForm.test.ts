@@ -74,6 +74,24 @@ describe('NodeNormForm — custom URLs', () => {
   });
 });
 
+describe('NodeNormForm — advanced options', () => {
+  it('opens when the page URL changes an advanced option', () => {
+    const wrapper = mount(NodeNormForm, {
+      props: { instances, loading: false, hasResults: false, initialOptions: { description: false } },
+    });
+    expect((wrapper.find('details').element as HTMLDetailsElement).open).toBe(true);
+  });
+
+  it('stays open when the user restores the defaults', async () => {
+    const wrapper = mountForm();
+    const details = wrapper.find('details').element as HTMLDetailsElement;
+    details.open = true;
+    await wrapper.find('#opt-desc').setValue(false);
+    await wrapper.find('#opt-desc').setValue(true);
+    expect(details.open).toBe(true);
+  });
+});
+
 describe('NodeNormForm — share', () => {
   afterEach(() => vi.unstubAllGlobals());
 
