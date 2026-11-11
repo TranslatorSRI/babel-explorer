@@ -7,7 +7,7 @@ import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-u
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
 import NameResResultsSummary from './NameResResultsSummary.vue';
-import { buildInstances, instanceForUrl, resolveTarget, resolveTargets, urlToTarget } from '../../lib/instances';
+import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
 import { initialSelection } from '../../lib/instance-prefs';
 import endpoints from '../../../../config/translator-endpoints.json';
 
@@ -21,22 +21,24 @@ const notice = ref<string | null>(null);
 const queriedTerms = ref<ParsedSearchTerm[]>([]);
 const threshold = ref(DEFAULT_NAMERES_OPTIONS.limit);
 
-// Read URL state synchronously so NameResForm receives correct initial values
-const urlState = typeof window !== 'undefined' ? readNameResQueryState() : null;
 /** Targets in the page URL that are neither known instances nor http(s) URLs. */
-const ignoredTargets = ref<string[]>(
-  urlState?.targets.filter((t) => resolveTarget(instances, t) === null) ?? [],
+const ignoredTargets = ref<string[]>([]);
+
+// Read URL state synchronously so NameResForm receives correct initial values on its
+// first render (before onMounted fires). A later fragment change (a pasted share link,
+// or Back) replaces it and remounts the form via formKey.
+const urlState = ref(readNameResQueryState());
+const formKey = ref(0);
+const initialTerms = computed(() =>
+  urlState.value.terms.length ? urlState.value.terms.join('\n') : undefined,
 );
-const initialTerms = ref<string | undefined>(
-  urlState?.terms.length ? urlState.terms.join('\n') : undefined,
+const initialTargets = computed(() =>
+  urlState.value.targets.length ? urlState.value.targets : undefined,
 );
-const initialTargets = ref<string[] | undefined>(
-  urlState?.targets.length ? urlState.targets : undefined,
+const initialOptions = computed(() =>
+  Object.keys(urlState.value.options).length ? urlState.value.options : undefined,
 );
-const initialOptions = ref<Partial<NameResApiOptions> | undefined>(
-  urlState?.options && Object.keys(urlState.options).length ? urlState.options : undefined,
-);
-const initialThreshold = ref<number | undefined>(urlState?.threshold);
+const initialThreshold = computed(() => urlState.value.threshold);
 
 // Results: instanceUrl → searchText → results array. A lookup that failed has no entry,
 // so the views can tell it from one that answered with nothing.
@@ -60,26 +62,79 @@ function cancelQuery() {
   loading.value = false;
 }
 
-onMounted(async () => {
-  if (urlState?.terms.length) {
-    const resolved = resolveTargets(instances, urlState.targets);
-    // A link naming only unusable targets would otherwise silently query another
-    // instance; the warning explains why nothing ran.
-    if (urlState.targets.length > 0 && resolved.length === 0) return;
-    // No targets in the link: the same instances the form starts with ticked.
-    const instanceUrls = resolved.length > 0 ? resolved : initialSelection('nameres', instances);
-    const opts = { ...DEFAULT_NAMERES_OPTIONS, ...urlState.options };
-    const thresh = urlState.threshold ?? opts.limit;
-    await handleSubmit({
-      rawTerms: urlState.terms.join('\n'),
-      instanceUrls,
-      options: opts,
-      threshold: thresh,
-    });
+/** Cancel any query and show an empty page, for a link that describes no runnable query. */
+function clearQuery() {
+  cancelQuery();
+  resultsByInstance.value = new Map();
+  resultsUrl = null;
+  error.value = null;
+  notice.value = null;
+}
+
+/** Run (or clear) the query that the page URL describes. */
+async function applyUrlState() {
+  const { terms, targets, options, threshold: linkThreshold } = urlState.value;
+  const resolved = targets.map((t) => resolveTarget(instances, t));
+  ignoredTargets.value = targets.filter((_, i) => resolved[i] === null);
+  const instanceUrls = [...new Set(resolved.filter((u): u is string => u !== null))];
+
+  if (terms.length === 0) {
+    clearQuery();
+    return;
   }
+  // A link naming only unusable targets would otherwise silently query another
+  // instance; the warning explains why nothing ran. Clearing matters: a query still
+  // running would otherwise land under that warning and overwrite the pasted link.
+  if (targets.length > 0 && instanceUrls.length === 0) {
+    clearQuery();
+    return;
+  }
+
+  const opts = { ...DEFAULT_NAMERES_OPTIONS, ...options };
+  await handleSubmit({
+    rawTerms: terms.join('\n'),
+    // No targets in the link: the same instances the form starts with ticked.
+    instanceUrls: instanceUrls.length > 0 ? instanceUrls : initialSelection('nameres', instances),
+    options: opts,
+    threshold: linkThreshold ?? opts.limit,
+  });
+}
+
+// The fragment the page currently reflects, so a hashchange to the URL this page
+// wrote itself is not run again. Browsers fire no hashchange for replaceState, but
+// happy-dom (the test DOM) does.
+let shownHash = window.location.hash;
+
+// The URL of the results on screen, put back when a query is stopped. A query started
+// by a pasted link or Back has already changed the address bar, so without this Share
+// would copy the stopped query's link beside the previous query's results.
+let resultsUrl: string | null = null;
+
+/** Show url in the address bar without a navigation, or a hashchange that re-runs it. */
+function showUrl(url: string) {
+  shownHash = url.includes('#') ? url.slice(url.indexOf('#')) : '';
+  window.history.replaceState(null, '', url);
+}
+
+// The browser does not reload for a fragment-only navigation, so a share link pasted
+// into a tab already on this page, or Back, arrives only as a hashchange.
+function onHashChange() {
+  if (window.location.hash === shownHash) return;
+  shownHash = window.location.hash;
+  urlState.value = readNameResQueryState();
+  formKey.value++;
+  void applyUrlState();
+}
+
+onMounted(() => {
+  window.addEventListener('hashchange', onHashChange);
+  void applyUrlState();
 });
 
-onBeforeUnmount(cancelQuery);
+onBeforeUnmount(() => {
+  window.removeEventListener('hashchange', onHashChange);
+  cancelQuery();
+});
 
 function stopQuery() {
   abortController?.abort();
@@ -170,6 +225,7 @@ async function handleSubmit(payload: {
     // Stopped: leave the previous query's results, and the URL that describes them,
     // in place rather than a table of half-finished lookups.
     if (signal.aborted) {
+      if (resultsUrl !== null) showUrl(resultsUrl);
       notice.value = hasResults.value
         ? 'Query stopped. Showing the results of the previous query.'
         : 'Query stopped.';
@@ -206,11 +262,9 @@ async function handleSubmit(payload: {
     // Update URL to reflect the submitted query.
     const rawTerms = terms.map((t) => t.raw);
     const targets = payload.instanceUrls.map((url) => urlToTarget(instances, url));
-    window.history.replaceState(
-      null,
-      '',
-      buildNameResQueryUrl(rawTerms, targets, payload.options, payload.threshold),
-    );
+    const queryUrl = buildNameResQueryUrl(rawTerms, targets, payload.options, payload.threshold);
+    resultsUrl = queryUrl;
+    showUrl(queryUrl);
   } finally {
     if (abortController === controller) {
       abortController = null;
@@ -225,6 +279,7 @@ async function handleSubmit(payload: {
     <div class="card-header">Query</div>
     <div class="card-body">
       <NameResForm
+        :key="formKey"
         :instances="instances"
         :loading="loading"
         :has-results="hasResults"

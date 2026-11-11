@@ -3,8 +3,9 @@ import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
 import NameResApp from '../NameResApp.vue';
 import endpoints from '../../../../../config/translator-endpoints.json';
 
-function setSearch(search: string) {
-  window.history.replaceState(null, '', `/nameres${search}`);
+/** Point the page at /nameres plus a fragment (or, for an older link, a query string). */
+function setUrl(suffix: string) {
+  window.history.replaceState(null, '', `/nameres${suffix}`);
 }
 
 enableAutoUnmount(afterEach);
@@ -12,14 +13,14 @@ enableAutoUnmount(afterEach);
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.innerHTML = '';
-  setSearch('');
+  setUrl('');
 });
 
 describe('NameResApp — share links', () => {
   it('does not fetch a link target that is not an http(s) URL, and says so', async () => {
     const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: () => Promise.resolve([]) }));
     vi.stubGlobal('fetch', fetchMock);
-    setSearch('?term=asthma&target=ftp%3A%2F%2Fh%2F&target=%2F%2Fevil.example');
+    setUrl('#term=asthma&target=ftp%3A%2F%2Fh%2F&target=%2F%2Fevil.example');
 
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
@@ -32,13 +33,60 @@ describe('NameResApp — share links', () => {
   it('queries a known target from the link', async () => {
     const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: () => Promise.resolve([]) }));
     vi.stubGlobal('fetch', fetchMock);
-    setSearch('?term=asthma&target=prod');
+    setUrl('#term=asthma&target=prod');
 
     mount(NameResApp, { attachTo: document.body });
     await flushPromises();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(String(fetchMock.mock.calls[0][0])).toContain(endpoints.nameres.prod);
+  });
+});
+
+describe('NameResApp — the URL fragment', () => {
+  it('still loads a link that carries the query in the query string', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('?term=asthma&target=prod');
+
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('table').text()).toContain('X:asthma');
+    // Rewritten into the fragment, which never reaches the server.
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toContain('term=asthma');
+  });
+
+  it('runs the new query when only the fragment changes', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    setUrl('#term=diabetes&target=prod');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('table').text()).toContain('X:diabetes');
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('diabetes');
+  });
+
+  it('does not re-run a query for the fragment it wrote itself', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -80,10 +128,10 @@ async function submit(wrapper: ReturnType<typeof mount>, terms: string) {
 describe('NameResApp — stop and replaced queries', () => {
   it('keeps the previous results and URL when a query is stopped', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string) => respond(url)));
-    setSearch('?term=asthma&target=prod');
+    setUrl('#term=asthma&target=prod');
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
-    const shownUrl = window.location.search;
+    const shownUrl = window.location.href;
 
     vi.stubGlobal('fetch', heldFetch().fetchMock);
     await submit(wrapper, 'diabetes');
@@ -93,13 +141,13 @@ describe('NameResApp — stop and replaced queries', () => {
     expect(wrapper.text()).toContain('Query stopped');
     expect(wrapper.find('table').text()).toContain('X:asthma');
     expect(wrapper.find('table').text()).not.toContain('diabetes');
-    expect(window.location.search).toBe(shownUrl);
+    expect(window.location.href).toBe(shownUrl);
   });
 
   it('cancels the running query when a new one is submitted', async () => {
     const held = heldFetch();
     vi.stubGlobal('fetch', held.fetchMock);
-    setSearch('?term=asthma&target=prod');
+    setUrl('#term=asthma&target=prod');
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
 
@@ -110,14 +158,14 @@ describe('NameResApp — stop and replaced queries', () => {
 
     expect(wrapper.find('table').text()).toContain('X:diabetes');
     expect(wrapper.find('table').text()).not.toContain('asthma');
-    expect(window.location.search).toContain('diabetes');
+    expect(window.location.hash).toContain('diabetes');
     expect(wrapper.text()).not.toContain('Looking up');
   });
 
   it('cancels the running query when a submission has no valid terms', async () => {
     const held = heldFetch();
     vi.stubGlobal('fetch', held.fetchMock);
-    setSearch('?term=asthma&target=prod');
+    setUrl('#term=asthma&target=prod');
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
 
@@ -137,7 +185,7 @@ describe('NameResApp — failed lookups', () => {
         ? { ok: false, status: 500, statusText: 'Internal Server Error' }
         : respond(url),
     ));
-    setSearch('?term=asthma&target=dev&target=prod');
+    setUrl('#term=asthma&target=dev&target=prod');
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
 
@@ -156,7 +204,7 @@ describe('NameResApp — Download JSON', () => {
         ? { ok: false, status: 500, statusText: 'Internal Server Error' }
         : respond(url),
     ));
-    setSearch('?term=asthma&target=dev&target=prod');
+    setUrl('#term=asthma&target=dev&target=prod');
     const wrapper = mount(NameResApp, { attachTo: document.body });
     await flushPromises();
 

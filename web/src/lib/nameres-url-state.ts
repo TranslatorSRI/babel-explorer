@@ -1,7 +1,7 @@
 import type { NameResApiOptions } from './nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from './nameres-types';
 
-/** Parsed state from URL query parameters for NameRes. */
+/** Parsed state from the URL fragment (or, for older links, the query string) for NameRes. */
 export interface NameResQueryState {
   /** Raw search term lines (with [[CURIE]] annotations preserved). */
   terms: string[];
@@ -21,10 +21,15 @@ const STRING_OPTION_KEYS: (keyof NameResApiOptions)[] = [
 ];
 
 /**
- * Read the current URL's query params and return the encoded NameRes query state.
+ * Read the NameRes query state from the current URL.
+ *
+ * Share links keep it in the fragment (#term=…), which browsers never send to the
+ * server, so a long list of annotated terms cannot hit a server's URL length limit (the
+ * same reason NodeNorm's url-state.ts moved there). Links that put it in the query
+ * string are read when there is no fragment.
  */
 export function readNameResQueryState(): NameResQueryState {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
 
   const terms = params.getAll('term');
   const targets = params.getAll('target');
@@ -60,7 +65,8 @@ export function readNameResQueryState(): NameResQueryState {
 }
 
 /**
- * Build a shareable relative URL for the current NameRes query.
+ * Build a shareable relative URL for the current NameRes query, with the state in the
+ * fragment (see readNameResQueryState).
  *
  * Only includes options that differ from DEFAULT_NAMERES_OPTIONS.
  */
@@ -97,5 +103,5 @@ export function buildNameResQueryUrl(
   }
 
   const qs = params.toString();
-  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  return qs ? `${window.location.pathname}#${qs}` : window.location.pathname;
 }

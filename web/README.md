@@ -26,7 +26,8 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
 - **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold
 - **Multi-instance comparison**: Same unified instance selector as NodeNorm
-- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; shareable URL state and JSON export
+- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; JSON export
+- **Shareable URLs**: Query state in the URL fragment (`#term=`, `target=`, non-default options and threshold), like NodeNorm, so a long annotated term list never reaches a server URL limit; older `?term=` links still load; a pasted link or Back re-runs the query without a reload
 
 ## Development
 
@@ -107,11 +108,11 @@ src/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
     instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
-    url-state.ts                    # Encode/decode NodeNorm query state in URL params
+    url-state.ts                    # Encode/decode NodeNorm query state in the URL fragment
     types.ts                        # NodeNorm TypeScript interfaces
     nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
     nameres-types.ts                # NameRes interfaces and default options
-    nameres-url-state.ts            # Encode/decode NameRes query state
+    nameres-url-state.ts            # Encode/decode NameRes query state in the URL fragment
     instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
     use-share-link.ts               # The Share button: copy the page URL, report success or failure
 ```
