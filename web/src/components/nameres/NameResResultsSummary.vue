@@ -23,9 +23,19 @@ function answeredResults(term: ParsedSearchTerm): NameResResult[][] {
     .filter((results): results is NameResResult[] => results !== undefined);
 }
 
+/**
+ * One term per distinct search text, for the tiles about the lookups themselves. Two
+ * lines that search for the same text with different expected CURIEs are one lookup,
+ * and counting it twice would report "diabetes, diabetes" as two terms with no results.
+ */
+const lookupTerms = computed(() => {
+  const seen = new Set<string>();
+  return props.terms.filter((t) => !seen.has(t.text) && seen.add(t.text));
+});
+
 /** Terms with at least one result on every instance that answered. */
 const resolvedByAll = computed(() =>
-  props.terms.filter((t) => {
+  lookupTerms.value.filter((t) => {
     const answered = answeredResults(t);
     return answered.length > 0 && answered.every((results) => results.length > 0);
   }),
@@ -33,7 +43,7 @@ const resolvedByAll = computed(() =>
 
 /** Terms with no results on any instance that answered. */
 const noResultsAny = computed(() =>
-  props.terms.filter((t) => {
+  lookupTerms.value.filter((t) => {
     const answered = answeredResults(t);
     return answered.length > 0 && answered.every((results) => results.length === 0);
   }),
@@ -41,7 +51,7 @@ const noResultsAny = computed(() =>
 
 /** Terms whose lookup failed on at least one instance. */
 const failedTerms = computed(() =>
-  props.terms.filter((t) => answeredResults(t).length < props.queriedInstances.length),
+  lookupTerms.value.filter((t) => answeredResults(t).length < props.queriedInstances.length),
 );
 
 // ── Agreement tile ───────────────────────────────────────────────────────────
@@ -49,7 +59,7 @@ const failedTerms = computed(() =>
 /** Terms where instances disagree on #1 result (only when 2+ instances). */
 const disagreements = computed(() => {
   if (props.queriedInstances.length < 2) return [];
-  return props.terms.filter((t) => {
+  return lookupTerms.value.filter((t) => {
     const curies = new Set<string>();
     for (const results of answeredResults(t)) {
       curies.add(results.length > 0 ? results[0].curie : '(no results)');
@@ -109,7 +119,7 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div class="text-muted small mb-1">Resolved</div>
         <div class="fs-5 fw-semibold">
           {{ resolvedByAll.length }}
-          <span class="fs-6 fw-normal text-muted">/ {{ terms.length }}</span>
+          <span class="fs-6 fw-normal text-muted">/ {{ lookupTerms.length }}</span>
         </div>
         <div v-if="noResultsAny.length > 0" class="text-danger small mt-1">
           {{ noResultsAny.length }} no results

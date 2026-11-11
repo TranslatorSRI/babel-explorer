@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { NameResResult, NameResInstance, NameResApiOptions, ParsedSearchTerm } from '../../lib/nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from '../../lib/nameres-types';
-import { parseSearchTerms, fetchNameResLookup } from '../../lib/nameres-api';
+import { parseSearchTerms, fetchNameResLookup, uniqueSearchTexts } from '../../lib/nameres-api';
 import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-url-state';
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
@@ -145,12 +145,12 @@ function handleExport() {
   // an empty array, which would read as "found nothing".
   const data: Record<string, Record<string, NameResResult[]>> = {};
   const failed: { term: string; instance: string }[] = [];
-  for (const term of queriedTerms.value) {
-    data[term.text] = {};
+  for (const text of uniqueSearchTexts(queriedTerms.value)) {
+    data[text] = {};
     for (const inst of queriedInstances.value) {
-      const results = resultsByInstance.value.get(inst.url)?.get(term.text);
-      if (results === undefined) failed.push({ term: term.text, instance: inst.name });
-      else data[term.text][inst.name] = results;
+      const results = resultsByInstance.value.get(inst.url)?.get(text);
+      if (results === undefined) failed.push({ term: text, instance: inst.name });
+      else data[text][inst.name] = results;
     }
   }
   const payload = {
@@ -205,14 +205,15 @@ async function handleSubmit(payload: {
   notice.value = null;
 
   try {
-    // Build all (instance, term) fetch promises
+    // Build all (instance, search text) fetch promises. Two lines with the same text
+    // but different expected CURIEs share one lookup.
     const jobs: { instanceUrl: string; text: string; promise: Promise<NameResResult[]> }[] = [];
     for (const instanceUrl of payload.instanceUrls) {
-      for (const term of terms) {
+      for (const text of uniqueSearchTexts(terms)) {
         jobs.push({
           instanceUrl,
-          text: term.text,
-          promise: fetchNameResLookup(instanceUrl, term.text, payload.options, signal),
+          text,
+          promise: fetchNameResLookup(instanceUrl, text, payload.options, signal),
         });
       }
     }

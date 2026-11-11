@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseSearchTerms, fetchNameResLookup, validateExpectedCuries } from '../nameres-api';
+import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, validateExpectedCuries } from '../nameres-api';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions, NameResResult } from '../nameres-types';
 import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
@@ -38,6 +38,23 @@ describe('parseSearchTerms', () => {
   it('deduplicates by search text preserving first occurrence', () => {
     const terms = parseSearchTerms('asthma\ndiabetes\nasthma');
     expect(terms).toHaveLength(2);
+  });
+
+  it('keeps a repeated search text that expects different CURIEs', () => {
+    const terms = parseSearchTerms('diabetes [[MONDO:0005015]]\ndiabetes [[MONDO:0005148]]');
+    expect(terms.map((t) => t.expectedCuries)).toEqual([['MONDO:0005015'], ['MONDO:0005148']]);
+    expect(terms.map((t) => t.raw)).toEqual(['diabetes [[MONDO:0005015]]', 'diabetes [[MONDO:0005148]]']);
+  });
+
+  it('drops a repeat with the same text and the same expected CURIEs in any order', () => {
+    const terms = parseSearchTerms('x [[A:1]] [[B:2]]\nx  [[B:2]][[A:1]]');
+    expect(terms).toHaveLength(1);
+  });
+
+  it('keeps an annotated line after an unannotated one with the same text', () => {
+    const terms = parseSearchTerms('diabetes\ndiabetes [[MONDO:0005015]]');
+    expect(terms).toHaveLength(2);
+    expect(uniqueSearchTexts(terms)).toEqual(['diabetes']);
   });
 
   it('returns empty array for empty input', () => {

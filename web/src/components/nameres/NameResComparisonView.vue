@@ -14,13 +14,15 @@ const props = defineProps<{
   threshold: number;
 }>();
 
+// Rows are identified by term.raw: two lines can search for the same text with
+// different expected CURIEs, and each is its own row.
 const expandedTerms = ref(new Set<string>());
 
-function toggleRow(text: string) {
-  if (expandedTerms.value.has(text)) {
-    expandedTerms.value.delete(text);
+function toggleRow(raw: string) {
+  if (expandedTerms.value.has(raw)) {
+    expandedTerms.value.delete(raw);
   } else {
-    expandedTerms.value.add(text);
+    expandedTerms.value.add(raw);
   }
 }
 
@@ -106,18 +108,18 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
           </td>
         </tr>
       </tbody>
-      <tbody v-for="term in terms" :key="term.text">
+      <tbody v-for="term in terms" :key="term.raw">
         <!-- Summary row -->
         <tr
           :class="['align-middle', getRowClass(term)]"
           style="cursor: pointer"
-          @click="toggleRow(term.text)"
+          @click="toggleRow(term.raw)"
         >
           <td class="text-center">
             <span
               :style="{
                 display: 'inline-block',
-                transform: expandedTerms.has(term.text) ? 'rotate(90deg)' : '',
+                transform: expandedTerms.has(term.raw) ? 'rotate(90deg)' : '',
                 transition: 'transform 0.15s',
               }"
             >›</span>
@@ -176,7 +178,7 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
         </tr>
 
         <!-- Detail row -->
-        <tr v-if="expandedTerms.has(term.text)" class="bg-light">
+        <tr v-if="expandedTerms.has(term.raw)" class="bg-light">
           <td></td>
           <td :colspan="queriedInstances.length + 1" class="p-0">
             <div class="d-flex flex-wrap">

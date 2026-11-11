@@ -20,7 +20,10 @@ export type NameResInstance = Instance;
 export interface ParsedSearchTerm {
   /** The text to send to the API (with [[...]] annotations stripped). */
   text: string;
-  /** The original line as entered by the user (for display and URL state). */
+  /**
+   * The original line as entered by the user (for display and URL state). Unique among
+   * the terms parseSearchTerms returns, so it identifies a row; text need not be.
+   */
   raw: string;
   /** Expected CURIEs extracted from [[CURIE]] annotations. */
   expectedCuries: string[];

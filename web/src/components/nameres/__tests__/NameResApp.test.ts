@@ -235,3 +235,26 @@ describe('NameResApp — Download JSON', () => {
     expect(Object.keys(payload.results.asthma)).toEqual(['NameRes Dev']);
   });
 });
+
+describe('NameResApp — repeated search text', () => {
+  it('looks the text up once and checks each line against its own expected CURIE', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    // respond() answers X:<text>, so only the second line's expectation is met.
+    setUrl(`#${new URLSearchParams([
+      ['term', 'diabetes [[MONDO:0005015]]'],
+      ['term', 'diabetes [[X:diabetes]]'],
+      ['target', 'prod'],
+    ])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const rows = wrapper.findAll('table tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain('MONDO:0005015');
+    expect(rows[0].classes()).toContain('table-danger');
+    expect(rows[1].classes()).toContain('table-success');
+    expect(window.location.hash).toContain('MONDO%3A0005015');
+  });
+});

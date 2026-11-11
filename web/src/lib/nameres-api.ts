@@ -8,6 +8,11 @@ import type { NameResResult, NameResApiOptions, ParsedSearchTerm, ExpectedCurieV
  * the search text before sending to the API.
  *
  * Example: "asthma [[MONDO:0004979]]" → text="asthma", expectedCuries=["MONDO:0004979"]
+ *
+ * A line is dropped only when an earlier one has the same search text *and* the same
+ * expected CURIEs. Two lines that search for the same text but expect different CURIEs
+ * are separate checks, so both are kept; callers look the text up once (see
+ * uniqueSearchTexts) and validate each line against the same results.
  */
 export function parseSearchTerms(raw: string): ParsedSearchTerm[] {
   const seen = new Set<string>();
@@ -28,13 +33,19 @@ export function parseSearchTerms(raw: string): ParsedSearchTerm[] {
     const text = trimmed.replace(annotationRegex, '').trim();
     if (!text) continue;
 
-    // Deduplicate by search text
-    if (seen.has(text)) continue;
-    seen.add(text);
+    // Deduplicate by search text and the set of expected CURIEs
+    const key = JSON.stringify([text, [...new Set(expectedCuries)].sort()]);
+    if (seen.has(key)) continue;
+    seen.add(key);
 
     result.push({ text, raw: trimmed, expectedCuries });
   }
   return result;
+}
+
+/** The distinct search texts among some terms, in first-appearance order. */
+export function uniqueSearchTexts(terms: ParsedSearchTerm[]): string[] {
+  return [...new Set(terms.map((t) => t.text))];
 }
 
 /**
