@@ -1,3 +1,5 @@
+import type { Instance } from './instances';
+
 /** A single result from the NameRes /lookup endpoint. */
 export interface NameResResult {
   curie: string;
@@ -11,12 +13,8 @@ export interface NameResResult {
   highlighting?: Record<string, unknown>;
 }
 
-/** A named NameRes deployment endpoint. */
-export interface NameResInstance {
-  name: string;
-  env: string;
-  url: string;
-}
+/** A named NameRes deployment endpoint: the shared Instance shape. */
+export type NameResInstance = Instance;
 
 /** A parsed search term from the textarea, with optional expected CURIEs. */
 export interface ParsedSearchTerm {

@@ -8,7 +8,7 @@
  * `#target=` value in a share link skipped it and was fetched on page load.
  */
 
-/** A named deployment of a service. NodeNormInstance and NameResInstance are this shape. */
+/** A named deployment of a service. NodeNormInstance and NameResInstance are aliases of it. */
 export interface Instance {
   name: string;
   env: string;
