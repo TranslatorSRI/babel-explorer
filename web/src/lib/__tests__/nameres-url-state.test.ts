@@ -89,11 +89,11 @@ describe('readNameResQueryState', () => {
   });
 
   it('parses advanced string options', async () => {
-    setLocation('?term=asthma&biolink_type=Disease&only_prefixes=MONDO%2CHP');
+    setLocation('?term=asthma&biolink_type=Disease&only_prefixes=MONDO%7CHP');
     const { readNameResQueryState } = await import('../nameres-url-state');
     const state = readNameResQueryState();
     expect(state.options.biolink_type).toBe('Disease');
-    expect(state.options.only_prefixes).toBe('MONDO,HP');
+    expect(state.options.only_prefixes).toBe('MONDO|HP');
   });
 });
 

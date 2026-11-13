@@ -157,13 +157,13 @@ describe('fetchNameResLookup', () => {
     const opts: NameResApiOptions = {
       ...DEFAULT_NAMERES_OPTIONS,
       biolink_type: 'Disease',
-      only_prefixes: 'MONDO,HP',
+      only_prefixes: 'MONDO|HP',
     };
     await fetchNameResLookup('https://example.com/', 'asthma', opts);
 
     const calledUrl = new URL(mockFetch.mock.calls[0][0]);
     expect(calledUrl.searchParams.get('biolink_type')).toBe('Disease');
-    expect(calledUrl.searchParams.get('only_prefixes')).toBe('MONDO,HP');
+    expect(calledUrl.searchParams.get('only_prefixes')).toBe('MONDO|HP');
   });
 
   it('returns parsed JSON array on success', async () => {

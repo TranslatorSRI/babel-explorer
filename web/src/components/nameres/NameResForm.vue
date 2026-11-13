@@ -170,6 +170,9 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
             style="width: 160px"
           />
         </div>
+        <!-- NameRes's /lookup takes pipe-separated lists for these three (its OpenAPI
+             docs: "e.g. `MONDO|EFO`"); the values are sent unchanged, so a comma would
+             be read as part of a single prefix and filter everything out. -->
         <div>
           <label for="opt-only-prefixes" class="form-label small mb-0">Only Prefixes</label>
           <input
@@ -177,7 +180,8 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
             v-model="options.only_prefixes"
             type="text"
             class="form-control form-control-sm"
-            placeholder="e.g. MONDO,HP"
+            placeholder="e.g. MONDO|HP"
+            title="Pipe-separated, case-sensitive"
             style="width: 160px"
           />
         </div>
@@ -188,7 +192,8 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
             v-model="options.exclude_prefixes"
             type="text"
             class="form-control form-control-sm"
-            placeholder="e.g. UMLS"
+            placeholder="e.g. UMLS|EFO"
+            title="Pipe-separated, case-sensitive"
             style="width: 160px"
           />
         </div>
@@ -200,6 +205,7 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
             type="text"
             class="form-control form-control-sm"
             placeholder="e.g. NCBITaxon:9606"
+            title="Pipe-separated"
             style="width: 180px"
           />
         </div>
