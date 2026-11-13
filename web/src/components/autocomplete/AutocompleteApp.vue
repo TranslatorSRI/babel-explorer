@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import type { NameResInstance, NameResResult, NameResApiOptions } from '../../lib/nameres-types';
 import { fetchNameResLookup } from '../../lib/nameres-api';
-import { sortInstances } from '../../lib/instance-prefs';
+import { buildInstances, instanceForUrl, sortInstances, urlToTarget } from '../../lib/instances';
 import {
   DEFAULT_AUTOCOMPLETE_OPTIONS,
   DEFAULT_DEBOUNCE_MS,
@@ -24,25 +24,14 @@ import endpoints from '../../../../config/translator-endpoints.json';
 
 // ─── Instance list (shared config) ───────────────────────────────────────────
 
-const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  es_ci: 'ES CI',
-  test: 'Test',
-  prod: 'Production',
-};
-
-const instances: NameResInstance[] = Object.entries(endpoints.nameres).map(
-  ([env, url]) => ({ name: `NameRes ${ENV_LABELS[env] ?? env}`, env, url: url as string }),
-);
+const instances: NameResInstance[] = buildInstances('NameRes', endpoints.nameres);
 
 function urlsToTargets(urls: string[]): string[] {
-  return urls.map((url) => instances.find((i) => i.url === url)?.env ?? url);
+  return urls.map((url) => urlToTarget(instances, url));
 }
 
 function instanceFor(url: string): NameResInstance {
-  return instances.find((i) => i.url === url) ?? { name: url, env: url, url };
+  return instanceForUrl(instances, url);
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────

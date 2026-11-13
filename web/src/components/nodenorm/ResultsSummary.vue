@@ -17,16 +17,21 @@ const emit = defineEmits<{
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** CURIEs bucketed by how many queried instances found them: all, some, or none. */
+/**
+ * CURIEs bucketed by how many instances found them: all, some, or none.
+ * Only instances that answered count — a failed request is reported separately,
+ * not as every CURIE going missing.
+ */
 const coverage = computed(() => {
   const all: string[] = [];
   const partial: string[] = [];
   const none: string[] = [];
+  const responses = props.queriedInstances
+    .map((inst) => props.resultsByInstance.get(inst.url))
+    .filter((resp) => resp !== undefined);
   for (const c of props.curies) {
-    const hits = props.queriedInstances.filter(
-      (inst) => props.resultsByInstance.get(inst.url)?.[c] != null,
-    ).length;
-    (hits === 0 ? none : hits === props.queriedInstances.length ? all : partial).push(c);
+    const hits = responses.filter((resp) => resp[c] != null).length;
+    (hits === 0 ? none : hits === responses.length ? all : partial).push(c);
   }
   return { all, partial, none };
 });
@@ -42,8 +47,9 @@ const disagreements = computed(() =>
 );
 
 /**
- * Biolink types seen across all results, using the most-specific type (type[0])
- * per CURIE. Counts distinct CURIEs per type (not occurrences).
+ * Biolink types seen across all results: the direct types every instance reports for
+ * each CURIE, so a type only a later instance returns still gets a filter button.
+ * Counts distinct CURIEs per type (not occurrences).
  * Returns array of [biolink type, count] pairs sorted by count descending.
  */
 const typeCounts = computed((): [string, number][] => {
@@ -56,7 +62,6 @@ const typeCounts = computed((): [string, number][] => {
         if (!curiesByType.has(t)) curiesByType.set(t, new Set());
         curiesByType.get(t)!.add(curie);
       }
-      break; // take the first instance that finds this CURIE
     }
   }
   return [...curiesByType.entries()]

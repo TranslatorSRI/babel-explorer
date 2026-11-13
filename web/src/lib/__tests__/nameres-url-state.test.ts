@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions } from '../nameres-types';
 
-function setLocation(search: string, pathname = '/nameres') {
+function setLocation(search: string, pathname = '/nameres', hash = '') {
   Object.defineProperty(window, 'location', {
-    value: { search, pathname, href: `http://localhost${pathname}${search}` },
+    value: { search, pathname, hash, href: `http://localhost${pathname}${search}${hash}` },
     writable: true,
     configurable: true,
   });
@@ -64,6 +64,23 @@ describe('readNameResQueryState', () => {
     expect(state.options.autocomplete).toBe(true);
   });
 
+  it.each([
+    ['true', true],
+    ['1', true],
+    ['false', false],
+    ['0', false],
+  ])('reads autocomplete=%s as %s', async (value, expected) => {
+    setLocation('', '/nameres', `#term=asthma&autocomplete=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().options.autocomplete).toBe(expected);
+  });
+
+  it.each(['', 'no', 'yes'])('ignores autocomplete=%j', async (value) => {
+    setLocation('', '/nameres', `#term=asthma&autocomplete=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().options.autocomplete).toBeUndefined();
+  });
+
   it('parses threshold', async () => {
     setLocation('?term=asthma&threshold=3');
     const { readNameResQueryState } = await import('../nameres-url-state');
@@ -72,11 +89,52 @@ describe('readNameResQueryState', () => {
   });
 
   it('parses advanced string options', async () => {
-    setLocation('?term=asthma&biolink_type=Disease&only_prefixes=MONDO%2CHP');
+    setLocation('?term=asthma&biolink_type=Disease&only_prefixes=MONDO%7CHP');
     const { readNameResQueryState } = await import('../nameres-url-state');
     const state = readNameResQueryState();
     expect(state.options.biolink_type).toBe('Disease');
-    expect(state.options.only_prefixes).toBe('MONDO,HP');
+    expect(state.options.only_prefixes).toBe('MONDO|HP');
+  });
+});
+
+describe('readNameResQueryState — unusable numbers', () => {
+  it.each(['0', '-3', '101', '2.5', 'abc', ''])('ignores %j as a limit or threshold', async (value) => {
+    setLocation('', '/nameres', `#term=asthma&limit=${value}&threshold=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    const state = readNameResQueryState();
+    expect(state.options.limit).toBeUndefined();
+    expect(state.threshold).toBeUndefined();
+  });
+});
+
+describe('readNameResQueryState — threshold above the limit', () => {
+  it('ignores a threshold above the limit', async () => {
+    setLocation('', '/nameres', '#term=asthma&limit=5&threshold=10');
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().threshold).toBeUndefined();
+  });
+
+  it('ignores a threshold above the default limit when the link sets none', async () => {
+    const { DEFAULT_NAMERES_OPTIONS } = await import('../nameres-types');
+    setLocation('', '/nameres', `#term=asthma&threshold=${DEFAULT_NAMERES_OPTIONS.limit + 1}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().threshold).toBeUndefined();
+  });
+});
+
+describe('readNameResQueryState — fragment', () => {
+  it('reads the state from the fragment', async () => {
+    setLocation('', '/nameres', '#term=asthma&target=prod');
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    const state = readNameResQueryState();
+    expect(state.terms).toEqual(['asthma']);
+    expect(state.targets).toEqual(['prod']);
+  });
+
+  it('prefers the fragment to the query string', async () => {
+    setLocation('?term=old', '/nameres', '#term=new');
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().terms).toEqual(['new']);
   });
 });
 
@@ -93,7 +151,7 @@ describe('buildNameResQueryUrl', () => {
     setLocation('', '/nameres');
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const url = buildNameResQueryUrl(['asthma', 'diabetes'], ['dev'], DEFAULT_NAMERES_OPTIONS);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.getAll('term')).toEqual(['asthma', 'diabetes']);
     expect(params.getAll('target')).toEqual(['dev']);
   });
@@ -102,7 +160,7 @@ describe('buildNameResQueryUrl', () => {
     setLocation('', '/nameres');
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const url = buildNameResQueryUrl(['asthma'], ['dev'], DEFAULT_NAMERES_OPTIONS);
-    const params = new URLSearchParams(url.split('?')[1] ?? '');
+    const params = new URLSearchParams(url.split('#')[1] ?? '');
     expect(params.has('limit')).toBe(false);
     expect(params.has('autocomplete')).toBe(false);
     expect(params.has('biolink_type')).toBe(false);
@@ -113,7 +171,7 @@ describe('buildNameResQueryUrl', () => {
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const opts: NameResApiOptions = { ...DEFAULT_NAMERES_OPTIONS, limit: 10 };
     const url = buildNameResQueryUrl(['asthma'], ['dev'], opts);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.get('limit')).toBe('10');
   });
 
@@ -121,7 +179,7 @@ describe('buildNameResQueryUrl', () => {
     setLocation('', '/nameres');
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const url = buildNameResQueryUrl(['asthma'], ['dev'], DEFAULT_NAMERES_OPTIONS, 3);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.get('threshold')).toBe('3');
   });
 
@@ -129,7 +187,7 @@ describe('buildNameResQueryUrl', () => {
     setLocation('', '/nameres');
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const url = buildNameResQueryUrl(['asthma'], ['dev'], DEFAULT_NAMERES_OPTIONS, 5);
-    const params = new URLSearchParams(url.split('?')[1] ?? '');
+    const params = new URLSearchParams(url.split('#')[1] ?? '');
     expect(params.has('threshold')).toBe(false);
   });
 
@@ -137,7 +195,7 @@ describe('buildNameResQueryUrl', () => {
     setLocation('', '/babel-explorer/nameres');
     const { buildNameResQueryUrl } = await import('../nameres-url-state');
     const url = buildNameResQueryUrl(['asthma'], ['dev'], DEFAULT_NAMERES_OPTIONS);
-    expect(url.startsWith('/babel-explorer/nameres?')).toBe(true);
+    expect(url.startsWith('/babel-explorer/nameres#')).toBe(true);
   });
 
   it('returns just pathname when terms and targets are empty', async () => {
@@ -162,8 +220,7 @@ describe('round-trip', () => {
     const opts: NameResApiOptions = { ...DEFAULT_NAMERES_OPTIONS, limit: 10 };
 
     const url = buildNameResQueryUrl(terms, targets, opts, 3);
-    const qs = url.includes('?') ? url.slice(url.indexOf('?')) : '';
-    setLocation(qs, '/nameres');
+    setLocation('', '/nameres', url.slice(url.indexOf('#')));
 
     const state = readNameResQueryState();
     expect(state.terms).toEqual(terms);
@@ -177,8 +234,7 @@ describe('round-trip', () => {
     const { buildNameResQueryUrl, readNameResQueryState } = await import('../nameres-url-state');
 
     const url = buildNameResQueryUrl(['asthma'], ['dev'], DEFAULT_NAMERES_OPTIONS);
-    const qs = url.includes('?') ? url.slice(url.indexOf('?')) : '';
-    setLocation(qs, '/nameres');
+    setLocation('', '/nameres', url.slice(url.indexOf('#')));
 
     const state = readNameResQueryState();
     expect(state.terms).toEqual(['asthma']);

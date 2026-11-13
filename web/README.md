@@ -13,20 +13,21 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, taxa)
-- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus any number of custom http(s) URLs, each with its own checkbox; any combination can be queried together. A selection you make is remembered for the tab's session (in `sessionStorage`, since each tool is a separate page load; opening a share link does not overwrite it) and can be saved as a default; environments carry over between tools, while custom URLs stay with the tool they were added in, so a custom NodeNorm server is never queried as NameRes
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
-- **Shareable URLs**: Query state encoded in URL params (`?curie=`, `?target=`, non-default options); Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
-- **CURIE link-outs**: Identifiers link to external resources via [biolink-model prefix map](https://github.com/biolink/biolink-model) (v4.3.7)
+- **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, any non-default option the form offers; `individual_types` is always on and never read from a link), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
+- **CURIE link-outs**: Identifiers link to external resources via the [biolink-model prefix map](https://github.com/biolink/biolink-model), at the release named in `src/lib/biolink-prefix-map.version`
 
 ### NameRes Lookup (`/nameres`)
 
 - **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
-- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold
+- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold, which follows the Limit until it is set and may not exceed it
 - **Multi-instance comparison**: Same unified instance selector as NodeNorm
-- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; shareable URL state and JSON export
+- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; JSON export
+- **Shareable URLs**: Query state in the URL fragment (`#term=`, `target=`, non-default options and threshold), like NodeNorm, so a long annotated term list never reaches a server URL limit; older `?term=` links still load; a pasted link or Back re-runs the query without a reload
 
 ### Autocomplete Playground (`/autocomplete`)
 
@@ -57,9 +58,10 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 ```bash
 npm test            # Run the Vitest unit + component tests
 npm run test:watch  # Watch mode
+npm run typecheck   # vue-tsc over the .ts and .vue files
 ```
 
-Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`). See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it.
+Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`), along with the type check. Vitest and the Astro build strip types without checking them, so a type error passes both; only `npm run typecheck` catches it. TypeScript stays on 5.x because Astro's `tsconfck` requires `^5.0.0`. See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it.
 
 ## Building
 
@@ -72,16 +74,24 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 ## Deployment
 
 `.github/workflows/deploy.yml` builds the site and pushes it to the `gh-pages` branch on every push to `main` that touches `web/` or `config/`, on published releases, and on demand (`workflow_dispatch`). GitHub Pages serves it at `https://translatorsri.github.io/babel-explorer/`.
+Each deploy copies the build over what is already on `gh-pages` (`keep_files: true`) rather
+than replacing the branch, because some tools are deployed there from branches that are not
+on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
+when to switch back to `force_orphan`.
+Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
+together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
 ## Shared Configuration
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
 
-Instance keys: NodeNorm has `dev`, `exp`, `ci` (ElasticSearch-backed), `redis_ci` (Redis, kept for comparison until retired), `test`, `prod`; NameRes has `dev`, `exp`, `ci` (Solr-backed), `es_ci` (ElasticSearch, experimental), `test`, `prod`. The two services share the `ci` key but it points at different backends. Saved defaults and `?target=` links are shared by every tool, so a key the current service lacks (`redis_ci` in NameRes, `es_ci` in NodeNorm) is ignored rather than treated as a custom URL — `resolveTarget()` in `src/lib/instance-prefs.ts`.
+Instance keys: NodeNorm has `dev`, `exp`, `ci` (ElasticSearch-backed), `redis_ci` (Redis, kept for comparison until retired), `test`, `prod`; NameRes has `dev`, `exp`, `ci` (Solr-backed), `es_ci` (ElasticSearch, experimental), `test`, `prod`. The two services share the `ci` key but it points at different backends. Saved defaults and `#target=` links are shared by every tool, so a key the current service lacks (`redis_ci` in NameRes, `es_ci` in NodeNorm) is ignored rather than treated as a custom URL — `resolveTarget()` in `src/lib/instances.ts`.
 
-Comparison tables always list instances in pipeline order — `ENV_ORDER` in `src/lib/instance-prefs.ts` (Exp, Dev, CI, ES CI, Redis CI, Test, Prod, then custom URLs). To add a named instance: (1) add it to `config/translator-endpoints.json`; (2) add the key to `PRIMARY_ENVS` in `InstanceSelector.vue` if it belongs in the main section rather than under "Extended environments"; (3) add it to `ENV_ORDER`; (4) add its label to `ENV_LABELS` in the App components and in `InstanceSelector.vue`, with a `BACKEND_ABBR` entry there if the label needs an `<abbr>`.
+Comparison tables always list instances in pipeline order — `ENV_ORDER` in `src/lib/instances.ts` (Exp, Dev, CI, ES CI, Redis CI, Test, Prod, then custom URLs). To add a named instance: (1) add it to `config/translator-endpoints.json`; (2) add the key to `PRIMARY_ENVS` in `src/lib/instance-prefs.ts` if it belongs in the main section rather than under "Extended environments"; (3) add it to `ENV_ORDER` and its result-table label to `ENV_LABELS`, both in `src/lib/instances.ts`; (4) add its selector label to `ENV_LABELS` in `InstanceSelector.vue`, with a `BACKEND_ABBR` entry there if the label needs an `<abbr>`.
 
-CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. `src/lib/curie-links.ts` records which release it came from and how to update it.
+CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. It is an exact copy of one release, named in `src/lib/biolink-prefix-map.version`; update both with `npm run update-prefix-map` (latest release) or `npm run update-prefix-map -- <tag>`.
+
+`.github/workflows/update-prefix-map.yml` runs that script every Monday and, when the map changes, opens or updates a draft PR from `bot/biolink-prefix-map` whose description lists the added, changed and (first) removed prefixes. A removed prefix that NodeNorm still emits loses its link-out, so read that list before merging. The job runs the tests, the type check and the build itself, because a PR opened with `GITHUB_TOKEN` does not trigger `ci.yml`.
 
 ## Architecture
 
@@ -102,7 +112,7 @@ src/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
       NodeNormApp.vue               # Root island: orchestrates form + results
-      NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
+      NodeNormForm.vue              # CURIE input, InstanceSelector, API options
       ComparisonView.vue            # Results table with expandable per-CURIE rows
       CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
       ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
@@ -111,18 +121,20 @@ src/
     nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
     autocomplete/                   # Autocomplete Vue components (App, Form, Results, ComparisonView, HighlightedFragment, ExpectedCuriePanel, LatencyBadge)
     shared/
-      InstanceSelector.vue          # Deployment checkboxes + custom URL, remembered in localStorage
+      InstanceSelector.vue          # Deployment checkboxes + custom URLs, shared by every tool
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
-    nodenorm-api.ts                 # NodeNorm API fetch wrapper (supports AbortSignal)
+    nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
+    instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check; pipeline order
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
-    url-state.ts                    # Encode/decode NodeNorm query state in URL params
+    url-state.ts                    # Encode/decode NodeNorm query state in the URL fragment
     types.ts                        # NodeNorm TypeScript interfaces
-    nameres-api.ts                  # NameRes /lookup wrapper; parseSearchTerms; validateExpectedCuries
+    nameres-api.ts                  # NameRes /lookup wrapper (bounded concurrency, AbortSignal); parseSearchTerms; validateExpectedCuries
     nameres-types.ts                # NameRes interfaces and default options
-    nameres-url-state.ts            # Encode/decode NameRes query state
-    instance-prefs.ts               # localStorage helpers and canonical instance ordering
+    nameres-url-state.ts            # Encode/decode NameRes query state in the URL fragment
+    instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
+    use-share-link.ts               # The Share button: copy the page URL, report success or failure
     autocomplete-url-state.ts       # Encode/decode Autocomplete query state
     autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom presets + detectPreset
     autocomplete-diff.ts            # Presence/rank/label/type diffs across instances
@@ -136,4 +148,4 @@ src/
 2. Create a root Vue island component in `src/components/<tool-name>/`
 3. Add a nav link in `src/components/Navbar.astro`
 4. Add a card on the landing page in `src/pages/index.astro`
-5. If the tool needs deployment URLs, import from `config/translator-endpoints.json`
+5. If the tool needs deployment URLs, build its instance list with `buildInstances` from `config/translator-endpoints.json`, and select instances with `InstanceSelector`. Start a link-driven query from `initialSelection`, so it runs against the instances the form shows ticked, and resolve every target through `instances.ts`, so an unusable one is reported rather than fetched

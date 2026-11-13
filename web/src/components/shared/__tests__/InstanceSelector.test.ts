@@ -1,17 +1,10 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import InstanceSelector from '../InstanceSelector.vue';
-import { sessionPrefs } from '../../../lib/instance-prefs';
+import { loadSessionPrefs, rememberSelection, savePrefs } from '../../../lib/instance-prefs';
 
-// happy-dom doesn't implement localStorage — provide a minimal in-memory mock.
-const localStorageStore: Record<string, string> = {};
-const localStorageMock = {
-  getItem: (key: string) => localStorageStore[key] ?? null,
-  setItem: (key: string, value: string) => { localStorageStore[key] = value; },
-  removeItem: (key: string) => { delete localStorageStore[key]; },
-  clear: () => { Object.keys(localStorageStore).forEach((k) => delete localStorageStore[k]); },
-};
-vi.stubGlobal('localStorage', localStorageMock);
+// tests/setup.ts provides localStorage and sessionStorage and clears both before each test.
+const STORAGE_KEY = 'babel-explorer:instance-prefs';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -27,19 +20,13 @@ const ALL_INSTANCES = [expInstance, devInstance, ciInstance, esCiInstance, testI
 function mountSelector(overrides: Record<string, unknown> = {}) {
   return mount(InstanceSelector, {
     props: {
+      service: 'nodenorm',
       instances: ALL_INSTANCES,
       modelValue: [],
       ...overrides,
     },
   });
 }
-
-// ─── Setup / teardown ─────────────────────────────────────────────────────────
-
-beforeEach(() => {
-  sessionPrefs.value = null;
-  localStorage.clear();
-});
 
 // ─── Rendering ────────────────────────────────────────────────────────────────
 
@@ -146,16 +133,16 @@ describe('InstanceSelector — default selection', () => {
     expect(wrapper.find('details').attributes('open')).toBe('');
   });
 
-  it('URL params (initialTargets) take priority over sessionPrefs', () => {
-    sessionPrefs.value = ['ci'];
+  it('URL params (initialTargets) take priority over the session selection', () => {
+    rememberSelection('nodenorm', ['ci']);
     const wrapper = mountSelector({ initialTargets: ['prod'] });
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     expect(emitted[0][0]).toContain(prodInstance.url);
     expect(emitted[0][0]).not.toContain(ciInstance.url);
   });
 
-  it('falls back to sessionPrefs when no initialTargets', () => {
-    sessionPrefs.value = ['ci', 'prod'];
+  it('falls back to the session selection when no initialTargets', () => {
+    rememberSelection('nodenorm', ['ci', 'prod']);
     const wrapper = mountSelector();
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     const initial = emitted[0][0];
@@ -163,8 +150,8 @@ describe('InstanceSelector — default selection', () => {
     expect(initial).toContain(prodInstance.url);
   });
 
-  it('falls back to localStorage when no initialTargets and no sessionPrefs', () => {
-    localStorage.setItem('babel-explorer:instance-prefs', JSON.stringify(['ci', 'prod']));
+  it('falls back to localStorage when no initialTargets and no session selection', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ envs: ['ci', 'prod'], custom: {} }));
     const wrapper = mountSelector();
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     const initial = emitted[0][0];
@@ -174,16 +161,16 @@ describe('InstanceSelector — default selection', () => {
 
   it('drops env keys this service lacks instead of treating them as custom URLs', () => {
     // Saved from NodeNorm, which has redis_ci; this instance list does not.
-    localStorage.setItem('babel-explorer:instance-prefs', JSON.stringify(['redis_ci', 'prod']));
-    const wrapper = mountSelector();
+    savePrefs('nodenorm', ['redis_ci', 'prod']);
+    const wrapper = mountSelector({ service: 'nameres' });
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     expect(emitted[0][0]).toEqual([prodInstance.url]);
     expect(wrapper.find('details').attributes('open')).toBeUndefined();
   });
 
   it('falls through to the default when no saved key resolves', () => {
-    sessionPrefs.value = ['redis_ci'];
-    const wrapper = mountSelector({ initialTargets: ['redis_ci'] });
+    rememberSelection('nodenorm', ['redis_ci']);
+    const wrapper = mountSelector({ service: 'nameres', initialTargets: ['redis_ci'] });
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     expect(emitted[0][0]).toEqual([devInstance.url]);
   });
@@ -213,12 +200,18 @@ describe('InstanceSelector — checkbox interaction', () => {
     expect(last).toContain(ciInstance.url);
   });
 
-  it('updates sessionPrefs on every change', async () => {
+  it("does not replace the session selection with a link's targets on mount", () => {
+    rememberSelection('nodenorm', ['ci', 'prod']);
+    mountSelector({ initialTargets: ['exp'] });
+    expect(loadSessionPrefs('nodenorm')).toEqual(['ci', 'prod']);
+  });
+
+  it('remembers the selection for the session on every change', async () => {
     const wrapper = mountSelector({ initialTargets: ['dev'] });
-    // Clear sessionPrefs to isolate this check
-    sessionPrefs.value = null;
+    // Clear the session selection to isolate this check
+    sessionStorage.clear();
     await wrapper.find('#inst-ci').trigger('change');
-    expect(sessionPrefs.value).toContain('ci');
+    expect(loadSessionPrefs('nodenorm')).toContain('ci');
   });
 });
 
@@ -314,10 +307,10 @@ describe('InstanceSelector — custom URL', () => {
 
   it('shows custom URL checkbox after adding', async () => {
     const wrapper = mountSelector({ initialTargets: ['dev'] });
-    expect(wrapper.find('#inst-custom').exists()).toBe(false);
+    expect(wrapper.find('#inst-custom-0').exists()).toBe(false);
     await wrapper.find('input[type="url"]').setValue('https://custom.example.com/');
     await wrapper.find('button.btn-outline-secondary').trigger('click');
-    expect(wrapper.find('#inst-custom').exists()).toBe(true);
+    expect(wrapper.find('#inst-custom-0').exists()).toBe(true);
   });
 });
 
@@ -327,18 +320,16 @@ describe('InstanceSelector — save as default', () => {
   it('saves current selection to localStorage', async () => {
     const wrapper = mountSelector({ initialTargets: ['ci', 'prod'] });
     await wrapper.find('button.btn-link.text-muted').trigger('click');
-    const stored = localStorage.getItem('babel-explorer:instance-prefs');
+    const stored = localStorage.getItem(STORAGE_KEY);
     expect(stored).not.toBeNull();
-    const parsed = JSON.parse(stored!);
-    expect(parsed).toContain('ci');
-    expect(parsed).toContain('prod');
+    expect(JSON.parse(stored!).envs).toEqual(['ci', 'prod']);
   });
 
-  it('updates sessionPrefs when saving', async () => {
+  it('updates the session selection when saving', async () => {
     const wrapper = mountSelector({ initialTargets: ['ci', 'prod'] });
+    sessionStorage.clear();
     await wrapper.find('button.btn-link.text-muted').trigger('click');
-    expect(sessionPrefs.value).toContain('ci');
-    expect(sessionPrefs.value).toContain('prod');
+    expect(loadSessionPrefs('nodenorm')).toEqual(['ci', 'prod']);
   });
 
   it('shows "✓ Saved as default" flash after clicking', async () => {
@@ -351,5 +342,97 @@ describe('InstanceSelector — save as default', () => {
     expect(wrapper.text()).toContain('Save as default');
     expect(wrapper.text()).not.toContain('✓ Saved as default');
     vi.useRealTimers();
+  });
+});
+
+// ─── Unusable targets ─────────────────────────────────────────────────────────
+
+function initialSelectionOf(wrapper: ReturnType<typeof mountSelector>): string[] {
+  return (wrapper.emitted('update:modelValue') as string[][])[0][0] as unknown as string[];
+}
+
+describe('InstanceSelector — unusable targets', () => {
+  it('gives no checkbox to a link target that is not an http(s) URL', () => {
+    const wrapper = mountSelector({ initialTargets: ['dev', 'ftp://h/', '//evil.example'] });
+    expect(initialSelectionOf(wrapper)).toEqual([devInstance.url]);
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(0);
+  });
+
+  it('falls back to the session selection when no link target is usable', () => {
+    rememberSelection('nodenorm', ['prod']);
+    const wrapper = mountSelector({ initialTargets: ['ftp://h/'] });
+    expect(initialSelectionOf(wrapper)).toEqual([prodInstance.url]);
+  });
+
+  it('drops saved preferences that are neither known keys nor http(s) URLs', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ envs: ['staging', 'ci'], custom: { nodenorm: ['ftp://h/'] } }));
+    const wrapper = mountSelector();
+    expect(initialSelectionOf(wrapper)).toEqual([ciInstance.url]);
+  });
+
+  it('falls back to the first primary instance when nothing saved is usable', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ envs: ['ftp://h/'], custom: {} }));
+    const wrapper = mountSelector();
+    expect(initialSelectionOf(wrapper)).toEqual([devInstance.url]);
+  });
+
+  it.each(['ftp://h/', 'not a url', 'foo:bar'])('disables Add for %s', async (url) => {
+    const wrapper = mountSelector();
+    await wrapper.find('input[type="url"]').setValue(url);
+    expect(wrapper.find('input[type="url"] + button').attributes('disabled')).toBeDefined();
+  });
+});
+
+// ─── Several custom URLs ──────────────────────────────────────────────────────
+
+describe('InstanceSelector — several custom URLs', () => {
+  async function add(wrapper: ReturnType<typeof mountSelector>, url: string) {
+    await wrapper.find('input[type="url"]').setValue(url);
+    await wrapper.find('input[type="url"] + button').trigger('click');
+  }
+
+  function lastSelection(wrapper: ReturnType<typeof mountSelector>): string[] {
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    return emitted[emitted.length - 1][0] as unknown as string[];
+  }
+
+  it('keeps a checkbox for each, so none is queried invisibly', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await add(wrapper, 'https://a.example/');
+    await add(wrapper, 'https://b.example/');
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
+
+    await wrapper.find('#inst-custom-0').trigger('change'); // untick A
+    expect(lastSelection(wrapper)).toEqual([devInstance.url, 'https://b.example/']);
+  });
+
+  it('restores every custom URL in the link', () => {
+    const wrapper = mountSelector({ initialTargets: ['https://a.example/', 'https://b.example'] });
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(2);
+    expect(initialSelectionOf(wrapper)).toEqual(['https://a.example/', 'https://b.example/']);
+  });
+
+  it('ticks a known instance typed as a URL instead of adding a custom row', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await add(wrapper, 'https://prod.example.com');
+    expect(wrapper.findAll('[id^="inst-custom-"]')).toHaveLength(0);
+    expect(lastSelection(wrapper)).toContain(prodInstance.url);
+  });
+
+  it('adds the URL on Enter', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev'] });
+    await wrapper.find('input[type="url"]').setValue('https://a.example/');
+    await wrapper.find('input[type="url"]').trigger('keydown', { key: 'Enter' });
+    expect(lastSelection(wrapper)).toContain('https://a.example/');
+  });
+
+  it('saves custom URLs as URLs and known instances as keys', async () => {
+    const wrapper = mountSelector({ initialTargets: ['dev', 'https://a.example/'] });
+    await wrapper.find('button.btn-link.text-muted').trigger('click');
+    expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
+      envs: ['dev'],
+      custom: { nodenorm: ['https://a.example/'] },
+      withoutEnvs: [],
+    });
   });
 });

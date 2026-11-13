@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { NameResResult, NameResInstance, ParsedSearchTerm, ExpectedCurieStatus } from '../../lib/nameres-types';
-import { validateExpectedCuries } from '../../lib/nameres-api';
+import { uniqueSearchTexts, validateExpectedCuries } from '../../lib/nameres-api';
 
 const props = defineProps<{
   resultsByInstance: Map<string, Map<string, NameResResult[]>>;
@@ -12,24 +12,44 @@ const props = defineProps<{
 
 // ── Resolved tile ────────────────────────────────────────────────────────────
 
-/** Terms with at least one result on every queried instance. */
+/**
+ * Each answered lookup's results for a term. A failed lookup has no entry in
+ * resultsByInstance and is left out: it is reported separately, not counted as a term
+ * that found nothing.
+ */
+function answeredResults(text: string): NameResResult[][] {
+  return props.queriedInstances
+    .map((inst) => props.resultsByInstance.get(inst.url)?.get(text))
+    .filter((results): results is NameResResult[] => results !== undefined);
+}
+
+/**
+ * The distinct search texts, for the tiles about the lookups themselves: the lookups
+ * NameResApp actually ran. Two lines that search for the same text with different
+ * expected CURIEs are one lookup, and counting it twice would report "diabetes,
+ * diabetes" as two terms with no results.
+ */
+const lookupTexts = computed(() => uniqueSearchTexts(props.terms));
+
+/** Terms with at least one result on every instance that answered. */
 const resolvedByAll = computed(() =>
-  props.terms.filter((t) =>
-    props.queriedInstances.every((inst) => {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      return results != null && results.length > 0;
-    }),
-  ),
+  lookupTexts.value.filter((text) => {
+    const answered = answeredResults(text);
+    return answered.length > 0 && answered.every((results) => results.length > 0);
+  }),
 );
 
-/** Terms with no results on any instance. */
+/** Terms with no results on any instance that answered. */
 const noResultsAny = computed(() =>
-  props.terms.filter((t) =>
-    props.queriedInstances.every((inst) => {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      return results == null || results.length === 0;
-    }),
-  ),
+  lookupTexts.value.filter((text) => {
+    const answered = answeredResults(text);
+    return answered.length > 0 && answered.every((results) => results.length === 0);
+  }),
+);
+
+/** Terms whose lookup failed on at least one instance. */
+const failedTerms = computed(() =>
+  lookupTexts.value.filter((text) => answeredResults(text).length < props.queriedInstances.length),
 );
 
 // ── Agreement tile ───────────────────────────────────────────────────────────
@@ -37,11 +57,10 @@ const noResultsAny = computed(() =>
 /** Terms where instances disagree on #1 result (only when 2+ instances). */
 const disagreements = computed(() => {
   if (props.queriedInstances.length < 2) return [];
-  return props.terms.filter((t) => {
+  return lookupTexts.value.filter((text) => {
     const curies = new Set<string>();
-    for (const inst of props.queriedInstances) {
-      const results = props.resultsByInstance.get(inst.url)?.get(t.text);
-      curies.add(results && results.length > 0 ? results[0].curie : '(no results)');
+    for (const results of answeredResults(text)) {
+      curies.add(results.length > 0 ? results[0].curie : '(no results)');
     }
     return curies.size > 1;
   });
@@ -53,13 +72,14 @@ const annotatedTerms = computed(() => props.terms.filter((t) => t.expectedCuries
 const hasAnnotations = computed(() => annotatedTerms.value.length > 0);
 
 /**
- * For each annotated term, get the "worst" status across all instances.
- * success < partial < failure (worst wins).
+ * For each annotated term, get the "worst" status across the instances that answered.
+ * success < partial < failure (worst wins). Null when no instance answered.
  */
-function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus {
+function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus | null {
+  const answered = answeredResults(term.text);
+  if (answered.length === 0) return null;
   let worst: ExpectedCurieStatus = 'success';
-  for (const inst of props.queriedInstances) {
-    const results = props.resultsByInstance.get(inst.url)?.get(term.text) ?? [];
+  for (const results of answered) {
     const v = validateExpectedCuries(results, term.expectedCuries, props.threshold);
     if (v.status === 'failure') return 'failure';
     if (v.status === 'partial') worst = 'partial';
@@ -67,22 +87,27 @@ function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus {
   return worst;
 }
 
-const successCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'success').length,
-);
-const partialCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'partial').length,
-);
-const failureCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'failure').length,
-);
+/**
+ * Annotated terms by worst status, in one pass. `unchecked` is a term every lookup for
+ * which failed: it is neither a pass nor a fail, but leaving it out of every count
+ * would make the counts not add up to "N annotated terms", and hide that it went
+ * unchecked.
+ */
+const statusCounts = computed(() => {
+  const counts = { success: 0, partial: 0, failure: 0, unchecked: 0 };
+  for (const t of annotatedTerms.value) {
+    const status = worstStatus(t);
+    if (status === 'success' || status === 'partial' || status === 'failure') counts[status]++;
+    else counts.unchecked++;
+  }
+  return counts;
+});
 
 // ── Display helpers ──────────────────────────────────────────────────────────
 
 const INLINE_LIMIT = 3;
 
-function formatTermList(termsList: ParsedSearchTerm[]): string {
-  const texts = termsList.map((t) => t.text);
+function formatTermList(texts: string[]): string {
   if (texts.length <= INLINE_LIMIT) return texts.join(', ');
   return `${texts.slice(0, INLINE_LIMIT).join(', ')} +${texts.length - INLINE_LIMIT} more`;
 }
@@ -97,11 +122,15 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div class="text-muted small mb-1">Resolved</div>
         <div class="fs-5 fw-semibold">
           {{ resolvedByAll.length }}
-          <span class="fs-6 fw-normal text-muted">/ {{ terms.length }}</span>
+          <span class="fs-6 fw-normal text-muted">/ {{ lookupTexts.length }}</span>
         </div>
         <div v-if="noResultsAny.length > 0" class="text-danger small mt-1">
           {{ noResultsAny.length }} no results
           <span class="text-muted">({{ formatTermList(noResultsAny) }})</span>
+        </div>
+        <div v-if="failedTerms.length > 0" class="text-danger small mt-1">
+          {{ failedTerms.length }} with a failed lookup
+          <span class="text-muted">({{ formatTermList(failedTerms) }})</span>
         </div>
       </div>
     </div>
@@ -129,16 +158,20 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div class="text-muted small mb-1">Expected CURIEs</div>
         <div class="d-flex gap-3">
           <div>
-            <span class="badge bg-success">{{ successCount }}</span>
+            <span class="badge bg-success">{{ statusCounts.success }}</span>
             <span class="small text-muted ms-1">pass</span>
           </div>
-          <div v-if="partialCount > 0">
-            <span class="badge bg-warning text-dark">{{ partialCount }}</span>
+          <div v-if="statusCounts.partial > 0">
+            <span class="badge bg-warning text-dark">{{ statusCounts.partial }}</span>
             <span class="small text-muted ms-1">partial</span>
           </div>
-          <div v-if="failureCount > 0">
-            <span class="badge bg-danger">{{ failureCount }}</span>
+          <div v-if="statusCounts.failure > 0">
+            <span class="badge bg-danger">{{ statusCounts.failure }}</span>
             <span class="small text-muted ms-1">fail</span>
+          </div>
+          <div v-if="statusCounts.unchecked > 0" title="Every lookup for these terms failed">
+            <span class="badge bg-secondary">{{ statusCounts.unchecked }}</span>
+            <span class="small text-muted ms-1">not checked</span>
           </div>
         </div>
         <div class="text-muted small mt-1">

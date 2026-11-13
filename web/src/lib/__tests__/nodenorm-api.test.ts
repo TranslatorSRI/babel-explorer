@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseCuries, fetchNormalizedNodes, preferredIdsDisagree } from '../nodenorm-api';
+import {
+  parseCuries,
+  fetchNormalizedNodes,
+  buildNodeNormUrl,
+  preferredIdsDisagree,
+  getDirectTypes,
+  MAX_CONCURRENT_BATCHES,
+  BATCH_TIMEOUT_MS,
+} from '../nodenorm-api';
 import { DEFAULT_API_OPTIONS } from '../types';
 import type { ApiOptions, NormalizedNode } from '../types';
 import mondoFixture from '../../../../tests/fixtures/nodenorm_responses/mondo_0004979.json';
@@ -176,6 +184,113 @@ describe('fetchNormalizedNodes', () => {
     ).rejects.toThrow('NodeNorm returned HTTP 500');
   });
 
+  it('splits a long CURIE list across several requests and merges the responses', async () => {
+    const mockFetch = vi.fn((url: string) => {
+      const curies = new URL(url).searchParams.getAll('curie');
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(Object.fromEntries(curies.map((c) => [c, null]))),
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const curies = Array.from({ length: 1000 }, (_, i) => `MONDO:${String(i).padStart(7, '0')}`);
+    const result = await fetchNormalizedNodes('https://example.com/', curies, DEFAULT_API_OPTIONS);
+
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(1);
+    for (const [url] of mockFetch.mock.calls) expect(url.length).toBeLessThan(8000);
+    expect(Object.keys(result)).toEqual(curies);
+  });
+
+  // Enough CURIEs for several times MAX_CONCURRENT_BATCHES batches.
+  const manyCuries = Array.from({ length: 3000 }, (_, i) => `NCBIGene:${100000 + i}`);
+
+  it(`keeps at most ${MAX_CONCURRENT_BATCHES} batches in flight at once`, async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const mockFetch = vi.fn(async () => {
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+      return { ok: true, json: () => Promise.resolve({}) };
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await fetchNormalizedNodes('https://example.com/', manyCuries, DEFAULT_API_OPTIONS);
+
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(MAX_CONCURRENT_BATCHES);
+    expect(peak).toBe(MAX_CONCURRENT_BATCHES);
+  });
+
+  it('aborts the other batches once one fails, and reports the failure', async () => {
+    const signals: AbortSignal[] = [];
+    const mockFetch = vi.fn((_url: string, init: RequestInit) => {
+      signals.push(init.signal!);
+      if (signals.length === 1) {
+        return Promise.resolve({ ok: false, status: 500, statusText: 'Internal Server Error' });
+      }
+      // Never resolves on its own; settles only when aborted.
+      return new Promise((_, reject) =>
+        init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        ),
+      );
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const err = await fetchNormalizedNodes(
+      'https://example.com/', manyCuries, DEFAULT_API_OPTIONS,
+    ).catch((e) => e);
+
+    expect(err.message).toContain('HTTP 500');
+    expect(signals.length).toBeLessThanOrEqual(MAX_CONCURRENT_BATCHES);
+    expect(signals.every((s) => s.aborted)).toBe(true);
+  });
+
+  it('fails an instance whose batch takes longer than the timeout, leaving the caller alone', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never resolves on its own; settles only when aborted.
+      vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
+        new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      ));
+      const caller = new AbortController();
+      const result = fetchNormalizedNodes(
+        'https://example.com/', manyCuries, DEFAULT_API_OPTIONS, caller.signal,
+      ).catch((e) => e);
+
+      await vi.advanceTimersByTimeAsync(BATCH_TIMEOUT_MS - 1);
+      expect(caller.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const err = await result;
+      expect(err.message).toBe(`NodeNorm did not answer within ${BATCH_TIMEOUT_MS / 1000} s`);
+      expect(caller.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives each batch its own deadline, not the whole lookup', async () => {
+    vi.useFakeTimers();
+    try {
+      // Each batch answers just inside the timeout, so the lookup as a whole takes longer.
+      vi.stubGlobal('fetch', vi.fn(() =>
+        new Promise((resolve) => setTimeout(
+          () => resolve({ ok: true, json: () => Promise.resolve({}) }),
+          BATCH_TIMEOUT_MS - 1,
+        )),
+      ));
+      const result = fetchNormalizedNodes('https://example.com/', manyCuries, DEFAULT_API_OPTIONS);
+      await vi.runAllTimersAsync();
+      await expect(result).resolves.toEqual({});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('throws AbortError when called with an already-aborted signal', async () => {
     const controller = new AbortController();
     controller.abort();
@@ -189,6 +304,13 @@ describe('fetchNormalizedNodes', () => {
     ).catch((e) => e);
 
     expect(err.name).toBe('AbortError');
+  });
+});
+
+describe('buildNodeNormUrl', () => {
+  it('keeps the last path segment of a base URL without a trailing slash', () => {
+    const url = new URL(buildNodeNormUrl('https://host/nodenorm', ['X:1'], DEFAULT_API_OPTIONS));
+    expect(url.pathname).toBe('/nodenorm/get_normalized_nodes');
   });
 });
 
@@ -317,5 +439,29 @@ describe('preferredIdsDisagree', () => {
   it('skips an instance whose request failed', () => {
     const results = new Map([[a.url, { X: node('P:1') }]]);
     expect(preferredIdsDisagree('X', [a, b], results)).toBe(false);
+  });
+});
+
+describe('getDirectTypes', () => {
+  const conflated = meshConflatedFixture['MESH:D014867'] as NormalizedNode;
+
+  it('lists each identifier type once, in first-appearance order', () => {
+    const types = getDirectTypes(conflated);
+    expect(new Set(types)).toEqual(new Set(['biolink:SmallMolecule', 'biolink:Drug', 'biolink:ChemicalEntity']));
+    expect(types).toHaveLength(3);
+  });
+
+  it('falls back to the most specific clique type when identifiers carry none', () => {
+    const node: NormalizedNode = {
+      id: { identifier: 'X:1' },
+      equivalent_identifiers: [{ identifier: 'X:1' }],
+      type: ['biolink:Gene', 'biolink:NamedThing'],
+    };
+    expect(getDirectTypes(node)).toEqual(['biolink:Gene']);
+  });
+
+  it('computes a node once, however many components ask', () => {
+    const node = structuredClone(conflated);
+    expect(getDirectTypes(node)).toBe(getDirectTypes(node));
   });
 });

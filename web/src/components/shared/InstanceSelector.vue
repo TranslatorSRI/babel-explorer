@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { sessionPrefs, savePrefs, loadPrefs, resolveTarget } from '../../lib/instance-prefs';
+import { rememberSelection, savePrefs, initialSelection, PRIMARY_ENVS } from '../../lib/instance-prefs';
+import { findInstance, normalizeInstanceUrl, resolveTarget, urlToTarget, type Instance } from '../../lib/instances';
 
 /**
  * Short, environment-level display names used inside the selector.
@@ -8,32 +9,28 @@ import { sessionPrefs, savePrefs, loadPrefs, resolveTarget } from '../../lib/ins
  * objects for use in result tables (ComparisonView column headers, etc.).
  */
 const ENV_LABELS: Record<string, string> = {
-  exp:      'RENCI Experimental',
-  dev:      'RENCI Dev',
-  ci:       'ITRB CI',
-  es_ci:    'ITRB ES CI',
+  exp: 'RENCI Experimental',
+  dev: 'RENCI Dev',
+  ci: 'ITRB CI',
+  es_ci: 'ITRB ES CI',
   redis_ci: 'ITRB Redis CI',
-  test:     'ITRB Test',
-  prod:     'ITRB Prod',
+  test: 'ITRB Test',
+  prod: 'ITRB Prod',
 };
 
-/** Environments shown in the main section (always visible). */
-const PRIMARY_ENVS = new Set(['dev', 'ci', 'es_ci', 'redis_ci', 'prod']);
-
-interface Instance {
-  name: string;
-  env: string;
-  url: string;
-}
-
 const props = defineProps<{
+  /**
+   * The service these instances belong to ('nodenorm', 'nameres'). Remembered custom
+   * URLs are kept per service, so one tool's custom server never becomes another's.
+   */
+  service: string;
   /** Full list of known instances (dev, exp, ci, test, prod). */
   instances: Instance[];
   /** Currently selected URLs — parent binds this via v-model. */
   modelValue: string[];
   /**
    * Env keys or raw URLs from URL state (e.g. ['dev', 'prod']).
-   * Takes priority over session/localStorage. Only used on mount.
+   * Takes priority over the session's and the saved selection. Only used on mount.
    */
   initialTargets?: string[];
 }>();
@@ -44,49 +41,22 @@ const emit = defineEmits<{
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
-/**
- * Resolve targets (env keys or URLs, from the URL bar or saved prefs) to
- * { urls, customUrl }. Env keys this service lacks are dropped; at most one
- * custom URL is kept as the custom entry.
- */
-function resolvePrefs(prefs: string[]): { urls: string[]; customUrl: string | null } {
-  const urls = prefs
-    .map((p) => resolveTarget(props.instances, p))
-    .filter((u): u is string => u !== null);
-  const customUrl = urls.find((u) => !props.instances.some((i) => i.url === u)) ?? null;
-  return { urls, customUrl };
-}
+// Resolved through lib/instances, so a target that is not an http(s) URL never gets a
+// checkbox, whether it came from a share link or from saved preferences.
+const initUrls = initialSelection(props.service, props.instances, props.initialTargets);
 
-/**
- * Determine the initial selection and any custom URL, using the priority:
- *   1. URL params (initialTargets prop)
- *   2. In-session prefs (sessionPrefs)
- *   3. localStorage (loadPrefs)
- *   4. First instance as default
- */
-function determineInitial(): { urls: string[]; customUrl: string | null } {
-  // Fall through to the next source if nothing in one resolves for this service.
-  for (const source of [props.initialTargets, sessionPrefs.value, loadPrefs()]) {
-    if (!source?.length) continue;
-    const resolved = resolvePrefs(source);
-    if (resolved.urls.length) return resolved;
-  }
-  // Default: first primary instance (dev), falling back to instances[0]
-  const firstPrimary = props.instances.find((i) => PRIMARY_ENVS.has(i.env));
-  return { urls: [(firstPrimary ?? props.instances[0])?.url ?? ''], customUrl: null };
-}
-
-const { urls: initUrls, customUrl: initCustomUrl } = determineInitial();
-
-const selectedUrls = ref<Set<string>>(new Set(initUrls.filter(Boolean)));
-const customUrlAdded = ref<string | null>(initCustomUrl);
+const selectedUrls = ref<Set<string>>(new Set(initUrls));
+// Every selected URL that isn't a known instance gets its own row and checkbox, so
+// nothing can stay selected without a way to untick it.
+const customUrls = ref<string[]>(initUrls.filter((u) => !findInstance(props.instances, u)));
 const customUrlInput = ref('');
+const customUrlValid = computed(() => normalizeInstanceUrl(customUrlInput.value) !== null);
 const savedFlash = ref(false);
 
 /** True if any non-primary (extended) env or a custom URL is in the selection. */
 function hasExtendedSelection(urls: Set<string>): boolean {
   for (const url of urls) {
-    const inst = props.instances.find((i) => i.url === url);
+    const inst = findInstance(props.instances, url);
     if (!inst || !PRIMARY_ENVS.has(inst.env)) return true;
   }
   return false;
@@ -94,24 +64,23 @@ function hasExtendedSelection(urls: Set<string>): boolean {
 
 const showExtended = ref(hasExtendedSelection(selectedUrls.value));
 
+/** The selection as targets: env keys for known instances, URLs for custom ones. */
+function selectionTargets(): string[] {
+  return [...selectedUrls.value].map((url) => urlToTarget(props.instances, url));
+}
+
 // ─── Reactivity ──────────────────────────────────────────────────────────────
 
+/** Emit every selection to the parent v-model, the starting one included. */
+watch(selectedUrls, (urls) => emit('update:modelValue', [...urls]), { immediate: true });
+
 /**
- * On every selection change: update sessionPrefs (so both NodeNorm and NameRes
- * stay in sync within the session) and emit to the parent v-model.
- * immediate: true also emits the initial value on mount.
+ * Remember a selection the user made for the rest of this tab's session, so the next
+ * tool opened in the tab starts with the same environments. Not immediate: the
+ * starting selection may come from a share link, and merely opening a colleague's
+ * link must not replace the environments the user chose for the tab.
  */
-watch(
-  selectedUrls,
-  (urls) => {
-    const keys = [...urls].map(
-      (url) => props.instances.find((i) => i.url === url)?.env ?? url,
-    );
-    sessionPrefs.value = keys;
-    emit('update:modelValue', [...urls]);
-  },
-  { immediate: true },
-);
+watch(selectedUrls, () => rememberSelection(props.service, selectionTargets()));
 
 // ─── Computed ────────────────────────────────────────────────────────────────
 
@@ -136,16 +105,12 @@ function toggleUrl(url: string) {
 }
 
 function selectAll() {
-  const next = new Set(props.instances.map((i) => i.url));
-  if (customUrlAdded.value) next.add(customUrlAdded.value);
-  selectedUrls.value = next;
+  selectedUrls.value = new Set([...props.instances.map((i) => i.url), ...customUrls.value]);
   showExtended.value = true;
 }
 
 function selectPrimary() {
-  selectedUrls.value = new Set(
-    props.instances.filter((i) => PRIMARY_ENVS.has(i.env)).map((i) => i.url),
-  );
+  selectedUrls.value = new Set(primaryInstances.value.map((i) => i.url));
 }
 
 function selectNone() {
@@ -153,37 +118,32 @@ function selectNone() {
 }
 
 function addCustomUrl() {
-  let url = customUrlInput.value.trim();
-  if (!url) return;
-  if (!url.endsWith('/')) url += '/';
-  const next = new Set(selectedUrls.value);
-  if (customUrlAdded.value) next.delete(customUrlAdded.value);
-  customUrlAdded.value = url;
-  next.add(url);
-  selectedUrls.value = next;
+  const url = resolveTarget(props.instances, customUrlInput.value);
+  if (url === null) return;
+  // A known instance typed as a URL (with or without its trailing slash) ticks that
+  // instance rather than adding a second row for the same server.
+  if (!findInstance(props.instances, url) && !customUrls.value.includes(url)) {
+    customUrls.value = [...customUrls.value, url];
+  }
+  selectedUrls.value = new Set(selectedUrls.value).add(url);
   customUrlInput.value = '';
 }
 
-function removeCustomUrl() {
-  if (customUrlAdded.value) {
-    const next = new Set(selectedUrls.value);
-    next.delete(customUrlAdded.value);
-    selectedUrls.value = next;
-  }
-  customUrlAdded.value = null;
+function removeCustomUrl(url: string) {
+  customUrls.value = customUrls.value.filter((u) => u !== url);
+  const next = new Set(selectedUrls.value);
+  next.delete(url);
+  selectedUrls.value = next;
 }
 
 /** CI backends whose label abbreviates the backend name ("ITRB <abbr>ES</abbr> CI"). */
 const BACKEND_ABBR: Record<string, { text: string; title: string }> = {
-  es_ci:    { text: 'ES',    title: 'ElasticSearch' },
+  es_ci: { text: 'ES', title: 'ElasticSearch' },
   redis_ci: { text: 'Redis', title: 'Redis' },
 };
 
 function saveDefault() {
-  const keys = [...selectedUrls.value].map(
-    (url) => props.instances.find((i) => i.url === url)?.env ?? url,
-  );
-  savePrefs(keys);
+  savePrefs(props.service, selectionTargets());
   savedFlash.value = true;
   setTimeout(() => {
     savedFlash.value = false;
@@ -246,24 +206,24 @@ function saveDefault() {
         </label>
       </div>
 
-      <!-- Custom URL row (shown when a custom URL has been added) -->
-      <div v-if="customUrlAdded !== null" class="form-check mt-1">
+      <!-- One row per custom URL -->
+      <div v-for="(url, i) in customUrls" :key="url" class="form-check mt-1">
         <input
-          id="inst-custom"
+          :id="`inst-custom-${i}`"
           type="checkbox"
           class="form-check-input"
-          :checked="selectedUrls.has(customUrlAdded!)"
-          @change="toggleUrl(customUrlAdded!)"
+          :checked="selectedUrls.has(url)"
+          @change="toggleUrl(url)"
         />
-        <label for="inst-custom" class="form-check-label d-flex align-items-center gap-1">
+        <label :for="`inst-custom-${i}`" class="form-check-label d-flex align-items-center gap-1">
           <span>Custom:</span>
-          <span class="text-muted small text-truncate" style="max-width: 220px">{{ customUrlAdded }}</span>
+          <span class="text-muted small text-truncate" style="max-width: 220px">{{ url }}</span>
           <button
             type="button"
             class="btn-close"
             style="font-size: 0.65rem"
             aria-label="Remove custom URL"
-            @click.stop="removeCustomUrl()"
+            @click.stop="removeCustomUrl(url)"
           ></button>
         </label>
       </div>
@@ -281,7 +241,7 @@ function saveDefault() {
         <button
           type="button"
           class="btn btn-sm btn-outline-secondary"
-          :disabled="!customUrlInput.trim()"
+          :disabled="!customUrlValid"
           @click="addCustomUrl()"
         >
           Add

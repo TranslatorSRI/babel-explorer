@@ -5,10 +5,12 @@ import type { ApiOptions } from '../types';
 // We need to stub window.location before importing, so we use dynamic imports
 // inside each test group after setting up the stub.
 
-// Helper: set window.location.search + pathname via stub
-function setLocation(search: string, pathname = '/nodenorm') {
+// Helper: stub window.location. `query` starting with '#' sets the fragment, which is
+// where share links keep their state; anything else sets the query string.
+function setLocation(query: string, pathname = '/nodenorm') {
+  const [search, hash] = query.startsWith('#') ? ['', query] : [query, ''];
   Object.defineProperty(window, 'location', {
-    value: { search, pathname, href: `http://localhost${pathname}${search}` },
+    value: { search, hash, pathname, href: `http://localhost${pathname}${query}` },
     writable: true,
     configurable: true,
   });
@@ -37,6 +39,24 @@ describe('readQueryState', () => {
     const { readQueryState } = await import('../url-state');
     const state = readQueryState();
     expect(state.curies).toEqual(['MONDO:0004979', 'CHEBI:48947']);
+  });
+
+  it('reads state from the fragment, as share links write it', async () => {
+    setLocation('#curie=MONDO%3A0004979&target=dev');
+    const { readQueryState } = await import('../url-state');
+    const state = readQueryState();
+    expect(state.curies).toEqual(['MONDO:0004979']);
+    expect(state.targets).toEqual(['dev']);
+  });
+
+  it('prefers the fragment over the query string', async () => {
+    Object.defineProperty(window, 'location', {
+      value: { search: '?curie=OLD%3A1', hash: '#curie=NEW%3A1', pathname: '/nodenorm' },
+      writable: true,
+      configurable: true,
+    });
+    const { readQueryState } = await import('../url-state');
+    expect(readQueryState().curies).toEqual(['NEW:1']);
   });
 
   it('parses a single target= param', async () => {
@@ -69,6 +89,22 @@ describe('readQueryState', () => {
     expect(state.options.conflate).toBe(true);
   });
 
+  it.each([
+    ['0', false],
+    ['1', true],
+    ['FALSE', false],
+  ])('parses conflate=%s as %s', async (value, expected) => {
+    setLocation(`?conflate=${value}`);
+    const { readQueryState } = await import('../url-state');
+    expect(readQueryState().options.conflate).toBe(expected);
+  });
+
+  it('ignores an option value that is not a boolean, leaving the default', async () => {
+    setLocation('?conflate=maybe');
+    const { readQueryState } = await import('../url-state');
+    expect('conflate' in readQueryState().options).toBe(false);
+  });
+
   it('omits option keys that are absent from the URL', async () => {
     setLocation('?conflate=false');
     const { readQueryState } = await import('../url-state');
@@ -79,9 +115,9 @@ describe('readQueryState', () => {
     expect('include_taxa' in state.options).toBe(false);
   });
 
-  it('parses all option keys when present', async () => {
+  it('parses every option the form can change', async () => {
     setLocation(
-      '?conflate=false&drug_chemical_conflate=false&description=false&individual_types=false&include_taxa=false',
+      '?conflate=false&drug_chemical_conflate=false&description=false&include_taxa=false',
     );
     const { readQueryState } = await import('../url-state');
     const state = readQueryState();
@@ -89,9 +125,14 @@ describe('readQueryState', () => {
       conflate: false,
       drug_chemical_conflate: false,
       description: false,
-      individual_types: false,
       include_taxa: false,
     });
+  });
+
+  it('ignores individual_types, which the form cannot turn back on', async () => {
+    setLocation('?individual_types=false');
+    const { readQueryState } = await import('../url-state');
+    expect('individual_types' in readQueryState().options).toBe(false);
   });
 });
 
@@ -104,11 +145,17 @@ describe('buildQueryUrl', () => {
     setLocation('', '/nodenorm');
   });
 
+  it('puts the state in the fragment, not the query string', async () => {
+    const { buildQueryUrl } = await import('../url-state');
+    const url = buildQueryUrl(['MONDO:0004979'], ['dev'], DEFAULT_API_OPTIONS);
+    expect(url).toBe('/nodenorm#curie=MONDO%3A0004979&target=dev');
+  });
+
   it('produces curie= and target= params', async () => {
     setLocation('', '/nodenorm');
     const { buildQueryUrl } = await import('../url-state');
     const url = buildQueryUrl(['MONDO:0004979', 'CHEBI:48947'], ['dev'], DEFAULT_API_OPTIONS);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.getAll('curie')).toEqual(['MONDO:0004979', 'CHEBI:48947']);
     expect(params.getAll('target')).toEqual(['dev']);
   });
@@ -117,7 +164,7 @@ describe('buildQueryUrl', () => {
     setLocation('', '/nodenorm');
     const { buildQueryUrl } = await import('../url-state');
     const url = buildQueryUrl(['MONDO:0004979'], ['dev'], DEFAULT_API_OPTIONS);
-    const params = new URLSearchParams(url.split('?')[1] ?? '');
+    const params = new URLSearchParams(url.split('#')[1] ?? '');
     for (const key of ['conflate', 'drug_chemical_conflate', 'description', 'individual_types', 'include_taxa']) {
       expect(params.has(key)).toBe(false);
     }
@@ -128,7 +175,7 @@ describe('buildQueryUrl', () => {
     const { buildQueryUrl } = await import('../url-state');
     const opts: ApiOptions = { ...DEFAULT_API_OPTIONS, conflate: false };
     const url = buildQueryUrl(['MONDO:0004979'], ['dev'], opts);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.get('conflate')).toBe('false');
     // Other options are still default, so not included
     expect(params.has('drug_chemical_conflate')).toBe(false);
@@ -138,7 +185,7 @@ describe('buildQueryUrl', () => {
     setLocation('', '/nodenorm');
     const { buildQueryUrl } = await import('../url-state');
     const url = buildQueryUrl(['MONDO:0004979'], ['dev', 'prod'], DEFAULT_API_OPTIONS);
-    const params = new URLSearchParams(url.split('?')[1]);
+    const params = new URLSearchParams(url.split('#')[1]);
     expect(params.getAll('target')).toEqual(['dev', 'prod']);
   });
 
@@ -146,7 +193,7 @@ describe('buildQueryUrl', () => {
     setLocation('', '/babel-explorer/nodenorm');
     const { buildQueryUrl } = await import('../url-state');
     const url = buildQueryUrl(['MONDO:0004979'], ['dev'], DEFAULT_API_OPTIONS);
-    expect(url.startsWith('/babel-explorer/nodenorm?')).toBe(true);
+    expect(url.startsWith('/babel-explorer/nodenorm#')).toBe(true);
   });
 
   it('returns just the pathname when curies and targets are empty', async () => {
@@ -173,7 +220,7 @@ describe('round-trip', () => {
     const url = buildQueryUrl(curies, targets, opts);
 
     // Simulate opening the URL
-    const qs = url.includes('?') ? url.slice(url.indexOf('?')) : '';
+    const qs = url.includes('#') ? url.slice(url.indexOf('#')) : '';
     setLocation(qs, '/nodenorm');
 
     const state = readQueryState();
@@ -189,7 +236,7 @@ describe('round-trip', () => {
     const { buildQueryUrl, readQueryState } = await import('../url-state');
 
     const url = buildQueryUrl(['MONDO:0004979'], ['dev'], DEFAULT_API_OPTIONS);
-    const qs = url.includes('?') ? url.slice(url.indexOf('?')) : '';
+    const qs = url.includes('#') ? url.slice(url.indexOf('#')) : '';
     setLocation(qs, '/nodenorm');
 
     const state = readQueryState();

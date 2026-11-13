@@ -29,7 +29,6 @@ For very large CURIE lists (100+), consider:
 
 ### Additional Tools
 - **Test Concordance**: Compare equivalence cliques across NodeNorm instances
-- **NameRes Lookup**: Name resolution using the NameRes API (also CORS-enabled)
 - **Node Annotator**: Annotation lookup via the Node Annotator API
 
 ### Pinia Store

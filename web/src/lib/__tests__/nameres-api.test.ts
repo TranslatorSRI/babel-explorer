@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseSearchTerms, fetchNameResLookup, validateExpectedCuries } from '../nameres-api';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, LOOKUP_TIMEOUT_MS, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions, NameResResult } from '../nameres-types';
 import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
@@ -35,9 +35,31 @@ describe('parseSearchTerms', () => {
     expect(terms[1].text).toBe('diabetes');
   });
 
+  it('keeps one copy of a CURIE annotated twice on a line', () => {
+    const [term] = parseSearchTerms('asthma [[MONDO:0004979]] [[MONDO:0004979]]');
+    expect(term.expectedCuries).toEqual(['MONDO:0004979']);
+  });
+
   it('deduplicates by search text preserving first occurrence', () => {
     const terms = parseSearchTerms('asthma\ndiabetes\nasthma');
     expect(terms).toHaveLength(2);
+  });
+
+  it('keeps a repeated search text that expects different CURIEs', () => {
+    const terms = parseSearchTerms('diabetes [[MONDO:0005015]]\ndiabetes [[MONDO:0005148]]');
+    expect(terms.map((t) => t.expectedCuries)).toEqual([['MONDO:0005015'], ['MONDO:0005148']]);
+    expect(terms.map((t) => t.raw)).toEqual(['diabetes [[MONDO:0005015]]', 'diabetes [[MONDO:0005148]]']);
+  });
+
+  it('drops a repeat with the same text and the same expected CURIEs in any order', () => {
+    const terms = parseSearchTerms('x [[A:1]] [[B:2]]\nx  [[B:2]][[A:1]]');
+    expect(terms).toHaveLength(1);
+  });
+
+  it('keeps an annotated line after an unannotated one with the same text', () => {
+    const terms = parseSearchTerms('diabetes\ndiabetes [[MONDO:0005015]]');
+    expect(terms).toHaveLength(2);
+    expect(uniqueSearchTexts(terms)).toEqual(['diabetes']);
   });
 
   it('returns empty array for empty input', () => {
@@ -135,13 +157,13 @@ describe('fetchNameResLookup', () => {
     const opts: NameResApiOptions = {
       ...DEFAULT_NAMERES_OPTIONS,
       biolink_type: 'Disease',
-      only_prefixes: 'MONDO,HP',
+      only_prefixes: 'MONDO|HP',
     };
     await fetchNameResLookup('https://example.com/', 'asthma', opts);
 
     const calledUrl = new URL(mockFetch.mock.calls[0][0]);
     expect(calledUrl.searchParams.get('biolink_type')).toBe('Disease');
-    expect(calledUrl.searchParams.get('only_prefixes')).toBe('MONDO,HP');
+    expect(calledUrl.searchParams.get('only_prefixes')).toBe('MONDO|HP');
   });
 
   it('returns parsed JSON array on success', async () => {
@@ -158,6 +180,17 @@ describe('fetchNameResLookup', () => {
     expect(result).toEqual(asthmaFixture);
   });
 
+  it('throws when a 200 response is not a list of results', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ detail: 'Not Found' }),
+    }));
+
+    await expect(
+      fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS),
+    ).rejects.toThrow('something other than a list');
+  });
+
   it('throws on non-OK HTTP response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
@@ -168,6 +201,69 @@ describe('fetchNameResLookup', () => {
     await expect(
       fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS),
     ).rejects.toThrow('NameRes returned HTTP 500');
+  });
+
+  it('fails a lookup that takes longer than the timeout, leaving the caller alone', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never resolves on its own; settles only when aborted.
+      vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
+        new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      ));
+      const caller = new AbortController();
+      const result = fetchNameResLookup(
+        'https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS, caller.signal,
+      ).catch((e) => e);
+
+      await vi.advanceTimersByTimeAsync(LOOKUP_TIMEOUT_MS - 1);
+      expect(caller.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const err = await result;
+      expect(err.message).toBe(`NameRes did not answer within ${LOOKUP_TIMEOUT_MS / 1000} s`);
+      expect(caller.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out a response whose body stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => ({
+        ok: true,
+        json: () => new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      })));
+      const result = fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS)
+        .catch((e) => e);
+      await vi.advanceTimersByTimeAsync(LOOKUP_TIMEOUT_MS);
+      expect((await result).message).toContain('did not answer');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives each lookup its own deadline, not the whole batch', async () => {
+    vi.useFakeTimers();
+    try {
+      // Each lookup answers just inside the timeout, so the batch as a whole takes longer.
+      vi.stubGlobal('fetch', vi.fn(() =>
+        new Promise((resolve) => setTimeout(
+          () => resolve({ ok: true, json: () => Promise.resolve([]) }),
+          LOOKUP_TIMEOUT_MS - 1,
+        )),
+      ));
+      const texts = Array.from({ length: MAX_CONCURRENT_LOOKUPS * 3 }, (_, i) => `t${i}`);
+      const result = fetchNameResLookups('https://example.com/', texts, DEFAULT_NAMERES_OPTIONS);
+      await vi.runAllTimersAsync();
+      expect((await result).every((r) => r.status === 'fulfilled')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws AbortError when called with an already-aborted signal', async () => {
@@ -316,5 +412,55 @@ describe('NameRes API response shape', () => {
     const first = asthmaFixture[0] as NameResResult;
     expect(typeof first.clique_identifier_count).toBe('number');
     expect(first.clique_identifier_count).toBeGreaterThan(0);
+  });
+});
+
+describe('fetchNameResLookups', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it(`never has more than MAX_CONCURRENT_LOOKUPS requests in flight`, async () => {
+    let inFlight = 0;
+    let peak = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      inFlight++;
+      peak = Math.max(peak, inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+      return { ok: true, json: () => Promise.resolve([]) };
+    }));
+    const texts = Array.from({ length: 20 }, (_, i) => `t${i}`);
+    const settled = await fetchNameResLookups('https://nr.example/', texts, DEFAULT_NAMERES_OPTIONS);
+    expect(settled).toHaveLength(20);
+    expect(settled.every((r) => r.status === 'fulfilled')).toBe(true);
+    expect(peak).toBe(MAX_CONCURRENT_LOOKUPS);
+  });
+
+  it('fails only the lookup that failed, keeping results in order', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      new URL(url).searchParams.get('string') === 'bad'
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : { ok: true, json: () => Promise.resolve([{ curie: new URL(url).searchParams.get('string') }]) },
+    ));
+    const settled = await fetchNameResLookups('https://nr.example/', ['a', 'bad', 'c'], DEFAULT_NAMERES_OPTIONS);
+    expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+    expect((settled[2] as PromiseFulfilledResult<{ curie: string }[]>).value[0].curie).toBe('c');
+  });
+});
+
+describe('fetchNameResLookups — abort', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('starts no further lookups once the signal is aborted', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn(async () => {
+      controller.abort();
+      return { ok: true, json: () => Promise.resolve([]) };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const texts = Array.from({ length: 20 }, (_, i) => `t${i}`);
+    const settled = await fetchNameResLookups('https://nr.example/', texts, DEFAULT_NAMERES_OPTIONS, controller.signal);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(MAX_CONCURRENT_LOOKUPS);
+    expect(settled).toHaveLength(20);
+    expect(settled.at(-1)!.status).toBe('rejected');
   });
 });

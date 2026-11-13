@@ -1,3 +1,5 @@
+import type { Instance } from './instances';
+
 /** A single result from the NameRes /lookup endpoint. */
 export interface NameResResult {
   curie: string;
@@ -12,18 +14,17 @@ export interface NameResResult {
   highlighting?: Record<string, unknown>;
 }
 
-/** A named NameRes deployment endpoint. */
-export interface NameResInstance {
-  name: string;
-  env: string;
-  url: string;
-}
+/** A named NameRes deployment endpoint: the shared Instance shape. */
+export type NameResInstance = Instance;
 
 /** A parsed search term from the textarea, with optional expected CURIEs. */
 export interface ParsedSearchTerm {
   /** The text to send to the API (with [[...]] annotations stripped). */
   text: string;
-  /** The original line as entered by the user (for display and URL state). */
+  /**
+   * The original line as entered by the user (for display and URL state). Unique among
+   * the terms parseSearchTerms returns, so it identifies a row; text need not be.
+   */
   raw: string;
   /** Expected CURIEs extracted from [[CURIE]] annotations. */
   expectedCuries: string[];

@@ -1,3 +1,5 @@
+import type { Instance } from './instances';
+
 /** A single identifier within a NodeNorm equivalence clique. */
 export interface NormalizedIdentifier {
   identifier: string;
@@ -30,12 +32,8 @@ export interface NormalizedNode {
 /** Raw API response: keys are the input CURIEs. */
 export type NodeNormResponse = Record<string, NormalizedNode | null>;
 
-/** A named NodeNorm deployment endpoint. */
-export interface NodeNormInstance {
-  name: string;
-  env: string;
-  url: string;
-}
+/** A named NodeNorm deployment endpoint: the shared Instance shape. */
+export type NodeNormInstance = Instance;
 
 /** API query options matching NodeNorm get_normalized_nodes parameters. */
 export interface ApiOptions {
@@ -44,6 +42,13 @@ export interface ApiOptions {
   description: boolean;
   individual_types: boolean;
   include_taxa: boolean;
+}
+
+/** What NodeNormForm emits on submit: the raw textarea, the instances to query, and the options. */
+export interface NodeNormQuery {
+  curies: string;
+  instanceUrls: string[];
+  options: ApiOptions;
 }
 
 /** Default API options — all enabled. */

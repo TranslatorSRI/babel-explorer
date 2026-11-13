@@ -147,6 +147,7 @@ function onShare() {
       <div class="col-md-6">
         <label class="form-label small mb-0 fw-semibold">NameRes Instances</label>
         <InstanceSelector
+          service="nameres"
           :instances="instances"
           :model-value="selectedUrls"
           :initial-targets="initialTargets"

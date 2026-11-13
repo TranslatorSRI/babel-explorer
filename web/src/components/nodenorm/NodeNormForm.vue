@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import type { NodeNormInstance, ApiOptions } from '../../lib/types';
+import { ref } from 'vue';
+import type { NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import InstanceSelector from '../shared/InstanceSelector.vue';
+import { useShareLink } from '../../lib/use-share-link';
 
 const DEFAULT_CURIES = 'MONDO:0004979\nCHEBI:48947\nNCBIGene:1756';
 
@@ -19,41 +20,41 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { curies: string; instanceUrls: string[]; options: ApiOptions }];
+  submit: [payload: NodeNormQuery];
   stop: [];
-  share: [];
 }>();
 
 // Form state
 const curies = ref(props.initialCuries ?? DEFAULT_CURIES);
 const options = ref<ApiOptions>({ ...DEFAULT_API_OPTIONS, ...props.initialOptions });
 
-// Instance selection driven by InstanceSelector via v-model
+// Instance selection, owned by InstanceSelector through v-model. It resolves the page
+// URL's targets through lib/instances, dropping any that is not an http(s) URL;
+// NodeNormApp reports those.
 const selectedUrls = ref<string[]>([]);
 
-// Share button "Copied!" flash
-const copied = ref(false);
+// Share button: copies the page URL, then says "✓ Copied!" or "Copy failed" for a moment
+const { shareStatus, share } = useShareLink();
 
 function onSubmit() {
   if (!curies.value.trim()) return;
   if (selectedUrls.value.length === 0) return;
-  emit('submit', { curies: curies.value, instanceUrls: selectedUrls.value, options: { ...options.value } });
+  emit('submit', { curies: curies.value, instanceUrls: [...selectedUrls.value], options: { ...options.value } });
 }
 
+// Open "Advanced options" when the form starts with any of them changed, so a share
+// link's settings are visible. Decided once: binding :open to a live computed would
+// snap the section shut under the user the moment they restored the defaults.
 const ADVANCED_KEYS = ['description', 'include_taxa'] as const;
-const hasNonDefaultAdvancedOptions = computed(() =>
-  ADVANCED_KEYS.some((k) => options.value[k] !== DEFAULT_API_OPTIONS[k])
+const advancedInitiallyOpen = ADVANCED_KEYS.some(
+  (k) => options.value[k] !== DEFAULT_API_OPTIONS[k],
 );
-
-function onShare() {
-  copied.value = true;
-  setTimeout(() => { copied.value = false; }, 2000);
-  emit('share');
-}
 </script>
 
 <template>
-  <form @submit.prevent="onSubmit">
+  <!-- novalidate: the browser's own check on InstanceSelector's custom-URL box would
+       otherwise block Normalize whenever that box holds a half-typed URL. -->
+  <form novalidate @submit.prevent="onSubmit">
     <div class="mb-3">
       <label for="curies" class="form-label">CURIEs (one per line)</label>
       <textarea
@@ -69,8 +70,9 @@ function onShare() {
       <div class="col-md-6">
         <label class="form-label">NodeNorm Instances</label>
         <InstanceSelector
-          :instances="instances"
+          service="nodenorm"
           v-model="selectedUrls"
+          :instances="instances"
           :initial-targets="initialTargets"
         />
       </div>
@@ -89,7 +91,7 @@ function onShare() {
     </div>
 
     <!-- Advanced API options -->
-    <details class="mb-3" :open="hasNonDefaultAdvancedOptions">
+    <details class="mb-3" :open="advancedInitiallyOpen">
       <summary class="text-muted small" style="cursor: pointer">Advanced options</summary>
       <div class="d-flex flex-wrap gap-3 mt-2">
         <div class="form-check">
@@ -123,9 +125,9 @@ function onShare() {
         v-if="hasResults && !loading"
         type="button"
         class="btn btn-outline-secondary"
-        @click="onShare"
+        @click="share"
       >
-        {{ copied ? '✓ Copied!' : 'Share' }}
+        {{ shareStatus ?? 'Share' }}
       </button>
     </div>
   </form>

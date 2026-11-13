@@ -1,9 +1,30 @@
 import type { ApiOptions, NormalizedNode, NodeNormInstance, NodeNormResponse } from './types';
+import { MAX_REQUESTS_PER_INSTANCE } from './instances';
+
+// Keep each GET well under the ~8 KB request-line limit common to servers and proxies.
+const MAX_CURIE_PARAMS_LENGTH = 4000;
+
+// Batches in flight at once per instance (see MAX_REQUESTS_PER_INSTANCE).
+export const MAX_CONCURRENT_BATCHES = MAX_REQUESTS_PER_INSTANCE;
+
+// How long one batch may take, from request to parsed body, before its instance is
+// reported as failed. Without a deadline, an instance that never answers holds back
+// every other instance's results, since NodeNormApp waits for all of them. Generous
+// because a batch is a few hundred CURIEs and conflated cliques make large responses.
+export const BATCH_TIMEOUT_MS = 60_000;
 
 /**
  * Call the NodeNorm get_normalized_nodes endpoint.
  *
- * @param baseUrl  NodeNorm instance URL (must end with /)
+ * Long CURIE lists are split into several GET requests, since one URL carrying every
+ * CURIE can exceed server limits (HTTP 414). GET rather than POST because a JSON POST
+ * needs a CORS preflight, which a custom NodeNorm URL may not answer (every deployment
+ * in translator-endpoints.json did when checked on 2026-11-10). At most
+ * MAX_CONCURRENT_BATCHES requests are in flight at once, and the first failure aborts
+ * the rest, since their responses would be thrown away. A batch that takes longer than
+ * BATCH_TIMEOUT_MS fails this instance only; the caller's signal is left alone.
+ *
+ * @param baseUrl  NodeNorm instance URL
  * @param curies   List of CURIEs to normalize
  * @param options  API query options (conflation, descriptions, etc.)
  * @returns        Raw NodeNorm response keyed by input CURIE
@@ -14,19 +35,73 @@ export async function fetchNormalizedNodes(
   options: ApiOptions,
   signal?: AbortSignal,
 ): Promise<NodeNormResponse> {
-  const resp = await fetch(buildNodeNormUrl(baseUrl, curies, options), { signal });
-  if (!resp.ok) {
-    throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+  const batches: string[][] = [];
+  let length = Infinity;
+  for (const curie of curies) {
+    const cost = '&curie='.length + encodeURIComponent(curie).length;
+    if (length + cost > MAX_CURIE_PARAMS_LENGTH) {
+      batches.push([]);
+      length = 0;
+    }
+    batches[batches.length - 1].push(curie);
+    length += cost;
   }
-  return resp.json();
+
+  // Linked by hand rather than with AbortSignal.any, which Safari gained only in 17.4.
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+
+  const responses: NodeNormResponse[] = new Array(batches.length);
+  let next = 0;
+  // Set before the abort, so whichever batch's rejection reaches Promise.all first, the
+  // failure is reported as the timeout rather than as an anonymous AbortError.
+  let timedOut = false;
+  async function worker() {
+    while (next < batches.length) {
+      const i = next++;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, BATCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(buildNodeNormUrl(baseUrl, batches[i], options), {
+          signal: controller.signal,
+        });
+        if (!resp.ok) {
+          throw new Error(`NodeNorm returned HTTP ${resp.status}: ${resp.statusText}`);
+        }
+        responses[i] = (await resp.json()) as NodeNormResponse;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+  }
+
+  try {
+    const workers = Math.min(MAX_CONCURRENT_BATCHES, batches.length);
+    await Promise.all(Array.from({ length: workers }, worker));
+  } catch (err) {
+    controller.abort();
+    if (timedOut && !signal?.aborted) {
+      throw new Error(`NodeNorm did not answer within ${BATCH_TIMEOUT_MS / 1000} s`);
+    }
+    throw err;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
+  }
+  return Object.assign({}, ...responses);
 }
 
 /**
  * Build the NodeNorm get_normalized_nodes GET URL for the given CURIEs and options.
  * Also used to link directly to the raw API response for one CURIE.
+ * A base URL without a trailing slash is treated as a directory, so
+ * https://host/nodenorm resolves to https://host/nodenorm/get_normalized_nodes.
  */
 export function buildNodeNormUrl(baseUrl: string, curies: string[], options: ApiOptions): string {
-  const url = new URL('get_normalized_nodes', baseUrl);
+  const url = new URL('get_normalized_nodes', baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`);
   for (const curie of curies) {
     url.searchParams.append('curie', curie);
   }
@@ -76,8 +151,17 @@ export function preferredIdsDisagree(
  *
  * Falls back to [node.type[0]] if no individual types are present (e.g. if the API
  * was called without individual_types=true).
+ *
+ * Memoised per node, since ComparisonView, ResultsSummary and CurieDetailPanel each
+ * ask for the same node's types and a conflated clique can list hundreds of
+ * identifiers. That relies on nodes never being mutated: NodeNormApp replaces a
+ * response whole rather than editing it. The result is shared, hence readonly.
  */
-export function getDirectTypes(node: NormalizedNode): string[] {
+const directTypesCache = new WeakMap<NormalizedNode, readonly string[]>();
+
+export function getDirectTypes(node: NormalizedNode): readonly string[] {
+  const cached = directTypesCache.get(node);
+  if (cached) return cached;
   const seen = new Set<string>();
   const result: string[] = [];
   for (const id of node.equivalent_identifiers) {
@@ -86,7 +170,9 @@ export function getDirectTypes(node: NormalizedNode): string[] {
       result.push(id.type);
     }
   }
-  return result.length > 0 ? result : node.type.slice(0, 1);
+  const types = result.length > 0 ? result : node.type.slice(0, 1);
+  directTypesCache.set(node, types);
+  return types;
 }
 
 /**

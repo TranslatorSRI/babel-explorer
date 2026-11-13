@@ -1,7 +1,8 @@
 import type { NameResApiOptions } from './nameres-types';
 import { DEFAULT_NAMERES_OPTIONS } from './nameres-types';
+import { isValidResultCount } from './nameres-api';
 
-/** Parsed state from URL query parameters for NameRes. */
+/** Parsed state from the URL fragment (or, for older links, the query string) for NameRes. */
 export interface NameResQueryState {
   /** Raw search term lines (with [[CURIE]] annotations preserved). */
   terms: string[];
@@ -21,26 +22,35 @@ const STRING_OPTION_KEYS: (keyof NameResApiOptions)[] = [
 ];
 
 /**
- * Read the current URL's query params and return the encoded NameRes query state.
+ * Read the NameRes query state from the current URL.
+ *
+ * Share links keep it in the fragment (#term=…), which browsers never send to the
+ * server, so a long list of annotated terms cannot hit a server's URL length limit (the
+ * same reason NodeNorm's url-state.ts moved there). Links that put it in the query
+ * string are read when there is no fragment.
  */
 export function readNameResQueryState(): NameResQueryState {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
 
   const terms = params.getAll('term');
   const targets = params.getAll('target');
 
   const options: Partial<NameResApiOptions> = {};
 
+  // A limit or threshold the form would refuse (0, negative, over the maximum) is
+  // ignored, falling back to the default, rather than sent to NameRes.
   const limitVal = params.get('limit');
   if (limitVal !== null) {
-    const parsed = parseInt(limitVal, 10);
-    if (!isNaN(parsed)) options.limit = parsed;
+    const parsed = Number(limitVal);
+    if (isValidResultCount(parsed)) options.limit = parsed;
   }
 
+  // Only the values buildNameResQueryUrl writes, plus 1 and 0. Anything else (an empty
+  // value, "no") is ignored like an unusable limit, rather than read as true, which
+  // turned autocomplete=0 on.
   const autoVal = params.get('autocomplete');
-  if (autoVal !== null) {
-    options.autocomplete = autoVal !== 'false';
-  }
+  if (autoVal === 'true' || autoVal === '1') options.autocomplete = true;
+  else if (autoVal === 'false' || autoVal === '0') options.autocomplete = false;
 
   for (const key of STRING_OPTION_KEYS) {
     const val = params.get(key);
@@ -49,18 +59,22 @@ export function readNameResQueryState(): NameResQueryState {
     }
   }
 
+  // A threshold above the limit asks about ranks that were never fetched, so the form
+  // refuses it too.
   let threshold: number | undefined;
   const threshVal = params.get('threshold');
   if (threshVal !== null) {
-    const parsed = parseInt(threshVal, 10);
-    if (!isNaN(parsed)) threshold = parsed;
+    const parsed = Number(threshVal);
+    const limit = options.limit ?? DEFAULT_NAMERES_OPTIONS.limit;
+    if (isValidResultCount(parsed) && parsed <= limit) threshold = parsed;
   }
 
   return { terms, targets, options, threshold };
 }
 
 /**
- * Build a shareable relative URL for the current NameRes query.
+ * Build a shareable relative URL for the current NameRes query, with the state in the
+ * fragment (see readNameResQueryState).
  *
  * Only includes options that differ from DEFAULT_NAMERES_OPTIONS.
  */
@@ -97,5 +111,5 @@ export function buildNameResQueryUrl(
   }
 
   const qs = params.toString();
-  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  return qs ? `${window.location.pathname}#${qs}` : window.location.pathname;
 }

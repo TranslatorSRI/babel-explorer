@@ -29,6 +29,35 @@ const defaultProps = {
 };
 
 describe('ComparisonView', () => {
+  it('shows "Request failed", not "Not found", for an instance that did not answer', async () => {
+    const custom: NodeNormInstance = { name: 'not a url', env: 'not a url', url: 'not a url' };
+    const wrapper = mount(ComparisonView, {
+      props: {
+        ...defaultProps,
+        queriedInstances: [devInstance, custom],
+        resultsByInstance: new Map([[devInstance.url, { 'MONDO:0004979': mondoFixture['MONDO:0004979'] }]]),
+      },
+    });
+    expect(wrapper.text()).toContain('Request failed');
+    expect(wrapper.text()).not.toContain('Not found');
+    // Expanding the row must not throw on the malformed URL.
+    await wrapper.find('tbody tr').trigger('click');
+    expect(wrapper.text()).toContain('The request to this instance failed.');
+  });
+
+  it('links each instance in an expanded row to its raw API response', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    expect(wrapper.find('a[title="Open raw API response"]').exists()).toBe(false);
+    await wrapper.find('tbody tr').trigger('click');
+    const hrefs = wrapper.findAll('a[title="Open raw API response"]').map((a) => a.attributes('href'));
+    expect(hrefs).toEqual([
+      'https://dev.example.com/get_normalized_nodes?curie=MONDO%3A0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true',
+      'https://prod.example.com/get_normalized_nodes?curie=MONDO%3A0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true',
+    ]);
+  });
+
   it('renders instance names as column headers', () => {
     const wrapper = mount(ComparisonView, {
       props: { ...defaultProps, resultsByInstance: agreeResults },
@@ -235,5 +264,18 @@ describe('ComparisonView — type filtering', () => {
 
     await wrapper.setProps({ typeFilter: new Set<string>() });
     expect(wrapper.text()).toContain('MONDO:0004979');
+  });
+});
+
+describe('ComparisonView — keyboard access', () => {
+  it('expands a row from its toggle button and reports the expanded state', async () => {
+    const wrapper = mount(ComparisonView, {
+      props: { ...defaultProps, resultsByInstance: agreeResults },
+    });
+    const toggle = wrapper.find('button[aria-label="Details for MONDO:0004979"]');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    await toggle.trigger('click');
+    expect(toggle.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.findAll('tbody tr')).toHaveLength(2); // summary + detail, not toggled twice
   });
 });
