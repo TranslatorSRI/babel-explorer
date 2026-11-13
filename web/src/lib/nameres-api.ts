@@ -101,7 +101,14 @@ export async function fetchNameResLookup(
   if (!resp.ok) {
     throw new Error(`NameRes returned HTTP ${resp.status}: ${resp.statusText}`);
   }
-  return resp.json();
+  // A 200 that is not a list (an error object from a custom server, a proxy's page)
+  // would otherwise be stored as this term's results and crash the views that index
+  // into it; as a failed lookup it fails only its own cell.
+  const body: unknown = await resp.json();
+  if (!Array.isArray(body)) {
+    throw new Error('NameRes returned something other than a list of results');
+  }
+  return body as NameResResult[];
 }
 
 /**

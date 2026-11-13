@@ -180,6 +180,17 @@ describe('fetchNameResLookup', () => {
     expect(result).toEqual(asthmaFixture);
   });
 
+  it('throws when a 200 response is not a list of results', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ detail: 'Not Found' }),
+    }));
+
+    await expect(
+      fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS),
+    ).rejects.toThrow('something other than a list');
+  });
+
   it('throws on non-OK HTTP response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false,
