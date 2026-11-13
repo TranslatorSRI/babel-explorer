@@ -89,15 +89,21 @@ function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus | null {
   return worst;
 }
 
-const successCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'success').length,
-);
-const partialCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'partial').length,
-);
-const failureCount = computed(() =>
-  annotatedTerms.value.filter((t) => worstStatus(t) === 'failure').length,
-);
+/**
+ * Annotated terms by worst status, in one pass. `unchecked` is a term every lookup for
+ * which failed: it is neither a pass nor a fail, but leaving it out of every count
+ * would make the counts not add up to "N annotated terms", and hide that it went
+ * unchecked.
+ */
+const statusCounts = computed(() => {
+  const counts = { success: 0, partial: 0, failure: 0, unchecked: 0 };
+  for (const t of annotatedTerms.value) {
+    const status = worstStatus(t);
+    if (status === 'success' || status === 'partial' || status === 'failure') counts[status]++;
+    else counts.unchecked++;
+  }
+  return counts;
+});
 
 // ── Display helpers ──────────────────────────────────────────────────────────
 
@@ -155,16 +161,20 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div class="text-muted small mb-1">Expected CURIEs</div>
         <div class="d-flex gap-3">
           <div>
-            <span class="badge bg-success">{{ successCount }}</span>
+            <span class="badge bg-success">{{ statusCounts.success }}</span>
             <span class="small text-muted ms-1">pass</span>
           </div>
-          <div v-if="partialCount > 0">
-            <span class="badge bg-warning text-dark">{{ partialCount }}</span>
+          <div v-if="statusCounts.partial > 0">
+            <span class="badge bg-warning text-dark">{{ statusCounts.partial }}</span>
             <span class="small text-muted ms-1">partial</span>
           </div>
-          <div v-if="failureCount > 0">
-            <span class="badge bg-danger">{{ failureCount }}</span>
+          <div v-if="statusCounts.failure > 0">
+            <span class="badge bg-danger">{{ statusCounts.failure }}</span>
             <span class="small text-muted ms-1">fail</span>
+          </div>
+          <div v-if="statusCounts.unchecked > 0" title="Every lookup for these terms failed">
+            <span class="badge bg-secondary">{{ statusCounts.unchecked }}</span>
+            <span class="small text-muted ms-1">not checked</span>
           </div>
         </div>
         <div class="text-muted small mt-1">

@@ -61,6 +61,15 @@ describe('NameResResultsSummary — failed lookups', () => {
     expect(wrapper.find('.badge.bg-danger').exists()).toBe(false); // no "fail" count
   });
 
+  it('counts an annotated term that no instance answered as not checked', () => {
+    const text = mount(NameResResultsSummary, {
+      props: { ...props, terms: [...terms, term('unanswered', ['MONDO:2'])] },
+    }).text();
+    expect(text).toMatch(/1\s*pass/);
+    expect(text).toMatch(/1\s*not checked/);
+    expect(text).toContain('2 annotated terms');
+  });
+
   it('does not count a failed lookup as a disagreement', () => {
     const text = mount(NameResResultsSummary, { props }).text();
     expect(text).toContain('All instances agree on #1');
