@@ -82,6 +82,10 @@ deployed to `gh-pages` from another branch disappears at the next deploy from `m
 Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
 together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
+The workflow finishing does not mean the site has changed: Pages publishes `gh-pages` in its own
+`pages-build-deployment` run afterwards. Each build carries its commit in `commit.txt`, so
+`curl https://translatorsri.github.io/babel-explorer/commit.txt` says which commit is live.
+
 ## Shared Configuration
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.

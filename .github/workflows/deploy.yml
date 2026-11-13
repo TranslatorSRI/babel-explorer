@@ -41,6 +41,11 @@ jobs:
         run: npm run build
         working-directory: web
 
+      # Lets anyone, and live-check.yml, tell which commit is actually being served:
+      # this workflow finishes when gh-pages is pushed, before Pages has published it.
+      - name: Stamp the build with its commit
+        run: echo "$GITHUB_SHA" > web/dist/commit.txt
+
       - name: Deploy to gh-pages
         uses: peaceiris/actions-gh-pages@v4
         with:
