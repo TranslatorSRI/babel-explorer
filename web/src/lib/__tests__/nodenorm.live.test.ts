@@ -52,12 +52,12 @@ describe.each(liveInstances('nodenorm'))('$name', (instance) => {
     for (const d of node.descriptions!) expect(typeof d).toBe('string');
   });
 
-  // KNOWN GAP: the equivalent-identifier table's Taxa column reads `taxa` on each
-  // identifier, as Redis-backed NodeNorm returned it. NodeNorm-ES ignores include_taxa
-  // and returns taxa only on the node (src/nodenorm/handlers/normalized_nodes.py), so
-  // that column is empty on every ElasticSearch deployment. it.fails keeps this green
-  // while the gap lasts and turns it red once per-identifier taxa return: then make it
-  // a plain `it`.
+  // KNOWN GAP, tracked in #43: the equivalent-identifier table's Taxa column reads
+  // `taxa` on each identifier, as Redis-backed NodeNorm returned it. NodeNorm-ES ignores
+  // include_taxa and returns taxa only on the node (src/nodenorm/handlers/
+  // normalized_nodes.py), so that column is empty on every ElasticSearch deployment.
+  // it.fails keeps this green while the gap lasts and turns it red once per-identifier
+  // taxa return: then make it a plain `it` and close #43.
   it.fails('puts taxa on a gene\'s equivalent identifiers (include_taxa)', async () => {
     const gene = (await batch())['NCBIGene:1756']!;
     expect(gene.equivalent_identifiers.some((eq) => (eq.taxa ?? []).length > 0)).toBe(true);
