@@ -50,6 +50,17 @@ describe('NameResComparisonView — failed lookups', () => {
   });
 });
 
+describe('NameResComparisonView — expanding a row', () => {
+  it('has a button that expands the row once and reports it', async () => {
+    const wrapper = mount(NameResComparisonView, { props });
+    const button = wrapper.find('tbody tr button[aria-expanded]');
+    expect(button.attributes('aria-expanded')).toBe('false');
+    await button.trigger('click');
+    expect(button.attributes('aria-expanded')).toBe('true');
+    expect(wrapper.text()).toContain('The lookup on this instance failed.');
+  });
+});
+
 describe('NameResResultsSummary — failed lookups', () => {
   it('counts terms by the instances that answered, and reports failures separately', () => {
     const wrapper = mount(NameResResultsSummary, { props });

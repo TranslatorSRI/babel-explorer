@@ -117,13 +117,20 @@ const rowClasses = computed(() => {
           @click="toggleRow(term.raw)"
         >
           <td class="text-center">
-            <span
+            <!-- The row is clickable too; this button is the keyboard and screen-reader way in. -->
+            <button
+              type="button"
+              class="btn btn-link btn-sm p-0 text-reset text-decoration-none"
+              :aria-expanded="expandedTerms.has(term.raw)"
+              :aria-label="`Ranked results for ${term.text}`"
+              @click.stop="toggleRow(term.raw)"
+            ><span
               :style="{
                 display: 'inline-block',
                 transform: expandedTerms.has(term.raw) ? 'rotate(90deg)' : '',
                 transition: 'transform 0.15s',
               }"
-            >›</span>
+            >›</span></button>
           </td>
           <td>
             <strong>{{ term.text }}</strong>
