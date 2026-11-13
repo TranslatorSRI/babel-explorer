@@ -249,6 +249,23 @@ describe('AutocompleteApp', () => {
     expect(wrapper.text()).not.toContain('&#x27;');
   });
 
+  it('renders highlighted labels in the comparison view too', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([
+      { ...mkResult('MONDO:0005011', "Crohn's colitis"), highlighting: { labels: ['<strong>Crohn&#x27;s</strong> colitis'], synonyms: [] } },
+    ]);
+    setLocation('#q=crohn&target=dev&target=prod');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Comparison —');
+    const marks = wrapper.findAll('tbody mark');
+    expect(marks).toHaveLength(2);
+    for (const m of marks) expect(m.text()).toBe("Crohn's");
+    expect(wrapper.text()).not.toContain('<strong>');
+  });
+
   it('leaves highlighting out of the request once the toggle is off', async () => {
     setLocation('#q=crohn&target=dev&highlight=false');
     mount(AutocompleteApp);
