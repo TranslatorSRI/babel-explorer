@@ -60,6 +60,30 @@ describe('AutocompleteForm', () => {
     expect((input.element as HTMLInputElement).value).toBe(String(DEFAULT_AUTOCOMPLETE_OPTIONS.limit));
   });
 
+  it('opens Advanced options for a link that sets one of them', () => {
+    const props = makeProps();
+    const wrapper = mount(AutocompleteForm, {
+      props: { ...props, options: { ...props.options, exclude_prefixes: 'UMLS' } },
+    });
+    expect((wrapper.find('#ac-advanced').element as HTMLDetailsElement).open).toBe(true);
+    expect((mount(AutocompleteForm, { props: makeProps() }).find('#ac-advanced').element as HTMLDetailsElement).open).toBe(false);
+  });
+
+  it('keeps Advanced options open when its fields go back to their defaults', async () => {
+    const props = makeProps();
+    const wrapper = mount(AutocompleteForm, { props });
+    const details = wrapper.find('#ac-advanced');
+    (details.element as HTMLDetailsElement).open = true;
+    await details.trigger('toggle');
+
+    await wrapper.setProps({ options: { ...props.options, exclude_prefixes: 'UMLS' } });
+    await wrapper.setProps({ options: { ...props.options, exclude_prefixes: '' } });
+    await wrapper.setProps({ highlight: false });
+    await wrapper.setProps({ highlight: true });
+
+    expect((details.element as HTMLDetailsElement).open).toBe(true);
+  });
+
   it('preset change emits update:options with preset-implied biolink_type + only_prefixes', async () => {
     const wrapper = mount(AutocompleteForm, { props: makeProps() });
     await wrapper.find('#ac-preset').setValue('gene');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { MAX_RESULT_COUNT } from '../../lib/nameres-api';
 import InstanceSelector from '../shared/InstanceSelector.vue';
@@ -13,6 +13,7 @@ import type { AutocompletePresetId } from '../../lib/autocomplete-presets';
 import {
   ALLOWED_DEBOUNCE_MS,
   DEFAULT_AUTOCOMPLETE_OPTIONS,
+  DEFAULT_DEBOUNCE_MS,
 } from '../../lib/autocomplete-url-state';
 import type { DebounceMs } from '../../lib/autocomplete-url-state';
 import type { InstanceState } from '../../lib/autocomplete-state';
@@ -104,14 +105,23 @@ watch(
   },
 );
 
-const hasNonDefaultAdvancedApi = computed(
-  () =>
+function hasNonDefaultAdvancedOptions(): boolean {
+  return (
     props.options.exclude_prefixes !== DEFAULT_AUTOCOMPLETE_OPTIONS.exclude_prefixes ||
     props.options.only_taxa !== DEFAULT_AUTOCOMPLETE_OPTIONS.only_taxa ||
     props.options.autocomplete !== DEFAULT_AUTOCOMPLETE_OPTIONS.autocomplete ||
-    props.debounceMs !== 150 ||
-    !props.highlight,
-);
+    props.debounceMs !== DEFAULT_DEBOUNCE_MS ||
+    !props.highlight
+  );
+}
+
+/**
+ * Whether "Advanced options" is open. It starts open when a link sets one of them, so
+ * the setting is not hidden; after that only the user opens or closes it. It was once
+ * bound to that check directly, and so snapped shut under the user's cursor as soon as
+ * a field inside it went back to its default.
+ */
+const advancedOpen = ref(hasNonDefaultAdvancedOptions());
 
 // Copy page URL as "Share" button feedback.
 function onShare() {
@@ -224,7 +234,12 @@ function onShare() {
     </div>
 
     <!-- Advanced options -->
-    <details class="mb-3" :open="hasNonDefaultAdvancedApi">
+    <details
+      id="ac-advanced"
+      class="mb-3"
+      :open="advancedOpen"
+      @toggle="advancedOpen = ($event.target as HTMLDetailsElement).open"
+    >
       <summary class="text-muted small" style="cursor: pointer">Advanced options</summary>
       <div class="d-flex flex-wrap gap-3 mt-2 align-items-end">
         <div>
