@@ -35,9 +35,9 @@ Purpose-built for evaluating NameRes as a real autocomplete (the primary way the
 
 - **Live-as-you-type**: every keystroke re-queries after a configurable debounce (0/150/300/500 ms); in-flight requests are aborted via `AbortController` so stale responses never render
 - **Preset dropdown**: one-click switches between the three Translator UI query shapes — Disease (`DiseaseOrPhenotypicFeature` + `only_prefixes=MONDO|HP`), Gene, Small Molecule — plus Custom. Presets only set `biolink_type` and `only_prefixes`; every other field stays user-editable
-- **Advanced options**: debounce, autocomplete flag, highlighting toggle, exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
+- **Advanced options**: debounce, autocomplete flag, highlighting toggle (sends `highlighting=true`; off leaves it out, so the latency badges time a plain request), exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
 - **Latency badges**: per-instance response time, with a tooltip noting parallel-contention when comparing multiple environments
-- **Match-reason highlighting**: renders NameRes's Solr `highlighting` fragments (`<em>`-wrapped matches) behind a whitelist sanitiser — the only place `v-html` is used in the codebase
+- **Match-reason highlighting**: renders NameRes's `highlighting` fragments — HTML-encoded Solr output with each match in `<strong>` — as `<mark>`, escaping everything else; the only place `v-html` is used in the codebase. NameRes returns them only when asked (`highlighting=true`), and an empty `{}` otherwise
 - **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches; each column header has an `API↗` link to the raw NameRes JSON for that instance
 - **Biolink type display**: the left-hand CURIE column shows the most specific Biolink type as a badge (linked to biolink.github.io/biolink-model); when instances disagree, all distinct types are shown and the type is repeated per-cell for easy comparison
 - **Expected-CURIE panel**: paste CURIEs you expect to see; "Check" button fires a `limit=100` parallel lookup per instance and shows whether each expected CURIE appears in the top-N (green), top-100 (amber) or is missing (red). Round-trips through URL state for shareable review links
@@ -139,7 +139,7 @@ src/
     autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom presets + detectPreset
     autocomplete-diff.ts            # Presence/rank/label/type diffs across instances
     debounce.ts                     # debounce(fn, ms) with .cancel()
-    highlight-sanitize.ts           # Whitelist sanitiser for Solr highlighting (<em> only)
+    highlight-sanitize.ts           # Renders NameRes highlighting fragments (<strong> marks → <mark>, all else escaped)
 ```
 
 ## Adding a New Tool

@@ -75,22 +75,10 @@ export function uniqueSearchTexts(terms: ParsedSearchTerm[]): string[] {
 export const LOOKUP_TIMEOUT_MS = 60_000;
 
 /**
- * Call the NameRes /lookup endpoint for a single search term.
- *
- * A lookup that takes longer than LOOKUP_TIMEOUT_MS fails on its own; the caller's
- * signal is left alone, so the other lookups carry on.
- * @param baseUrl  NameRes instance URL (must end with /)
- * @param text     Search string
- * @param options  API query options
- * @param signal   Optional AbortSignal for cancellation
- * @returns        Array of ranked results
+ * The NameRes /lookup URL for one search term. Used both to fetch and to show the user
+ * the request that was made, so the two cannot disagree about a parameter.
  */
-export async function fetchNameResLookup(
-  baseUrl: string,
-  text: string,
-  options: NameResApiOptions,
-  signal?: AbortSignal,
-): Promise<NameResResult[]> {
+export function buildLookupUrl(baseUrl: string, text: string, options: NameResApiOptions): URL {
   const url = new URL('lookup', baseUrl);
   url.searchParams.set('string', text);
   url.searchParams.set('limit', String(options.limit));
@@ -108,6 +96,31 @@ export async function fetchNameResLookup(
   if (options.only_taxa) {
     url.searchParams.set('only_taxa', options.only_taxa);
   }
+  // NameRes defaults to false, and then returns `highlighting: {}` on every result.
+  if (options.highlighting) {
+    url.searchParams.set('highlighting', 'true');
+  }
+  return url;
+}
+
+/**
+ * Call the NameRes /lookup endpoint for a single search term.
+ *
+ * A lookup that takes longer than LOOKUP_TIMEOUT_MS fails on its own; the caller's
+ * signal is left alone, so the other lookups carry on.
+ * @param baseUrl  NameRes instance URL (must end with /)
+ * @param text     Search string
+ * @param options  API query options
+ * @param signal   Optional AbortSignal for cancellation
+ * @returns        Array of ranked results
+ */
+export async function fetchNameResLookup(
+  baseUrl: string,
+  text: string,
+  options: NameResApiOptions,
+  signal?: AbortSignal,
+): Promise<NameResResult[]> {
+  const url = buildLookupUrl(baseUrl, text, options);
 
   // Linked by hand rather than with AbortSignal.any, which Safari gained only in 17.4.
   const controller = new AbortController();

@@ -1,70 +1,93 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeHighlight, stripHighlightTags, escapeHtml } from '../highlight-sanitize';
+import {
+  decodeEntities,
+  escapeHtml,
+  highlightEntries,
+  labelFragment,
+  renderHighlight,
+} from '../highlight-sanitize';
+import type { NameResResult } from '../nameres-types';
+import crohnFixture from '../../../../tests/fixtures/nameres_responses/crohn_highlighting.json';
+import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
 
-describe('sanitizeHighlight', () => {
-  it('preserves bare <em> and </em>', () => {
-    expect(sanitizeHighlight('<em>dia</em>betes')).toBe('<em>dia</em>betes');
+const crohn = crohnFixture as NameResResult[];
+
+describe('renderHighlight', () => {
+  it("turns NameRes's <strong> marks into <mark>", () => {
+    expect(renderHighlight('<strong>dia</strong>betes')).toBe('<mark>dia</mark>betes');
   });
 
-  it('preserves multiple em pairs', () => {
-    expect(sanitizeHighlight('<em>a</em> and <em>b</em>')).toBe('<em>a</em> and <em>b</em>');
+  it('accepts <em> marks too', () => {
+    expect(renderHighlight('<em>a</em> and <em>b</em>')).toBe('<mark>a</mark> and <mark>b</mark>');
   });
 
-  it('escapes <script> and its content', () => {
-    const out = sanitizeHighlight('<em>hi</em><script>alert(1)</script>');
-    expect(out).toContain('<em>hi</em>');
-    expect(out).not.toContain('<script>');
-    expect(out).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  it('decodes the entities Solr encodes, so they are not shown literally', () => {
+    expect(renderHighlight('<strong>Crohn&#x27;s</strong> colitis')).toBe(
+      '<mark>Crohn&#39;s</mark> colitis',
+    );
+    expect(renderHighlight('A &amp; B')).toBe('A &amp; B');
   });
 
-  it('escapes attributes on <em> (<em onclick=...> becomes inert)', () => {
-    const out = sanitizeHighlight('<em onclick="alert(1)">x</em>');
-    // The `<em>` with attributes should NOT survive as a tag.
-    expect(out).not.toContain('<em onclick');
-    expect(out).toContain('&lt;em onclick=');
-    // The closing </em> is a bare tag, so it'll pass through — that's fine
-    // because a stray </em> with no opener has no effect in the DOM.
-    expect(out).toContain('</em>');
+  it('drops the marks when highlighting is off', () => {
+    expect(renderHighlight('<strong>Crohn&#x27;s</strong> colitis', false)).toBe('Crohn&#39;s colitis');
   });
 
-  it('escapes <img> and other tags', () => {
-    const out = sanitizeHighlight('<img src=x onerror=y>');
-    expect(out).not.toContain('<img');
-    expect(out).toContain('&lt;img');
+  it('keeps an encoded <script> inert', () => {
+    const out = renderHighlight('<strong>hi</strong>&lt;script&gt;alert(1)&lt;/script&gt;');
+    expect(out).toBe('<mark>hi</mark>&lt;script&gt;alert(1)&lt;/script&gt;');
   });
 
-  it('escapes quotes', () => {
-    expect(sanitizeHighlight(`"hello"`)).toContain('&quot;');
-    expect(sanitizeHighlight(`'world'`)).toContain('&#39;');
+  it('escapes raw tags other than bare marks, attributes included', () => {
+    expect(renderHighlight('<img src=x onerror=y>')).toBe('&lt;img src=x onerror=y&gt;');
+    expect(renderHighlight('<strong onclick="alert(1)">x</strong>')).toBe(
+      '&lt;strong onclick=&quot;alert(1)&quot;&gt;x',
+    );
   });
 
-  it('handles unterminated tags', () => {
-    const out = sanitizeHighlight('<em>oops');
-    expect(out).toBe('<em>oops');
-  });
-
-  it('escapes ampersands', () => {
-    expect(sanitizeHighlight('a & b')).toBe('a &amp; b');
+  it('keeps marks balanced', () => {
+    expect(renderHighlight('<strong>oops')).toBe('<mark>oops</mark>');
+    expect(renderHighlight('stray</strong> close')).toBe('stray close');
+    expect(renderHighlight('<strong><strong>x</strong>')).toBe('<mark>x</mark>');
   });
 
   it('returns empty string for empty input', () => {
-    expect(sanitizeHighlight('')).toBe('');
+    expect(renderHighlight('')).toBe('');
   });
 });
 
-describe('stripHighlightTags', () => {
-  it('strips <em> and </em>', () => {
-    expect(stripHighlightTags('<em>dia</em>betes')).toBe('diabetes');
+describe('decodeEntities', () => {
+  it('decodes named, decimal and hex entities', () => {
+    expect(decodeEntities('&lt;&gt;&amp;&quot;&#39;&#x27;&#x2F;')).toBe('<>&"\'\'/');
   });
 
-  it('leaves other content alone', () => {
-    expect(stripHighlightTags('plain text')).toBe('plain text');
+  it('leaves unknown or out-of-range entities alone', () => {
+    expect(decodeEntities('&bogus; &#x110000;')).toBe('&bogus; &#x110000;');
+  });
+});
+
+describe('labelFragment', () => {
+  it("uses NameRes's highlighted label when the lookup asked for one", () => {
+    const colitis = crohn.find((r) => r.label === "Crohn's colitis")!;
+    expect(renderHighlight(labelFragment(colitis))).toBe('<mark>Crohn&#39;s</mark> colitis');
   });
 
-  it('escapes any other markup, since the result goes to v-html', () => {
-    expect(stripHighlightTags('<em>a</em><img src=x onerror=alert(1)>')).toBe(
-      'a&lt;img src=x onerror=alert(1)&gt;',
-    );
+  it('falls back to the plain label, encoded so it renders as typed', () => {
+    const plain = (asthmaFixture as NameResResult[])[0];
+    expect(plain.highlighting).toEqual({});
+    expect(renderHighlight(labelFragment(plain))).toBe(escapeHtml(plain.label));
+    expect(renderHighlight(labelFragment({ ...plain, label: 'A <b> & C' }))).toBe('A &lt;b&gt; &amp; C');
+  });
+});
+
+describe('highlightEntries', () => {
+  it('groups the recorded fragments by field', () => {
+    const entries = highlightEntries(crohn[0]);
+    expect(entries.map((e) => e.field)).toEqual(['labels', 'synonyms']);
+    expect(entries[0].fragments[0]).toContain('<strong>Crohn</strong>');
+  });
+
+  it('is empty when NameRes returned no highlighting', () => {
+    expect(highlightEntries((asthmaFixture as NameResResult[])[0])).toEqual([]);
   });
 });
 

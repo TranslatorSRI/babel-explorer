@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
+import type { NameResInstance } from '../../lib/nameres-types';
+import { highlightEntries, labelFragment } from '../../lib/highlight-sanitize';
 import type { InstanceState } from '../../lib/autocomplete-state';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
@@ -36,18 +37,6 @@ function curieApiUrl(curie: string): string {
   }
 }
 
-// Group highlighting fragments for display.
-function highlightEntries(r: NameResResult): { field: string; fragments: string[] }[] {
-  if (!r.highlighting) return [];
-  const out: { field: string; fragments: string[] }[] = [];
-  for (const [field, value] of Object.entries(r.highlighting)) {
-    if (Array.isArray(value) && value.every((v) => typeof v === 'string')) {
-      out.push({ field, fragments: value as string[] });
-    }
-  }
-  return out;
-}
-
 const hasResults = computed(() => props.state.results.length > 0);
 </script>
 
@@ -79,7 +68,7 @@ const hasResults = computed(() => props.state.results.length > 0);
           <tr>
             <th style="width: 3rem">#</th>
             <th>Label</th>
-            <th>Matched on</th>
+            <th v-if="highlight">Matched on</th>
             <th>CURIE</th>
             <th>Types</th>
             <th>Clique</th>
@@ -91,9 +80,9 @@ const hasResults = computed(() => props.state.results.length > 0);
           <tr v-for="(r, idx) in state.results" :key="r.curie + idx">
             <td class="text-muted">{{ idx + 1 }}</td>
             <td>
-              <HighlightedFragment :fragment="r.label" :highlight="highlight" />
+              <HighlightedFragment :fragment="labelFragment(r)" :highlight="highlight" />
             </td>
-            <td>
+            <td v-if="highlight">
               <div v-for="entry in highlightEntries(r)" :key="entry.field" class="small">
                 <span class="text-muted">{{ entry.field }}:</span>
                 <HighlightedFragment

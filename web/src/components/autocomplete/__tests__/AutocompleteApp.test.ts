@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import type { NameResResult } from '../../../lib/nameres-types';
 
-// Mock the network layer before any component import.
-vi.mock('../../../lib/nameres-api', () => ({
-  parseSearchTerms: vi.fn(),
+// Mock the network layer before any component import. Everything else in the module
+// (buildLookupUrl, MAX_RESULT_COUNT, isValidResultCount) stays real.
+vi.mock('../../../lib/nameres-api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../lib/nameres-api')>()),
   fetchNameResLookup: vi.fn(),
-  validateExpectedCuries: vi.fn(),
 }));
 vi.mock('../../../lib/curie-links', () => ({
   getCurieUrl: vi.fn(() => null),
@@ -190,6 +190,32 @@ describe('AutocompleteApp', () => {
     expect(nameresApi.fetchNameResLookup).toHaveBeenCalled();
     const opts = vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][2];
     expect(opts.limit).toBe(100);
+  });
+
+  it('asks NameRes for highlighting and renders its <strong> marks', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([
+      { ...mkResult('MONDO:0005011', "Crohn's colitis"), highlighting: { labels: ['<strong>Crohn&#x27;s</strong> colitis'], synonyms: [] } },
+    ]);
+    setLocation('?q=crohn&target=dev');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][2].highlighting).toBe(true);
+    expect(wrapper.find('mark').text()).toBe("Crohn's");
+    expect(wrapper.text()).not.toContain('<strong>');
+    expect(wrapper.text()).not.toContain('&#x27;');
+  });
+
+  it('leaves highlighting out of the request once the toggle is off', async () => {
+    setLocation('?q=crohn&target=dev&highlight=false');
+    mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][2].highlighting).toBe(false);
   });
 
   it('renders the single-instance Results view when only one instance is selected', async () => {

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
 import { computeInstanceDiffs } from '../../lib/autocomplete-diff';
 import type { InstanceState } from '../../lib/autocomplete-state';
+import { labelFragment } from '../../lib/highlight-sanitize';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
 import CurieLink from '../shared/CurieLink.vue';
@@ -156,7 +157,7 @@ function uniqueLabelsForCurie(curie: string): string[] {
                 </div>
                 <div class="small">
                   <HighlightedFragment
-                    :fragment="resultFor(inst.url, curie)!.label"
+                    :fragment="labelFragment(resultFor(inst.url, curie)!)"
                     :highlight="highlight"
                   />
                 </div>

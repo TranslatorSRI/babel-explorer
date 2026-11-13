@@ -1,0 +1,299 @@
+[
+  {
+    "curie": "MONDO:0000709",
+    "label": "Crohn ileitis",
+    "highlighting": {
+      "labels": [
+        "<strong>Crohn</strong> ileitis"
+      ],
+      "synonyms": [
+        "<strong>Crohn</strong> ileitis"
+      ]
+    },
+    "synonyms": [
+      "ileitis",
+      "Ileitis",
+      "ILEITIS",
+      "Ileitis NOS",
+      "Ileitis, NOS",
+      "Crohn ileitis",
+      "Crohn Ileitis",
+      "Crohn's Ileitis",
+      "crohn's ileitis",
+      "Crohn's ileitis",
+      "Ileitis regional",
+      "Regional Ileitis",
+      "regional ileitis",
+      "ILEITIS REGIONAL",
+      "Regional ileitis",
+      "regional; ileitis",
+      "Ileitis, regional",
+      "ileitis; regional",
+      "Ileitis (disorder)",
+      "ileitis (regional)",
+      "ileitis (diagnosis)",
+      "ileum; inflammation",
+      "inflammation; ileum",
+      "Crohn disease of ileum",
+      "Crohn's disease of ileum",
+      "Inflammation of the ileum",
+      "Crohn's disease of ileum (disorder)",
+      "Crohn's disease of ileum (diagnosis)"
+    ],
+    "taxa": [
+      "NCBITaxon:9606"
+    ],
+    "types": [
+      "biolink:Disease",
+      "biolink:DiseaseOrPhenotypicFeature",
+      "biolink:OntologyClass",
+      "biolink:BiologicalEntity",
+      "biolink:ThingWithTaxon",
+      "biolink:NamedThing",
+      "biolink:Entity"
+    ],
+    "score": 598.63086,
+    "clique_identifier_count": 14,
+    "explain": null,
+    "debug": null
+  },
+  {
+    "curie": "MONDO:0005011",
+    "label": "Crohn disease",
+    "highlighting": {
+      "labels": [
+        "<strong>Crohn</strong> disease"
+      ],
+      "synonyms": [
+        "<strong>Crohn</strong>"
+      ]
+    },
+    "synonyms": [
+      "IBD1",
+      "Crohn",
+      "Crohn's",
+      "crohn s",
+      "crohns's",
+      "CROHN DIS",
+      "CROHNS DIS",
+      "eleocolitis",
+      "Morbus Crohn",
+      "Crohn Disease",
+      "disease crohn",
+      "Crohn disease",
+      "CROHN DISEASE",
+      "Disease;Crohns",
+      "Disease Crohns",
+      "Crohns Disease",
+      "crohn diseases",
+      "Crohns disease",
+      "DISEASE CROHNS",
+      "crohns disease",
+      "CROHN'S DISEASE",
+      "Crohn's disease",
+      "Crohn's Disease",
+      "crohns diseases",
+      "crohn s disease",
+      "disease crohn's",
+      "crohn's disease",
+      "crohns's disease",
+      "crohn's diseases",
+      "Crohn's enteritis",
+      "Crohn's Enteritis",
+      "regional enteritis",
+      "Regional enteritis",
+      "REGIONAL ENTERITIS",
+      "enteritis regional",
+      "Regional Enteritis",
+      "Crohn's disease NOS",
+      "CD - Crohn's disease",
+      "Crohn's disease, NOS",
+      "enteritis (regional)",
+      "Granulomatous Colitis",
+      "Regional enterocolitis",
+      "regional enterocolitis",
+      "Regional enteritis, NOS",
+      "granulomatous enteritis",
+      "Crohn's disease of colon",
+      "obsolete_Crohn's disease",
+      "Cicatrizing enterocolitis",
+      "pediatric Crohn's disease",
+      "Pediatric Crohn's disease",
+      "Crohn's disease (disorder)",
+      "paediatric Crohn's disease",
+      "Crohn's disease (diagnosis)",
+      "Granulomatous enteritis, NOS",
+      "Crohn's disease, unspecified",
+      "Inflammatory Bowel Disease 1",
+      "Crohn's disease of large bowel",
+      "inflammatory bowel disease - IBD1",
+      "Granulomatous enteritis and colitis",
+      "Regional enteritis (Crohn's disease)",
+      "Crohn's disease [regional enteritis]",
+      "INFLAMMATORY BOWEL DISEASE (CROHN DISEASE) 1",
+      "inflammatory bowel disease - IBD1 (diagnosis)",
+      "INFLAMMATORY BOWEL DISEASE, REGIONAL ENTERITIS"
+    ],
+    "taxa": [
+      "NCBITaxon:9606"
+    ],
+    "types": [
+      "biolink:Disease",
+      "biolink:DiseaseOrPhenotypicFeature",
+      "biolink:OntologyClass",
+      "biolink:BiologicalEntity",
+      "biolink:ThingWithTaxon",
+      "biolink:NamedThing",
+      "biolink:Entity"
+    ],
+    "score": 598.63086,
+    "clique_identifier_count": 14,
+    "explain": null,
+    "debug": null
+  },
+  {
+    "curie": "MONDO:0000708",
+    "label": "Crohn jejunoileitis",
+    "highlighting": {
+      "labels": [
+        "<strong>Crohn</strong> jejunoileitis"
+      ],
+      "synonyms": [
+        "<strong>Crohn</strong> jejunoileitis"
+      ]
+    },
+    "synonyms": [
+      "jejunoileitis",
+      "Crohn jejunoileitis",
+      "Ileojejunal Crohn disease",
+      "Crohn disease of jejunum and ileum",
+      "Crohn disease of jejunum and ileum (disorder)"
+    ],
+    "taxa": [],
+    "types": [
+      "biolink:Disease",
+      "biolink:DiseaseOrPhenotypicFeature",
+      "biolink:OntologyClass",
+      "biolink:BiologicalEntity",
+      "biolink:ThingWithTaxon",
+      "biolink:NamedThing",
+      "biolink:Entity"
+    ],
+    "score": 430.1552,
+    "clique_identifier_count": 6,
+    "explain": null,
+    "debug": null
+  },
+  {
+    "curie": "MONDO:0005532",
+    "label": "Crohn's colitis",
+    "highlighting": {
+      "labels": [
+        "<strong>Crohn&#x27;s</strong> colitis"
+      ],
+      "synonyms": [
+        "<strong>Crohn</strong> colitis"
+      ]
+    },
+    "synonyms": [
+      "Crohn colitis",
+      "Crohn Colitis",
+      "Crohn's Colitis",
+      "crohn's colitis",
+      "Crohn's colitis",
+      "Regional colitis",
+      "colitis; regional",
+      "regional; colitis",
+      "crohn disease colon",
+      "colon crohn disease",
+      "CC - Crohn's colitis",
+      "granulomatous colitis",
+      "crohn's colon disease",
+      "Granulomatous colitis",
+      "GRANULOMATOUS COLITIS",
+      "crohn's disease colon",
+      "Granulomatous Colitis",
+      "Crohns disease, colon",
+      "colon crohn's disease",
+      "large intestine; Crohn",
+      "Colitis, granulomatous",
+      "colitis; granulomatous",
+      "Colitis, Granulomatous",
+      "Crohn disease of colon",
+      "Crohn; large intestine",
+      "granulomatous; colitis",
+      "Crohn's disease (colon)",
+      "Colonic Crohn's disease",
+      "CROHNS DISEASE OF COLON",
+      "colitis (granulomatous)",
+      "Crohn's disease of colon",
+      "obsolete_Crohn's colitis",
+      "Reg enteritis, lg intest",
+      "GC - Granulomatous colitis",
+      "CROHN'S DISEASE OF THE COLON",
+      "Crohn disease of large bowel",
+      "Crohn's disease of large bowel",
+      "Crohn's (granulomatous) colitis",
+      "Crohns disease, large intestine",
+      "Granulomatous colitis (disorder)",
+      "Crohn's disease of large intestine",
+      "regional enteritis; large intestine",
+      "large intestine; regional enteritis",
+      "Crohn's disease of colon (disorder)",
+      "Crohn's disease of colon (diagnosis)",
+      "Regional enteritis of large intestine",
+      "Crohn's disease of large bowel (disorder)",
+      "Crohn's (granulomatous) colitis (diagnosis)",
+      "Crohn's disease [regional enteritis] of colon",
+      "Crohn's disease of large intestine (diagnosis)"
+    ],
+    "taxa": [],
+    "types": [
+      "biolink:Disease",
+      "biolink:DiseaseOrPhenotypicFeature",
+      "biolink:OntologyClass",
+      "biolink:BiologicalEntity",
+      "biolink:ThingWithTaxon",
+      "biolink:NamedThing",
+      "biolink:Entity"
+    ],
+    "score": 357.73575,
+    "clique_identifier_count": 14,
+    "explain": null,
+    "debug": null
+  },
+  {
+    "curie": "MONDO:0021207",
+    "label": "Crohn jejunitis",
+    "highlighting": {
+      "labels": [
+        "<strong>Crohn</strong> jejunitis"
+      ],
+      "synonyms": [
+        "<strong>Crohn</strong> jejunitis"
+      ]
+    },
+    "synonyms": [
+      "Crohn jejunitis",
+      "Crohn's jejunitis",
+      "Crohn disease of jejunum",
+      "Crohn's disease of jejunum",
+      "Crohn's disease of jejunum (disorder)",
+      "Crohn's disease of jejunum (diagnosis)"
+    ],
+    "taxa": [],
+    "types": [
+      "biolink:Disease",
+      "biolink:DiseaseOrPhenotypicFeature",
+      "biolink:OntologyClass",
+      "biolink:BiologicalEntity",
+      "biolink:ThingWithTaxon",
+      "biolink:NamedThing",
+      "biolink:Entity"
+    ],
+    "score": 355.776,
+    "clique_identifier_count": 4,
+    "explain": null,
+    "debug": null
+  }
+]

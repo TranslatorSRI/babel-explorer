@@ -35,7 +35,7 @@ web/src/
       nameres-api.test.ts              # NameRes /lookup wrapper + parseSearchTerms + validateExpectedCuries
       nameres-url-state.test.ts        # NameRes URL-state round-trip
       debounce.test.ts                 # coalescing, cancel(), synchronous 0-ms path
-      highlight-sanitize.test.ts       # <em> preservation, script/attribute/quote escaping
+      highlight-sanitize.test.ts       # NameRes <strong> marks → <mark>, entity decoding, script/attribute escaping
       autocomplete-url-state.test.ts   # read/build round-trip, preset-implied value handling, parseExpectedCuries
       autocomplete-diff.test.ts        # computeInstanceDiffs (presence/rank/label/types) + classifyExpectedCurie
   components/
@@ -96,6 +96,9 @@ tests/fixtures/
     mesh_d014867_no_conflate.json  # Water — 30 equiv IDs (conflate=false, drug_chemical_conflate=false)
     batch_mixed.json               # Multi-CURIE GET: MONDO:0004979 + NCIT:C55060 + FAKE:9999999
     not_found.json                 # FAKE:9999999 → null (key present, value null)
+  nameres_responses/
+    asthma.json, diabetes.json, metformin.json, no_results.json  # /lookup, no highlighting
+    crohn_highlighting.json        # /lookup?string=crohn&autocomplete=true&highlighting=true&limit=5
   prefix_map_subset.json           # 10 entries from biolink-model prefix map (MONDO, CHEBI, …)
 ```
 
@@ -117,6 +120,15 @@ Fixtures are snapshots of real NodeNorm Dev responses. To regenerate a single CU
 ```bash
 curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' \
   | python3 -m json.tool > tests/fixtures/nodenorm_responses/mondo_0004979.json
+```
+
+`crohn_highlighting.json` records what NameRes's highlighting really looks like: HTML-encoded
+text with each match in `<strong>` (`<strong>Crohn&#x27;s</strong> colitis`), and `{}` on every
+result unless the request sends `highlighting=true`. Regenerate it from NameRes Dev with:
+
+```bash
+curl -s 'https://name-resolution-sri.renci.org/lookup?string=crohn&limit=5&autocomplete=true&highlighting=true' \
+  | python3 -m json.tool > tests/fixtures/nameres_responses/crohn_highlighting.json
 ```
 
 For a multi-CURIE batch (GET with repeated params):

@@ -10,7 +10,11 @@ export interface NameResResult {
   synonyms: string[];
   score: number;
   clique_identifier_count: number;
-  /** Raw highlighting data from Solr (opaque). */
+  /**
+   * Which labels and synonyms matched, as HTML-encoded fragments with each match in
+   * `<strong>` (`{ labels: [...], synonyms: [...] }`). Empty unless the lookup sent
+   * `highlighting=true`; render it with lib/highlight-sanitize.ts.
+   */
   highlighting?: Record<string, unknown>;
 }
 
@@ -38,6 +42,8 @@ export interface NameResApiOptions {
   only_prefixes: string;
   exclude_prefixes: string;
   only_taxa: string;
+  /** Ask NameRes for `highlighting` on each result. Only the Autocomplete tool sets it. */
+  highlighting?: boolean;
 }
 
 /** Default API options. */

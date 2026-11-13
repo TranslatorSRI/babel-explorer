@@ -239,7 +239,7 @@ function onShare() {
             :checked="highlight"
             @change="(e) => emit('update:highlight', (e.target as HTMLInputElement).checked)"
           />
-          <label for="ac-highlight" class="form-check-label">Render highlighting</label>
+          <label for="ac-highlight" class="form-check-label">Highlight matches (<code>highlighting=true</code>)</label>
         </div>
         <div>
           <label for="ac-exclude" class="form-label small mb-0">Exclude Prefixes</label>

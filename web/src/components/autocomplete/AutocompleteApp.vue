@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
-import { fetchNameResLookup } from '../../lib/nameres-api';
+import { buildLookupUrl, fetchNameResLookup, MAX_RESULT_COUNT } from '../../lib/nameres-api';
 import { buildInstances, instanceForUrl, sortInstances, urlToTarget } from '../../lib/instances';
 import {
   DEFAULT_AUTOCOMPLETE_OPTIONS,
@@ -56,6 +56,16 @@ const expectedRaw = ref<string>((urlState?.expected ?? []).join('\n'));
 const expected = computed(() => parseExpectedCuries(expectedRaw.value));
 const debounceMs = ref<DebounceMs>(urlState?.debounceMs ?? DEFAULT_DEBOUNCE_MS);
 const highlight = ref<boolean>(urlState?.highlight ?? true);
+
+/**
+ * The options every live lookup sends. Highlighting is requested only while it is shown:
+ * it costs Solr time, and the latency badges should reflect what a plain autocomplete
+ * request costs when the marks are not wanted.
+ */
+const lookupOptions = computed<NameResApiOptions>(() => ({
+  ...options.value,
+  highlighting: highlight.value,
+}));
 
 const perInstance = ref<Map<string, InstanceState>>(new Map());
 const queriedInstances = computed<NameResInstance[]>(() =>
@@ -152,7 +162,7 @@ async function fire() {
 
   const calls = selectedUrls.value.map((url) => {
     const t0 = performance.now();
-    return fetchNameResLookup(url, q, options.value, signal).then(
+    return fetchNameResLookup(url, q, lookupOptions.value, signal).then(
       (res) => ({ url, ok: true as const, res, ms: performance.now() - t0 }),
       (err: Error) => ({ url, ok: false as const, err, ms: performance.now() - t0 }),
     );
@@ -197,7 +207,7 @@ watch(
 // previous lookup and sync the URL at once rather than when the debounce
 // expires, or a reply for the old query can still render under the new one.
 watch(
-  [query, selectedUrls, () => JSON.stringify(options.value)],
+  [query, selectedUrls, () => JSON.stringify(lookupOptions.value)],
   () => {
     abortController?.abort();
     lastFireId++;
@@ -222,7 +232,7 @@ function syncUrl() {
 }
 
 // Non-fetch state changes still update the URL so "Copy link" reflects them.
-watch([preset, expectedRaw, debounceMs, highlight], syncUrl);
+watch([preset, expectedRaw, debounceMs], syncUrl);
 
 // ─── Expected-CURIE deep check ──────────────────────────────────────────────
 
@@ -234,7 +244,8 @@ async function runDeepCheck() {
   checking.value = true;
   const controller = (deepController = new AbortController());
   const { signal } = controller;
-  const deepOpts = { ...options.value, limit: 100 };
+  // Only ranks are read from the deep results, so they need no highlighting.
+  const deepOpts = { ...options.value, limit: MAX_RESULT_COUNT, highlighting: false };
 
   const calls = selectedUrls.value.map((url) =>
     fetchNameResLookup(url, q, deepOpts, signal).then(
@@ -282,15 +293,7 @@ function handleStop() {
 // Build the per-instance NameRes /lookup URL for display/copy.
 function apiUrlFor(url: string): string {
   try {
-    const u = new URL('lookup', url);
-    u.searchParams.set('string', query.value.trim());
-    u.searchParams.set('limit', String(options.value.limit));
-    u.searchParams.set('autocomplete', String(options.value.autocomplete));
-    if (options.value.biolink_type) u.searchParams.set('biolink_type', options.value.biolink_type);
-    if (options.value.only_prefixes) u.searchParams.set('only_prefixes', options.value.only_prefixes);
-    if (options.value.exclude_prefixes) u.searchParams.set('exclude_prefixes', options.value.exclude_prefixes);
-    if (options.value.only_taxa) u.searchParams.set('only_taxa', options.value.only_taxa);
-    return u.toString();
+    return buildLookupUrl(url, query.value.trim(), lookupOptions.value).toString();
   } catch {
     return url;
   }
