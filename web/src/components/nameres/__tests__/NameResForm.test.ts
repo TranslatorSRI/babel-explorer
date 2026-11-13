@@ -96,4 +96,33 @@ describe('NameResForm — Limit and "Fail if in top"', () => {
     expect(payload.options.limit).toBe(10);
     expect(payload.threshold).toBe(3);
   });
+
+  it('keeps "Fail if in top" equal to the Limit until it is set', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('#opt-limit').setValue('20');
+    expect((wrapper.find('#opt-threshold').element as HTMLInputElement).value).toBe('20');
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.emitted<[{ threshold: number }]>('submit')!.at(-1)![0].threshold).toBe(20);
+  });
+
+  it('stops following the Limit once "Fail if in top" is set', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('#opt-threshold').setValue('3');
+    await wrapper.find('#opt-limit').setValue('20');
+    expect((wrapper.find('#opt-threshold').element as HTMLInputElement).value).toBe('3');
+  });
+
+  it("starts from a share link's threshold rather than the Limit", () => {
+    const wrapper = mountForm({ initialOptions: { limit: 10 }, initialThreshold: 3 });
+    expect((wrapper.find('#opt-threshold').element as HTMLInputElement).value).toBe('3');
+  });
+
+  it('blocks the lookup when "Fail if in top" is above the Limit', async () => {
+    const wrapper = mountForm();
+    await wrapper.find('#opt-limit').setValue('5');
+    await wrapper.find('#opt-threshold').setValue('10');
+    expect(wrapper.find('#opt-threshold').classes()).toContain('is-invalid');
+    await wrapper.find('form').trigger('submit');
+    expect(wrapper.emitted('submit')).toBeUndefined();
+  });
 });

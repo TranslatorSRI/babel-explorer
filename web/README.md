@@ -24,7 +24,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 ### NameRes Lookup (`/nameres`)
 
 - **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
-- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold
+- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold, which follows the Limit until it is set and may not exceed it
 - **Multi-instance comparison**: Same unified instance selector as NodeNorm
 - **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; JSON export
 - **Shareable URLs**: Query state in the URL fragment (`#term=`, `target=`, non-default options and threshold), like NodeNorm, so a long annotated term list never reaches a server URL limit; older `?term=` links still load; a pasted link or Back re-runs the query without a reload

@@ -57,11 +57,14 @@ export function readNameResQueryState(): NameResQueryState {
     }
   }
 
+  // A threshold above the limit asks about ranks that were never fetched, so the form
+  // refuses it too.
   let threshold: number | undefined;
   const threshVal = params.get('threshold');
   if (threshVal !== null) {
     const parsed = Number(threshVal);
-    if (isValidResultCount(parsed)) threshold = parsed;
+    const limit = options.limit ?? DEFAULT_NAMERES_OPTIONS.limit;
+    if (isValidResultCount(parsed) && parsed <= limit) threshold = parsed;
   }
 
   return { terms, targets, options, threshold };

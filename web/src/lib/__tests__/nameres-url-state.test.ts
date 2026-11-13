@@ -90,6 +90,21 @@ describe('readNameResQueryState — unusable numbers', () => {
   });
 });
 
+describe('readNameResQueryState — threshold above the limit', () => {
+  it('ignores a threshold above the limit', async () => {
+    setLocation('', '/nameres', '#term=asthma&limit=5&threshold=10');
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().threshold).toBeUndefined();
+  });
+
+  it('ignores a threshold above the default limit when the link sets none', async () => {
+    const { DEFAULT_NAMERES_OPTIONS } = await import('../nameres-types');
+    setLocation('', '/nameres', `#term=asthma&threshold=${DEFAULT_NAMERES_OPTIONS.limit + 1}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().threshold).toBeUndefined();
+  });
+});
+
 describe('readNameResQueryState — fragment', () => {
   it('reads the state from the fragment', async () => {
     setLocation('', '/nameres', '#term=asthma&target=prod');

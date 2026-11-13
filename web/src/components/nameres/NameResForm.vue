@@ -35,7 +35,19 @@ const emit = defineEmits<{
 // Form state
 const terms = ref(props.initialTerms ?? DEFAULT_TERMS);
 const options = ref<NameResApiOptions>({ ...DEFAULT_NAMERES_OPTIONS, ...props.initialOptions });
-const threshold = ref(props.initialThreshold ?? options.value.limit);
+
+/**
+ * "Fail if in top" follows the Limit until the user (or a share link) sets it, so
+ * raising the Limit to 20 also checks ranks 6–20 rather than leaving the threshold at
+ * the old 5. Copying the Limit once at start-up is what the form used to do.
+ */
+const thresholdOverride = ref<number | undefined>(props.initialThreshold);
+const threshold = computed<number>({
+  get: () => thresholdOverride.value ?? options.value.limit,
+  set: (value) => {
+    thresholdOverride.value = value;
+  },
+});
 
 // Instance selection driven by InstanceSelector via v-model
 const selectedUrls = ref<string[]>([]);
@@ -45,7 +57,16 @@ const { shareStatus, share } = useShareLink();
 
 // An emptied or out-of-range box is marked invalid and blocks the lookup.
 const limitValid = computed(() => isValidResultCount(options.value.limit));
-const thresholdValid = computed(() => isValidResultCount(threshold.value));
+/** The largest threshold allowed: no more than the results the Limit fetches. */
+const thresholdMax = computed(() => (limitValid.value ? options.value.limit : MAX_RESULT_COUNT));
+// A threshold that follows the Limit is only as wrong as the Limit, which is marked
+// already. One above the Limit would ask about ranks that were never fetched, and
+// report an expected CURIE at one of them as "not found".
+const thresholdValid = computed(
+  () =>
+    thresholdOverride.value === undefined ||
+    (isValidResultCount(threshold.value) && threshold.value <= thresholdMax.value),
+);
 
 function onSubmit() {
   if (!terms.value.trim()) return;
@@ -127,10 +148,10 @@ const advancedInitiallyOpen = ADVANCED_KEYS.some(
           class="form-control form-control-sm"
           :class="{ 'is-invalid': !thresholdValid }"
           min="1"
-          :max="MAX_RESULT_COUNT"
+          :max="thresholdMax"
           style="width: 80px"
         />
-        <div class="invalid-feedback">1–{{ MAX_RESULT_COUNT }}</div>
+        <div class="invalid-feedback">1–{{ thresholdMax }}</div>
       </div>
     </div>
 
