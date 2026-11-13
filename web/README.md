@@ -13,13 +13,21 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, taxa)
-- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus a custom URL input; any combination of instances can be queried together
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus any number of custom http(s) URLs, each with its own checkbox; any combination can be queried together. A selection you make is remembered for the tab's session (in `sessionStorage`, since each tool is a separate page load; opening a share link does not overwrite it) and can be saved as a default; environments carry over between tools, while custom URLs stay with the tool they were added in, so a custom NodeNorm server is never queried as NameRes
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide
 - **Unified summary**: Stat tiles above the table — normalized count (with partial/not-found detail), disagreement count across instances, and biolink type frequency badges
 - **Shareable URLs**: Query state encoded in the URL fragment (`#curie=`, `target=`, any non-default option the form offers; `individual_types` is always on and never read from a link), so long CURIE lists never reach a server URL limit; older `?curie=` links still load; Share button copies link to clipboard; auto-submits on page load when URL contains CURIEs
 - **CURIE link-outs**: Identifiers link to external resources via the [biolink-model prefix map](https://github.com/biolink/biolink-model), at the release named in `src/lib/biolink-prefix-map.version`
+
+### NameRes Lookup (`/nameres`)
+
+- **Batch name → CURIE resolution**: Enter multiple search terms (one per line), see ranked results per instance
+- **Expected-CURIE validation**: Annotate any line with `[[CURIE]]` to mark expected results; validation reports success/partial/failure with the rank of the best match, configurable via a "fail if in top N" threshold, which follows the Limit until it is set and may not exceed it
+- **Multi-instance comparison**: Same unified instance selector as NodeNorm
+- **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; JSON export
+- **Shareable URLs**: Query state in the URL fragment (`#term=`, `target=`, non-default options and threshold), like NodeNorm, so a long annotated term list never reaches a server URL limit; older `?term=` links still load; a pasted link or Back re-runs the query without a reload
 
 ## Development
 
@@ -80,25 +88,33 @@ src/
   pages/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # Hosts NodeNormApp Vue island
+    nameres.astro                   # Hosts NameResApp Vue island
   components/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
       NodeNormApp.vue               # Root island: orchestrates form + results
-      NodeNormForm.vue              # CURIE input, checkbox instance selection, custom URL, API options
+      NodeNormForm.vue              # CURIE input, InstanceSelector, API options
       ComparisonView.vue            # Results table with expandable per-CURIE rows
       CurieDetailPanel.vue          # Detail body: description, types, IC, equiv IDs table
       ResultsSummary.vue            # Stat tiles: normalized count, disagreements, type badges
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
+    nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
     shared/
+      InstanceSelector.vue          # Deployment checkboxes + custom URLs, shared by every tool
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
-    instances.ts                    # Target (env key or URL) → instance URL; the one http(s) check
+    instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
-    url-state.ts                    # Encode/decode query state in URL params
-    types.ts                        # TypeScript interfaces
+    url-state.ts                    # Encode/decode NodeNorm query state in the URL fragment
+    types.ts                        # NodeNorm TypeScript interfaces
+    nameres-api.ts                  # NameRes /lookup wrapper (bounded concurrency, AbortSignal); parseSearchTerms; validateExpectedCuries
+    nameres-types.ts                # NameRes interfaces and default options
+    nameres-url-state.ts            # Encode/decode NameRes query state in the URL fragment
+    instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
+    use-share-link.ts               # The Share button: copy the page URL, report success or failure
 ```
 
 ## Adding a New Tool
@@ -107,4 +123,4 @@ src/
 2. Create a root Vue island component in `src/components/<tool-name>/`
 3. Add a nav link in `src/components/Navbar.astro`
 4. Add a card on the landing page in `src/pages/index.astro`
-5. If the tool needs deployment URLs, import from `config/translator-endpoints.json`
+5. If the tool needs deployment URLs, build its instance list with `buildInstances` from `config/translator-endpoints.json`, and select instances with `InstanceSelector`. Start a link-driven query from `initialSelection`, so it runs against the instances the form shows ticked, and resolve every target through `instances.ts`, so an unusable one is reported rather than fetched

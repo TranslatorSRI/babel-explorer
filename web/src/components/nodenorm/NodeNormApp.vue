@@ -4,6 +4,7 @@ import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions, No
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
 import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
+import { initialSelection } from '../../lib/instance-prefs';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
 import ComparisonView from './ComparisonView.vue';
@@ -11,7 +12,7 @@ import ResultsSummary from './ResultsSummary.vue';
 import ColumnVisibility from './ColumnVisibility.vue';
 import endpoints from '../../../../config/translator-endpoints.json';
 
-const instances: NodeNormInstance[] = buildInstances(endpoints.nodenorm);
+const instances: NodeNormInstance[] = buildInstances('NodeNorm', endpoints.nodenorm);
 
 // State
 const loading = ref(false);
@@ -84,7 +85,8 @@ async function applyUrlState() {
 
   await handleSubmit({
     curies: curies.join('\n'),
-    instanceUrls: instanceUrls.length > 0 ? instanceUrls : [instances[0].url],
+    // No targets in the link: the same instances the form starts with ticked.
+    instanceUrls: instanceUrls.length > 0 ? instanceUrls : initialSelection('nodenorm', instances),
     options: { ...DEFAULT_API_OPTIONS, ...options },
   });
 }

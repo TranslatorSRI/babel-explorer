@@ -8,7 +8,7 @@ import {
   urlToTarget,
 } from '../instances';
 
-const instances = buildInstances({
+const instances = buildInstances('NodeNorm', {
   dev: 'https://dev.example.com/',
   prod: 'https://prod.example.com/nodenorm',
 });

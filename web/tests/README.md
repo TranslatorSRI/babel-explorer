@@ -137,6 +137,13 @@ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
 }));
 ```
 
+### `localStorage` and `sessionStorage`
+
+The happy-dom environment leaves both undefined. [`setup.ts`](setup.ts), Vitest's setup
+file, installs in-memory versions and clears them before every test, so a test that
+needs a remembered instance selection sets one (`rememberSelection`, `savePrefs`) rather
+than mocking storage itself, and never inherits the previous test's.
+
 ## Future Improvements
 
 See the Testing section of [`web/FUTURE.md`](../FUTURE.md).

@@ -1,11 +1,11 @@
 import type { ApiOptions, NormalizedNode, NodeNormInstance, NodeNormResponse } from './types';
+import { MAX_REQUESTS_PER_INSTANCE } from './instances';
 
 // Keep each GET well under the ~8 KB request-line limit common to servers and proxies.
 const MAX_CURIE_PARAMS_LENGTH = 4000;
 
-// Batches in flight at once per instance. A few thousand CURIEs make dozens of
-// batches, and sending them all together invites HTTP 429s.
-export const MAX_CONCURRENT_BATCHES = 4;
+// Batches in flight at once per instance (see MAX_REQUESTS_PER_INSTANCE).
+export const MAX_CONCURRENT_BATCHES = MAX_REQUESTS_PER_INSTANCE;
 
 // How long one batch may take, from request to parsed body, before its instance is
 // reported as failed. Without a deadline, an instance that never answers holds back

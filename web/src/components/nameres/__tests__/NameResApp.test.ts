@@ -1,0 +1,306 @@
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mount, flushPromises, enableAutoUnmount } from '@vue/test-utils';
+import NameResApp from '../NameResApp.vue';
+import endpoints from '../../../../../config/translator-endpoints.json';
+
+/** Point the page at /nameres plus a fragment (or, for an older link, a query string). */
+function setUrl(suffix: string) {
+  window.history.replaceState(null, '', `/nameres${suffix}`);
+}
+
+enableAutoUnmount(afterEach);
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.body.innerHTML = '';
+  setUrl('');
+});
+
+describe('NameResApp — share links', () => {
+  it('does not fetch a link target that is not an http(s) URL, and says so', async () => {
+    const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: () => Promise.resolve([]) }));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=ftp%3A%2F%2Fh%2F&target=%2F%2Fevil.example');
+
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(wrapper.text()).toContain('ftp://h/');
+    expect(wrapper.text()).toContain('neither a known instance nor an http(s)');
+  });
+
+  it('queries a known target from the link', async () => {
+    const fetchMock = vi.fn(async (_url: string) => ({ ok: true, json: () => Promise.resolve([]) }));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+
+    mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain(endpoints.nameres.prod);
+  });
+});
+
+describe('NameResApp — the URL fragment', () => {
+  it('still loads a link that carries the query in the query string', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('?term=asthma&target=prod');
+
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('table').text()).toContain('X:asthma');
+    // Rewritten into the fragment, which never reaches the server.
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toContain('term=asthma');
+  });
+
+  it('runs the new query when only the fragment changes', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    setUrl('#term=diabetes&target=prod');
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(wrapper.find('table').text()).toContain('X:diabetes');
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('diabetes');
+  });
+
+  it('clears the results for a link whose terms are only comments or annotations', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    setUrl(`#${new URLSearchParams([['term', '# a comment'], ['term', '[[X:1]]'], ['target', 'prod']])}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.text()).toContain('No valid search terms provided.');
+  });
+
+  it('does not re-run a query for the fragment it wrote itself', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+/** A NameRes response naming one result, X:<search text>, for the requested term. */
+function respond(url: string) {
+  const text = new URL(url).searchParams.get('string')!;
+  const body = [{ curie: `X:${text}`, label: text, types: [], taxa: [], synonyms: [], score: 1, clique_identifier_count: 1 }];
+  return { ok: true, json: () => Promise.resolve(body) };
+}
+
+/**
+ * A fetch that hangs until release() is called, then answers like respond(). An
+ * aborted request rejects as fetch does.
+ */
+function heldFetch() {
+  const pending: (() => void)[] = [];
+  const fetchMock = vi.fn((url: string, init: RequestInit) =>
+    new Promise((resolve, reject) => {
+      init.signal!.addEventListener('abort', () =>
+        reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+      );
+      pending.push(() => resolve(respond(url)));
+    }),
+  );
+  return {
+    fetchMock,
+    release: async () => {
+      pending.splice(0).forEach((r) => r());
+      await flushPromises();
+    },
+  };
+}
+
+async function submit(wrapper: ReturnType<typeof mount>, terms: string) {
+  await wrapper.find('textarea').setValue(terms);
+  await wrapper.find('form').trigger('submit');
+}
+
+describe('NameResApp — stop and replaced queries', () => {
+  it('keeps the previous results and URL when a query is stopped', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => respond(url)));
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+    const shownUrl = window.location.href;
+
+    vi.stubGlobal('fetch', heldFetch().fetchMock);
+    await submit(wrapper, 'diabetes');
+    await wrapper.findAll('button').find((b) => b.text() === 'Stop')!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Query stopped');
+    expect(wrapper.find('table').text()).toContain('X:asthma');
+    expect(wrapper.find('table').text()).not.toContain('diabetes');
+    expect(window.location.href).toBe(shownUrl);
+  });
+
+  it('cancels the running query when a new one is submitted', async () => {
+    const held = heldFetch();
+    vi.stubGlobal('fetch', held.fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => respond(url)));
+    await submit(wrapper, 'diabetes');
+    await flushPromises();
+    await held.release();
+
+    expect(wrapper.find('table').text()).toContain('X:diabetes');
+    expect(wrapper.find('table').text()).not.toContain('asthma');
+    expect(window.location.hash).toContain('diabetes');
+    expect(wrapper.text()).not.toContain('Looking up');
+  });
+
+  it('cancels the running query when a submission has no valid terms', async () => {
+    const held = heldFetch();
+    vi.stubGlobal('fetch', held.fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    await submit(wrapper, '# just a comment');
+    await held.release();
+
+    expect(wrapper.text()).toContain('No valid search terms provided.');
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Looking up');
+  });
+});
+
+describe('NameResApp — failed lookups', () => {
+  it('shows a lookup that failed as failed, not as finding nothing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.startsWith(endpoints.nameres.prod)
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : respond(url),
+    ));
+    setUrl('#term=asthma&target=dev&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    const row = wrapper.find('table tbody tr');
+    expect(row.text()).toContain('X:asthma');
+    expect(row.text()).toContain('Request failed');
+    expect(row.text()).not.toContain('No results');
+    expect(wrapper.text()).toContain('Some lookups failed');
+  });
+});
+
+describe('NameResApp — Download JSON', () => {
+  it('clicks an attached link, keeps the blob alive, and lists failed lookups separately', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url: string) =>
+      url.startsWith(endpoints.nameres.prod)
+        ? { ok: false, status: 500, statusText: 'Internal Server Error' }
+        : respond(url),
+    ));
+    setUrl('#term=asthma&target=dev&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    let blob: Blob | undefined;
+    vi.stubGlobal('URL', Object.assign(class extends URL {}, {
+      createObjectURL: (b: Blob) => { blob = b; return 'blob:test'; },
+      revokeObjectURL: vi.fn(),
+    }));
+    let attached: boolean | undefined;
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      attached = this.isConnected;
+    });
+    vi.useFakeTimers();
+    try {
+      await wrapper.findAll('button').find((b) => b.text() === 'Download JSON')!.trigger('click');
+      expect(click).toHaveBeenCalledOnce();
+      expect(attached).toBe(true);
+      expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(40_000);
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test');
+    } finally {
+      vi.useRealTimers();
+      click.mockRestore();
+    }
+
+    const payload = JSON.parse(await blob!.text());
+    expect(payload.failed_lookups).toEqual([{ term: 'asthma', instance: 'NameRes Production' }]);
+    expect(Object.keys(payload.results.asthma)).toEqual(['NameRes Dev']);
+  });
+});
+
+describe('NameResApp — repeated search text', () => {
+  it('looks the text up once and checks each line against its own expected CURIE', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    // respond() answers X:<text>, so only the second line's expectation is met.
+    setUrl(`#${new URLSearchParams([
+      ['term', 'diabetes [[MONDO:0005015]]'],
+      ['term', 'diabetes [[X:diabetes]]'],
+      ['target', 'prod'],
+    ])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const rows = wrapper.findAll('table tbody tr');
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text()).toContain('MONDO:0005015');
+    expect(rows[0].classes()).toContain('table-danger');
+    expect(rows[1].classes()).toContain('table-success');
+    expect(window.location.hash).toContain('MONDO%3A0005015');
+  });
+});
+
+describe('NameResApp — expected CURIE badges', () => {
+  /** A response listing X:1 … X:n in rank order. */
+  function ranked(n: number) {
+    const body = Array.from({ length: n }, (_, i) => ({
+      curie: `X:${i + 1}`, label: `x${i + 1}`, types: [], taxa: [], synonyms: [], score: n - i, clique_identifier_count: 1,
+    }));
+    return vi.fn(async () => ({ ok: true, json: () => Promise.resolve(body) }));
+  }
+
+  it('shows the rank of an expected CURIE found outside the threshold', async () => {
+    vi.stubGlobal('fetch', ranked(10));
+    setUrl(`#${new URLSearchParams([['term', 'x [[X:5]]'], ['target', 'prod'], ['limit', '10'], ['threshold', '3']])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    const badge = wrapper.find('table tbody tr .badge.bg-danger');
+    expect(badge.text()).toBe('✗ #5');
+    expect(badge.attributes('title')).toBe('Found at #5, outside the top 3');
+  });
+
+  it('says not found when the expected CURIE is absent', async () => {
+    vi.stubGlobal('fetch', ranked(10));
+    setUrl(`#${new URLSearchParams([['term', 'x [[Y:1]]'], ['target', 'prod'], ['limit', '10']])}`);
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    expect(wrapper.find('table tbody tr .badge.bg-danger').text()).toBe('✗ not found');
+  });
+});

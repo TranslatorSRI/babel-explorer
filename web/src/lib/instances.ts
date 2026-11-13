@@ -1,14 +1,28 @@
-import type { NodeNormInstance } from './types';
+/**
+ * Resolving a service "target" — an env key such as `prod`, or a full URL — to the
+ * instance URL to query, for NodeNorm and NameRes alike.
+ *
+ * Every path that turns a target into a URL goes through here: share links, saved
+ * instance preferences, the "Add custom URL" box and the URL written back to the
+ * address bar. Keep it that way. The http(s) check once lived only in the form, so a
+ * `#target=` value in a share link skipped it and was fetched on page load.
+ */
 
 /**
- * Resolving a NodeNorm "target" — an env key such as `prod`, or a full URL — to the
- * instance URL to query.
- *
- * Every path that turns a target into a URL goes through here: the share-link
- * fragment, the "Add custom URL" box and the URL written back to the address bar.
- * Keep it that way. The http(s) check once lived only in the form, so a `#target=`
- * value in a share link skipped it and was fetched on page load.
+ * Requests one tool keeps in flight at once against one instance: NodeNorm's batches
+ * and NameRes's lookups. A long CURIE list or regression list against every instance
+ * would otherwise start dozens or hundreds of requests together, which the browser
+ * queues anyway and the servers may answer with HTTP 429 or 503, showing up as failures
+ * unrelated to what is being checked. One constant, so the two tools cannot drift apart.
  */
+export const MAX_REQUESTS_PER_INSTANCE = 4;
+
+/** A named deployment of a service. NodeNormInstance and NameResInstance are aliases of it. */
+export interface Instance {
+  name: string;
+  env: string;
+  url: string;
+}
 
 const ENV_LABELS: Record<string, string> = {
   dev: 'Dev',
@@ -35,20 +49,20 @@ export function normalizeInstanceUrl(raw: string): string | null {
   return url.href;
 }
 
-/** Build the instance list from the `nodenorm` section of translator-endpoints.json. */
-export function buildInstances(urlsByEnv: Record<string, string>): NodeNormInstance[] {
+/** Build a service's instance list from its section of translator-endpoints.json. */
+export function buildInstances(service: string, urlsByEnv: Record<string, string>): Instance[] {
   return Object.entries(urlsByEnv).map(([env, url]) => ({
-    name: `NodeNorm ${ENV_LABELS[env] ?? env}`,
+    name: `${service} ${ENV_LABELS[env] ?? env}`,
     env,
     url: normalizeInstanceUrl(url) ?? url,
   }));
 }
 
 /** The known instance a target names, by env key or by (normalized) URL. */
-export function findInstance(
-  instances: NodeNormInstance[],
+export function findInstance<T extends Instance>(
+  instances: T[],
   target: string,
-): NodeNormInstance | undefined {
+): T | undefined {
   const url = normalizeInstanceUrl(target);
   return instances.find((i) => i.env === target || (url !== null && i.url === url));
 }
@@ -57,16 +71,26 @@ export function findInstance(
  * The URL to query for a target: a known instance's URL, or the normalized custom URL.
  * Null when the target is neither a known instance nor an http(s) URL.
  */
-export function resolveTarget(instances: NodeNormInstance[], target: string): string | null {
+export function resolveTarget(instances: Instance[], target: string): string | null {
   return findInstance(instances, target)?.url ?? normalizeInstanceUrl(target);
 }
 
+/**
+ * Resolve several targets, dropping any that are neither a known instance nor an
+ * http(s) URL, and any that name the same instance twice.
+ */
+export function resolveTargets(instances: Instance[], targets: string[]): string[] {
+  return [
+    ...new Set(targets.map((t) => resolveTarget(instances, t)).filter((u): u is string => u !== null)),
+  ];
+}
+
 /** The instance for a resolved URL, inventing a "custom" one for unknown URLs. */
-export function instanceForUrl(instances: NodeNormInstance[], url: string): NodeNormInstance {
+export function instanceForUrl(instances: Instance[], url: string): Instance {
   return findInstance(instances, url) ?? { name: url, env: url, url };
 }
 
 /** The shortest target naming a URL: its env key if known, otherwise the URL itself. */
-export function urlToTarget(instances: NodeNormInstance[], url: string): string {
+export function urlToTarget(instances: Instance[], url: string): string {
   return findInstance(instances, url)?.env ?? url;
 }

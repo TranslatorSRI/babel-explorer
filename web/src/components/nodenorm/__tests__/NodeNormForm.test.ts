@@ -74,17 +74,23 @@ describe('NodeNormForm — custom URLs', () => {
   });
 });
 
+/** The "Advanced options" section; InstanceSelector's "Extended environments" comes first. */
+function advancedDetails(wrapper: ReturnType<typeof mount>) {
+  return wrapper.findAll('details').find((d) => d.find('summary').text() === 'Advanced options')!
+    .element as HTMLDetailsElement;
+}
+
 describe('NodeNormForm — advanced options', () => {
   it('opens when the page URL changes an advanced option', () => {
     const wrapper = mount(NodeNormForm, {
       props: { instances, loading: false, hasResults: false, initialOptions: { description: false } },
     });
-    expect((wrapper.find('details').element as HTMLDetailsElement).open).toBe(true);
+    expect(advancedDetails(wrapper).open).toBe(true);
   });
 
   it('stays open when the user restores the defaults', async () => {
     const wrapper = mountForm();
-    const details = wrapper.find('details').element as HTMLDetailsElement;
+    const details = advancedDetails(wrapper);
     details.open = true;
     await wrapper.find('#opt-desc').setValue(false);
     await wrapper.find('#opt-desc').setValue(true);
