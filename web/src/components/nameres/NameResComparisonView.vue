@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { NameResResult, NameResInstance, ParsedSearchTerm, ExpectedCurieValidation } from '../../lib/nameres-types';
 import { validateExpectedCuries } from '../../lib/nameres-api';
 import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
@@ -26,67 +26,68 @@ function toggleRow(raw: string) {
   }
 }
 
-/** The lookup's results, or undefined if the lookup failed (not the same as no results). */
-function getResults(text: string, instanceUrl: string): NameResResult[] | undefined {
-  return props.resultsByInstance.get(instanceUrl)?.get(text);
-}
-
-function lookupFailed(text: string, instanceUrl: string): boolean {
-  return getResults(text, instanceUrl) === undefined;
-}
-
-/** Instances whose lookup for this term answered; a failed one is no evidence either way. */
-function answeredInstances(text: string): NameResInstance[] {
-  return props.queriedInstances.filter((inst) => !lookupFailed(text, inst.url));
-}
-
-function getTopResult(text: string, instanceUrl: string): NameResResult | null {
-  return getResults(text, instanceUrl)?.[0] ?? null;
-}
-
-function getValidation(term: ParsedSearchTerm, instanceUrl: string): ExpectedCurieValidation {
-  const results = getResults(term.text, instanceUrl) ?? [];
-  return validateExpectedCuries(results, term.expectedCuries, props.threshold);
+interface Cell {
+  /** The lookup's results, or undefined if the lookup failed (not the same as no results). */
+  results: NameResResult[] | undefined;
+  top: NameResResult | null;
+  /** Null for a term with no expected CURIEs, or a failed lookup: no evidence either way. */
+  validation: ExpectedCurieValidation | null;
 }
 
 /**
- * Check if the instances that answered agree on the top result CURIE for a search term.
+ * Every cell's results, top result and validation, keyed by term.raw and then instance
+ * URL, worked out once per change of props. The template reads a cell many times, and
+ * a regression list of a few hundred terms would otherwise rerun validateExpectedCuries
+ * thousands of times on every re-render, such as each row expand.
  */
-function allAgree(text: string): boolean {
-  const curies = new Set<string>();
-  for (const inst of answeredInstances(text)) {
-    const top = getTopResult(text, inst.url);
-    curies.add(top?.curie ?? '(no results)');
+const cells = computed(() => {
+  const byTerm = new Map<string, Map<string, Cell>>();
+  for (const term of props.terms) {
+    const byInstance = new Map<string, Cell>();
+    for (const inst of props.queriedInstances) {
+      const results = props.resultsByInstance.get(inst.url)?.get(term.text);
+      byInstance.set(inst.url, {
+        results,
+        top: results?.[0] ?? null,
+        validation:
+          results !== undefined && term.expectedCuries.length > 0
+            ? validateExpectedCuries(results, term.expectedCuries, props.threshold)
+            : null,
+      });
+    }
+    byTerm.set(term.raw, byInstance);
   }
-  return curies.size <= 1;
+  return byTerm;
+});
+
+function cell(term: ParsedSearchTerm, instanceUrl: string): Cell {
+  return cells.value.get(term.raw)!.get(instanceUrl)!;
 }
 
 /**
- * Determine row class based on expected CURIE status across all instances.
+ * Row class from the instances that answered: a failed lookup is no evidence either
+ * way. Unannotated terms are marked only when the instances disagree on the top CURIE.
  */
-function getRowClass(term: ParsedSearchTerm): string {
-  if (term.expectedCuries.length === 0) {
-    return allAgree(term.text) ? '' : 'table-warning';
+const rowClasses = computed(() => {
+  const classes = new Map<string, string>();
+  for (const term of props.terms) {
+    const answered = props.queriedInstances
+      .map((inst) => cell(term, inst.url))
+      .filter((c) => c.results !== undefined);
+    let rowClass = '';
+    if (term.expectedCuries.length === 0) {
+      const tops = new Set(answered.map((c) => c.top?.curie ?? '(no results)'));
+      if (tops.size > 1) rowClass = 'table-warning';
+    } else if (answered.length > 0) {
+      const statuses = answered.map((c) => c.validation!.status);
+      if (statuses.every((s) => s === 'success')) rowClass = 'table-success';
+      else if (statuses.includes('failure')) rowClass = 'table-danger';
+      else rowClass = 'table-warning';
+    }
+    classes.set(term.raw, rowClass);
   }
-
-  const validations = answeredInstances(term.text).map((inst) => getValidation(term, inst.url));
-  if (validations.length === 0) return '';
-
-  // All success → green
-  if (validations.every((v) => v.status === 'success')) return 'table-success';
-  // Any failure → red
-  if (validations.some((v) => v.status === 'failure')) return 'table-danger';
-  // Mix of success/partial → yellow
-  return 'table-warning';
-}
-
-/**
- * Get a short status indicator for a cell.
- */
-function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCurieValidation | null {
-  if (term.expectedCuries.length === 0 || lookupFailed(term.text, instanceUrl)) return null;
-  return getValidation(term, instanceUrl);
-}
+  return classes;
+});
 </script>
 
 <template>
@@ -111,7 +112,7 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
       <tbody v-for="term in terms" :key="term.raw">
         <!-- Summary row -->
         <tr
-          :class="['align-middle', getRowClass(term)]"
+          :class="['align-middle', rowClasses.get(term.raw)]"
           style="cursor: pointer"
           @click="toggleRow(term.raw)"
         >
@@ -134,52 +135,52 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
             >{{ ec }}</span>
           </td>
           <td v-for="inst in queriedInstances" :key="inst.url">
-            <template v-if="getTopResult(term.text, inst.url)">
+            <template v-if="cell(term, inst.url).top">
               <CurieLink
-                :curie="getTopResult(term.text, inst.url)!.curie"
+                :curie="cell(term, inst.url).top!.curie"
               />
               <br />
-              <small class="text-muted">{{ getTopResult(term.text, inst.url)!.label }}</small>
+              <small class="text-muted">{{ cell(term, inst.url).top!.label }}</small>
               <br />
-              <template v-if="getTopResult(term.text, inst.url)!.types.length > 0">
+              <template v-if="cell(term, inst.url).top!.types.length > 0">
                 <span
-                  v-for="t in getTopResult(term.text, inst.url)!.types"
+                  v-for="t in cell(term, inst.url).top!.types"
                   :key="t"
                   class="badge bg-info text-dark me-1"
                   style="font-size: 0.7em"
                 ><BiolinkTypeLink :type="t" /></span>
                 <br />
               </template>
-              <small class="text-muted">{{ getResults(term.text, inst.url)!.length }} results</small>
+              <small class="text-muted">{{ cell(term, inst.url).results!.length }} results</small>
 
               <!-- Expected CURIE status indicator -->
-              <template v-if="getCellStatus(term, inst.url)">
+              <template v-if="cell(term, inst.url).validation">
                 <br />
                 <span
-                  v-if="getCellStatus(term, inst.url)!.status === 'success'"
+                  v-if="cell(term, inst.url).validation!.status === 'success'"
                   class="badge bg-success"
                   style="font-size: 0.65em"
                 >&#10003; #1</span>
                 <span
-                  v-else-if="getCellStatus(term, inst.url)!.status === 'partial'"
+                  v-else-if="cell(term, inst.url).validation!.status === 'partial'"
                   class="badge bg-warning text-dark"
                   style="font-size: 0.65em"
-                >#{{ getCellStatus(term, inst.url)!.rank + 1 }}</span>
+                >#{{ cell(term, inst.url).validation!.rank + 1 }}</span>
                 <!-- A failure with a rank was found, just not within the threshold. -->
                 <span
-                  v-else-if="getCellStatus(term, inst.url)!.status === 'failure' && getCellStatus(term, inst.url)!.rank >= 0"
+                  v-else-if="cell(term, inst.url).validation!.status === 'failure' && cell(term, inst.url).validation!.rank >= 0"
                   class="badge bg-danger"
                   style="font-size: 0.65em"
-                  :title="`Found at #${getCellStatus(term, inst.url)!.rank + 1}, outside the top ${threshold}`"
-                >&#10007; #{{ getCellStatus(term, inst.url)!.rank + 1 }}</span>
+                  :title="`Found at #${cell(term, inst.url).validation!.rank + 1}, outside the top ${threshold}`"
+                >&#10007; #{{ cell(term, inst.url).validation!.rank + 1 }}</span>
                 <span
-                  v-else-if="getCellStatus(term, inst.url)!.status === 'failure'"
+                  v-else-if="cell(term, inst.url).validation!.status === 'failure'"
                   class="badge bg-danger"
                   style="font-size: 0.65em"
                 >&#10007; not found</span>
               </template>
             </template>
-            <span v-else-if="lookupFailed(term.text, inst.url)" class="text-danger">Request failed</span>
+            <span v-else-if="cell(term, inst.url).results === undefined" class="text-danger">Request failed</span>
             <span v-else class="text-muted">No results</span>
           </td>
         </tr>
@@ -196,12 +197,12 @@ function getCellStatus(term: ParsedSearchTerm, instanceUrl: string): ExpectedCur
                 :style="{ minWidth: `${100 / queriedInstances.length}%`, maxWidth: `${100 / queriedInstances.length}%` }"
               >
                 <div class="fw-semibold text-muted small mb-2">{{ inst.name }}</div>
-                <p v-if="lookupFailed(term.text, inst.url)" class="text-danger">
+                <p v-if="cell(term, inst.url).results === undefined" class="text-danger">
                   The lookup on this instance failed.
                 </p>
                 <NameResDetailPanel
                   v-else
-                  :results="getResults(term.text, inst.url)!"
+                  :results="cell(term, inst.url).results!"
                   :expected-curies="term.expectedCuries"
                 />
               </div>
