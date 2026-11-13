@@ -37,6 +37,29 @@ describe('AutocompleteForm', () => {
     expect(emitted![emitted!.length - 1]).toEqual(['diabe']);
   });
 
+  it.each([
+    ['500', 100],
+    ['0', 1],
+    ['-3', 1],
+    ['7.6', 8],
+  ])('clamps a typed Limit of %s to %d', async (typed, expected) => {
+    const wrapper = mount(AutocompleteForm, { props: makeProps() });
+    const input = wrapper.find('#ac-limit');
+    (input.element as HTMLInputElement).value = typed;
+    await input.trigger('change');
+    expect(wrapper.emitted('update:options')?.at(-1)?.[0]).toMatchObject({ limit: expected });
+    expect((input.element as HTMLInputElement).value).toBe(String(expected));
+  });
+
+  it('puts the current Limit back when the field is emptied', async () => {
+    const wrapper = mount(AutocompleteForm, { props: makeProps() });
+    const input = wrapper.find('#ac-limit');
+    (input.element as HTMLInputElement).value = '';
+    await input.trigger('change');
+    expect(wrapper.emitted('update:options')).toBeUndefined();
+    expect((input.element as HTMLInputElement).value).toBe(String(DEFAULT_AUTOCOMPLETE_OPTIONS.limit));
+  });
+
   it('preset change emits update:options with preset-implied biolink_type + only_prefixes', async () => {
     const wrapper = mount(AutocompleteForm, { props: makeProps() });
     await wrapper.find('#ac-preset').setValue('gene');

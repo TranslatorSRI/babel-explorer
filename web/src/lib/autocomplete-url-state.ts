@@ -3,6 +3,7 @@ import { DEFAULT_NAMERES_OPTIONS } from './nameres-types';
 import type { AutocompletePresetId } from './autocomplete-presets';
 import { DEFAULT_PRESET_ID, getPreset } from './autocomplete-presets';
 import { curieKey } from './autocomplete-diff';
+import { isValidResultCount } from './nameres-api';
 
 /** Defaults specific to the Autocomplete tool (differ from NameRes tool on `autocomplete`). */
 export const DEFAULT_AUTOCOMPLETE_OPTIONS: NameResApiOptions = {
@@ -53,13 +54,18 @@ export function readAutocompleteQueryState(): AutocompleteQueryState {
   const expected = params.getAll('expected');
 
   const options: Partial<NameResApiOptions> = {};
+  // A limit the form would refuse (0, negative, over MAX_RESULT_COUNT, not a whole
+  // number) is ignored, falling back to the default, rather than sent on every keystroke.
   const limitVal = params.get('limit');
   if (limitVal !== null) {
-    const n = parseInt(limitVal, 10);
-    if (!isNaN(n)) options.limit = n;
+    const n = Number(limitVal);
+    if (isValidResultCount(n)) options.limit = n;
   }
+  // Only true/1 and false/0, as in nameres-url-state.ts; `autocomplete=0` used to read
+  // as true, since anything but the literal "false" counted.
   const autoVal = params.get('autocomplete');
-  if (autoVal !== null) options.autocomplete = autoVal !== 'false';
+  if (autoVal === 'true' || autoVal === '1') options.autocomplete = true;
+  else if (autoVal === 'false' || autoVal === '0') options.autocomplete = false;
   for (const key of STRING_OPTION_KEYS) {
     const val = params.get(key);
     if (val !== null) (options as Record<string, unknown>)[key] = val;

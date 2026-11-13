@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
+import { MAX_RESULT_COUNT } from '../../lib/nameres-api';
 import InstanceSelector from '../shared/InstanceSelector.vue';
 import ExpectedCuriePanel from './ExpectedCuriePanel.vue';
 import {
@@ -74,6 +75,23 @@ function onPresetChange(e: Event) {
 function onOptionChange<K extends keyof NameResApiOptions>(key: K, value: NameResApiOptions[K]) {
   const next = { ...props.options, [key]: value };
   emit('update:options', next);
+}
+
+/**
+ * Take a Limit from 1 to MAX_RESULT_COUNT, rounding and clamping anything else typed
+ * there, since every keystroke sends it to NameRes. An empty or non-numeric entry puts
+ * the current limit back rather than sending `limit=`, which NameRes rejects.
+ */
+function onLimitChange(e: Event) {
+  const input = e.target as HTMLInputElement;
+  const n = Math.round(Number(input.value));
+  const limit =
+    input.value.trim() === '' || !Number.isFinite(n)
+      ? props.options.limit
+      : Math.min(MAX_RESULT_COUNT, Math.max(1, n));
+  // Written back by hand: when the limit does not change, Vue has nothing to re-render.
+  input.value = String(limit);
+  if (limit !== props.options.limit) onOptionChange('limit', limit);
 }
 
 // When the user hand-edits biolink_type / only_prefixes, recompute the preset
@@ -173,10 +191,10 @@ function onShare() {
           type="number"
           class="form-control form-control-sm"
           min="1"
-          max="100"
+          :max="MAX_RESULT_COUNT"
           style="width: 90px"
           :value="options.limit"
-          @change="(e) => onOptionChange('limit', parseInt((e.target as HTMLInputElement).value, 10) || 1)"
+          @change="onLimitChange"
         />
       </div>
       <div>

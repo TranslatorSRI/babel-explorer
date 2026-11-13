@@ -57,6 +57,20 @@ describe('readAutocompleteQueryState', () => {
     expect(s.options.only_prefixes).toBe('NCBIGene');
   });
 
+  it.each(['0', '-3', '101', '500', '2.5', 'ten', ''])('ignores limit=%s, which the form would refuse', async (limit) => {
+    setLocation(`?limit=${limit}`);
+    const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
+    expect(readAutocompleteQueryState().options.limit).toBeUndefined();
+  });
+
+  it('reads autocomplete=0 as false and ignores values it does not recognise', async () => {
+    const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
+    setLocation('?autocomplete=0');
+    expect(readAutocompleteQueryState().options.autocomplete).toBe(false);
+    setLocation('?autocomplete=no');
+    expect(readAutocompleteQueryState().options.autocomplete).toBeUndefined();
+  });
+
   it('parses debounce and highlight', async () => {
     setLocation('?debounce=300&highlight=false');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
