@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Babel Explorer{% endblock %}
+{% block content %}
+<h1>Babel Explorer</h1>
+<p class="lead">Explore Babel intermediate files and discover why two identifiers are considered identical.</p>
+
+<div class="row mt-4">
+  <div class="col-md-6 col-lg-3 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">NodeNorm</h5>
+        <p class="card-text">Look up normalized identifiers, labels, and biolink types from NodeNormalization.</p>
+        <a href="/nodenorm" class="btn btn-primary">Open</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">XRefs</h5>
+        <p class="card-text">Query cross-references from Babel Concord files with optional expansion and labels.</p>
+        <a href="/xrefs" class="btn btn-primary">Open</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">IDs</h5>
+        <p class="card-text">Look up identifier records from the Babel Identifiers file.</p>
+        <a href="/ids" class="btn btn-primary">Open</a>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-lg-3 mb-3">
+    <div class="card h-100">
+      <div class="card-body">
+        <h5 class="card-title">Test Concordance</h5>
+        <p class="card-text">See all equivalent identifiers (clique members) for CURIEs via NodeNorm.</p>
+        <a href="/test-concord" class="btn btn-primary">Open</a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
