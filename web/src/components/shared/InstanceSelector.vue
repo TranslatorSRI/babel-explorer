@@ -1,20 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { rememberSelection, savePrefs, initialSelection, PRIMARY_ENVS } from '../../lib/instance-prefs';
-import { findInstance, normalizeInstanceUrl, resolveTarget, urlToTarget, type Instance } from '../../lib/instances';
-
-/**
- * Short, environment-level display names used inside the selector.
- * The full "NodeNorm Dev" / "NameRes Dev" names are kept on the instance
- * objects for use in result tables (ComparisonView column headers, etc.).
- */
-const ENV_LABELS: Record<string, string> = {
-  exp: 'RENCI Experimental',
-  dev: 'RENCI Dev',
-  ci: 'ITRB CI',
-  test: 'ITRB Test',
-  prod: 'ITRB Prod',
-};
+import {
+  ENVIRONMENTS,
+  findInstance,
+  normalizeInstanceUrl,
+  resolveTarget,
+  urlToTarget,
+  type Instance,
+} from '../../lib/instances';
 
 const props = defineProps<{
   /**
@@ -134,6 +128,19 @@ function removeCustomUrl(url: string) {
   selectedUrls.value = next;
 }
 
+/**
+ * An instance's selector label (ENVIRONMENTS' selectorLabel, e.g. "ITRB ES CI"), split
+ * around the word to show as an <abbr>, if it has one. The full "NameRes Dev" names
+ * stay on the instance objects for result tables.
+ */
+function labelParts(inst: Instance): { before: string; abbr?: { text: string; title: string }; after: string } {
+  const info = ENVIRONMENTS[inst.env];
+  const label = info?.selectorLabel ?? inst.name;
+  const at = info?.abbr ? label.indexOf(info.abbr.text) : -1;
+  if (!info?.abbr || at === -1) return { before: label, after: '' };
+  return { before: label.slice(0, at), abbr: info.abbr, after: label.slice(at + info.abbr.text.length) };
+}
+
 function saveDefault() {
   savePrefs(props.service, selectionTargets());
   savedFlash.value = true;
@@ -164,7 +171,7 @@ function saveDefault() {
       @change="toggleUrl(inst.url)"
     />
     <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
-      {{ ENV_LABELS[inst.env] ?? inst.name }}
+      {{ labelParts(inst).before }}<abbr v-if="labelParts(inst).abbr" :title="labelParts(inst).abbr!.title">{{ labelParts(inst).abbr!.text }}</abbr>{{ labelParts(inst).after }}
     </label>
   </div>
 
@@ -192,7 +199,7 @@ function saveDefault() {
           @change="toggleUrl(inst.url)"
         />
         <label :for="`inst-${inst.env}`" class="form-check-label" :title="inst.url">
-          {{ ENV_LABELS[inst.env] ?? inst.name }}
+          {{ labelParts(inst).before }}<abbr v-if="labelParts(inst).abbr" :title="labelParts(inst).abbr!.title">{{ labelParts(inst).abbr!.text }}</abbr>{{ labelParts(inst).after }}
         </label>
       </div>
 

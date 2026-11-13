@@ -28,19 +28,32 @@ Tests are **co-located** with source using `__tests__/` directories:
 web/src/
   lib/
     __tests__/
-      nodenorm-api.test.ts    # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
-      url-state.test.ts       # readQueryState + buildQueryUrl + round-trip
-      curie-links.test.ts     # parseCurie + getCurieUrl
-      types.test.ts           # DEFAULT_API_OPTIONS smoke test
+      nodenorm-api.test.ts             # parseCuries + fetchNormalizedNodes + AbortSignal + fixture shape
+      url-state.test.ts                # readQueryState + buildQueryUrl + round-trip
+      curie-links.test.ts              # parseCurie + getCurieUrl
+      types.test.ts                    # DEFAULT_API_OPTIONS smoke test
+      nameres-api.test.ts              # NameRes /lookup wrapper + parseSearchTerms + validateExpectedCuries
+      nameres-url-state.test.ts        # NameRes URL-state round-trip
+      debounce.test.ts                 # coalescing, cancel(), synchronous 0-ms path
+      highlight-sanitize.test.ts       # NameRes <strong> marks → <mark>, entity decoding, script/attribute escaping
+      autocomplete-url-state.test.ts   # read/build round-trip, preset-implied value handling, parseExpectedCuries
+      autocomplete-diff.test.ts        # computeInstanceDiffs (presence/rank/label/types) + classifyExpectedCurie
   components/
     nodenorm/
       __tests__/
         ResultsSummary.test.ts
         CurieDetailPanel.test.ts
         ComparisonView.test.ts
+        ColumnVisibility.test.ts
+        EquivalentIdTable.test.ts
+    autocomplete/
+      __tests__/
+        AutocompleteForm.test.ts       # preset ↔ options coupling, hand-edit → custom auto-switch, field bindings
+        AutocompleteApp.test.ts        # mocked fetch: debounce coalescing, abort on new keystroke, deep lookup uses limit=100, single-vs-multi view
     shared/
       __tests__/
         CurieLink.test.ts
+        InstanceSelector.test.ts
 ```
 
 ### Library tests (highest priority)
@@ -50,14 +63,22 @@ Pure function tests with mocked `fetch()`. These cover:
 - **`url-state.ts`**: `readQueryState` (no params, curie/target/option parsing), `buildQueryUrl` (default option omission, multi-target), and round-trip fidelity
 - **`curie-links.ts`**: CURIE parsing, URL construction from biolink prefix map
 - **`types.ts`**: Default options constant
+- **`nameres-api.ts`**: `/lookup` URL construction, parameter passthrough, `parseSearchTerms` `[[CURIE]]` annotation handling, `validateExpectedCuries` threshold semantics
+- **`nameres-url-state.ts`**: repeated `term=`/`target=` parsing, option-override round-trip, threshold handling
+- **`debounce.ts`**: coalescing, `cancel()`, `ms === 0` synchronous path
+- **`highlight-sanitize.ts`**: `<em>` preservation, `<script>`/`<img>`/attribute escaping, HTML-entity escaping, unterminated tags
+- **`autocomplete-url-state.ts`**: `q`/`preset`/`target`/`expected`/advanced-flag round-trip; preset-implied values suppressed from URL; `parseExpectedCuries` (split, dedupe, prefix uppercase)
+- **`autocomplete-diff.ts`**: union/presence/rank/label-mismatch/types-mismatch/uniqueness computation (order-independent set comparison); `classifyExpectedCurie` top-N vs top-100 vs miss vs unknown
 
 ### Component tests
 
 Mount Vue components with `@vue/test-utils` and assert on rendered output and computed logic:
 - **`ResultsSummary`**: normalized/partial/not-found counts, disagreement detection across instances, type badge aggregation; disagreements tile hidden for single instance
 - **`CurieDetailPanel`**: description, types, IC score display; adaptive threshold (≤10 full table vs >10 prefix summary + expand); "Show all" / "Collapse" toggle
-- **`ComparisonView`**: agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
+- **`ComparisonView`** (NodeNorm): agreement detection, row highlighting, expandable rows (click → detail sub-row appears; click again → collapses)
 - **`CurieLink`**: conditional `<a>` vs `<span>` rendering
+- **`AutocompleteForm`**: emits `update:query` on input; preset change sets `biolink_type` + `only_prefixes`; preset `custom` does NOT emit options; hand-editing `biolink_type` away from the preset auto-switches preset to `custom`; debounce / highlight / advanced field bindings
+- **`AutocompleteApp`**: with `vi.mock`ed `fetchNameResLookup` — typing triggers exactly one call after the debounce window; a new keystroke while a request is in flight aborts it (`signal.aborted === true`); the Check button fires a second lookup with `limit: 100`; single-instance state renders the Results view (not the Comparison view)
 
 ## Shared Fixtures
 
@@ -75,6 +96,9 @@ tests/fixtures/
     mesh_d014867_no_conflate.json  # Water — 30 equiv IDs (conflate=false, drug_chemical_conflate=false)
     batch_mixed.json               # Multi-CURIE GET: MONDO:0004979 + NCIT:C55060 + FAKE:9999999
     not_found.json                 # FAKE:9999999 → null (key present, value null)
+  nameres_responses/
+    asthma.json, diabetes.json, metformin.json, no_results.json  # /lookup, no highlighting
+    crohn_highlighting.json        # /lookup?string=crohn&autocomplete=true&highlighting=true&limit=5
   prefix_map_subset.json           # 10 entries from biolink-model prefix map (MONDO, CHEBI, …)
 ```
 
@@ -96,6 +120,15 @@ Fixtures are snapshots of real NodeNorm Dev responses. To regenerate a single CU
 ```bash
 curl -s 'https://nodenormalization-sri.renci.org/get_normalized_nodes?curie=MONDO:0004979&conflate=true&drug_chemical_conflate=true&description=true&individual_types=true&include_taxa=true' \
   | python3 -m json.tool > tests/fixtures/nodenorm_responses/mondo_0004979.json
+```
+
+`crohn_highlighting.json` records what NameRes's highlighting really looks like: HTML-encoded
+text with each match in `<strong>` (`<strong>Crohn&#x27;s</strong> colitis`), and `{}` on every
+result unless the request sends `highlighting=true`. Regenerate it from NameRes Dev with:
+
+```bash
+curl -s 'https://name-resolution-sri.renci.org/lookup?string=crohn&limit=5&autocomplete=true&highlighting=true' \
+  | python3 -m json.tool > tests/fixtures/nameres_responses/crohn_highlighting.json
 ```
 
 For a multi-CURIE batch (GET with repeated params):

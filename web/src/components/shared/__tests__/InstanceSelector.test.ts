@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import InstanceSelector from '../InstanceSelector.vue';
-import { loadSessionPrefs, rememberSelection } from '../../../lib/instance-prefs';
+import { loadSessionPrefs, rememberSelection, savePrefs } from '../../../lib/instance-prefs';
 
 // tests/setup.ts provides localStorage and sessionStorage and clears both before each test.
 const STORAGE_KEY = 'babel-explorer:instance-prefs';
@@ -11,10 +11,11 @@ const STORAGE_KEY = 'babel-explorer:instance-prefs';
 const devInstance = { name: 'NodeNorm Dev', env: 'dev', url: 'https://dev.example.com/' };
 const expInstance = { name: 'NodeNorm Exp', env: 'exp', url: 'https://exp.example.com/' };
 const ciInstance = { name: 'NodeNorm CI', env: 'ci', url: 'https://ci.example.com/' };
+const esCiInstance = { name: 'NameRes ES CI', env: 'es_ci', url: 'https://es-ci.example.com/' };
 const testInstance = { name: 'NodeNorm Test', env: 'test', url: 'https://test.example.com/' };
 const prodInstance = { name: 'NodeNorm Prod', env: 'prod', url: 'https://prod.example.com/' };
 
-const ALL_INSTANCES = [expInstance, devInstance, ciInstance, testInstance, prodInstance];
+const ALL_INSTANCES = [expInstance, devInstance, ciInstance, esCiInstance, testInstance, prodInstance];
 
 function mountSelector(overrides: Record<string, unknown> = {}) {
   return mount(InstanceSelector, {
@@ -44,6 +45,19 @@ describe('InstanceSelector — rendering', () => {
     expect(details.exists()).toBe(true);
     expect(details.text()).toContain('RENCI Experimental');
     expect(details.text()).toContain('ITRB Test');
+  });
+
+  it('renders es_ci label as primary with an <abbr> for ElasticSearch', () => {
+    const wrapper = mountSelector();
+    const label = wrapper.find('label[for="inst-es_ci"]');
+    expect(label.exists()).toBe(true);
+    const abbr = label.find('abbr');
+    expect(abbr.exists()).toBe(true);
+    expect(abbr.attributes('title')).toBe('ElasticSearch');
+    expect(abbr.text()).toBe('ES');
+    expect(label.text()).toBe('ITRB ES CI');
+    // es_ci must be in the primary section, not inside <details>
+    expect(wrapper.find('details').html()).not.toContain('inst-es_ci');
   });
 
   it('does not open <details> by default', () => {
@@ -145,6 +159,23 @@ describe('InstanceSelector — default selection', () => {
     expect(initial).toContain(ciInstance.url);
     expect(initial).toContain(prodInstance.url);
   });
+
+  it('drops env keys this service lacks instead of treating them as custom URLs', () => {
+    // redis_ci was NodeNorm's Redis CI, since retired, and may still be in a saved default.
+    savePrefs('nodenorm', ['redis_ci', 'prod']);
+    const wrapper = mountSelector({ service: 'nameres' });
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    expect(emitted[0][0]).toEqual([prodInstance.url]);
+    expect(wrapper.find('details').attributes('open')).toBeUndefined();
+  });
+
+  it('falls through to the default when no saved key resolves', () => {
+    // As above: a retired key, or one only another service has.
+    rememberSelection('nodenorm', ['redis_ci']);
+    const wrapper = mountSelector({ service: 'nameres', initialTargets: ['redis_ci'] });
+    const emitted = wrapper.emitted('update:modelValue') as string[][];
+    expect(emitted[0][0]).toEqual([devInstance.url]);
+  });
 });
 
 // ─── Checkbox interactions ────────────────────────────────────────────────────
@@ -189,13 +220,14 @@ describe('InstanceSelector — checkbox interaction', () => {
 // ─── Quick-select presets ─────────────────────────────────────────────────────
 
 describe('InstanceSelector — quick-select presets', () => {
-  it('"Primary" selects only dev, ci, prod', async () => {
+  it('"Primary" selects only dev, ci, es_ci, prod', async () => {
     const wrapper = mountSelector({ initialTargets: ['exp'] });
     await wrapper.findAll('button').find((b) => b.text() === 'Primary')!.trigger('click');
     const emitted = wrapper.emitted('update:modelValue') as string[][];
     const last = emitted[emitted.length - 1][0];
     expect(last).toContain(devInstance.url);
     expect(last).toContain(ciInstance.url);
+    expect(last).toContain(esCiInstance.url);
     expect(last).toContain(prodInstance.url);
     expect(last).not.toContain(expInstance.url);
     expect(last).not.toContain(testInstance.url);
@@ -209,6 +241,7 @@ describe('InstanceSelector — quick-select presets', () => {
     expect(last).toContain(expInstance.url);
     expect(last).toContain(devInstance.url);
     expect(last).toContain(ciInstance.url);
+    expect(last).toContain(esCiInstance.url);
     expect(last).toContain(testInstance.url);
     expect(last).toContain(prodInstance.url);
     expect(wrapper.find('details').attributes('open')).toBe('');
@@ -334,7 +367,7 @@ describe('InstanceSelector — unusable targets', () => {
   });
 
   it('drops saved preferences that are neither known keys nor http(s) URLs', () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ envs: ['es_ci', 'ci'], custom: { nodenorm: ['ftp://h/'] } }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ envs: ['staging', 'ci'], custom: { nodenorm: ['ftp://h/'] } }));
     const wrapper = mountSelector();
     expect(initialSelectionOf(wrapper)).toEqual([ciInstance.url]);
   });

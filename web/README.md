@@ -29,6 +29,20 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 - **API tuning**: `biolink_type`, `only_prefixes`, `exclude_prefixes`, `only_taxa` exposed in the form; limit and autocomplete mode toggles; JSON export
 - **Shareable URLs**: Query state in the URL fragment (`#term=`, `target=`, non-default options and threshold), like NodeNorm, so a long annotated term list never reaches a server URL limit; older `?term=` links still load; a pasted link or Back re-runs the query without a reload
 
+### Autocomplete Playground (`/autocomplete`)
+
+Purpose-built for evaluating NameRes as a real autocomplete (the primary way the Translator UI uses it).
+
+- **Live-as-you-type**: every keystroke re-queries after a configurable debounce (0/150/300/500 ms); in-flight requests are aborted via `AbortController` so stale responses never render
+- **Preset dropdown**: one-click switches between the three Translator UI query shapes — Disease (`DiseaseOrPhenotypicFeature` + `only_prefixes=MONDO|HP`), Gene, Small Molecule — plus Custom. Presets only set `biolink_type` and `only_prefixes`; every other field stays user-editable
+- **Advanced options**: debounce, autocomplete flag, highlighting toggle (sends `highlighting=true`; off leaves it out, so the latency badges time a plain request), exclude_prefixes, only_taxa (collapsed by default, auto-opens when any non-default is set)
+- **Latency badges**: per-instance response time, with a tooltip noting parallel-contention when comparing multiple environments
+- **Match-reason highlighting**: renders NameRes's `highlighting` fragments — HTML-encoded Solr output with each match in `<strong>` — as `<mark>`, escaping everything else; the only place `v-html` is used in the codebase. NameRes returns them only when asked (`highlighting=true`), and an empty `{}` otherwise
+- **Single- vs multi-instance views**: one instance → rich ranked table with copy-API-URL per row; multiple → side-by-side comparison table with row/cell styling for missing CURIEs, rank drift, label/types mismatches; each column header has an `API↗` link to the raw NameRes JSON for that instance
+- **Biolink type display**: the left-hand CURIE column shows the most specific Biolink type as a badge (linked to biolink.github.io/biolink-model); when instances disagree, all distinct types are shown and the type is repeated per-cell for easy comparison
+- **Expected-CURIE panel**: paste CURIEs you expect to see; "Check" button fires a `limit=100` parallel lookup per instance and shows whether each expected CURIE appears in the top-N (green), top-100 (amber) or is missing (red). Round-trips through URL state for shareable review links
+- **Shareable state**: `q`, `preset`, repeated `target`, repeated `expected`, per-field option overrides, non-default `debounce` and `highlight` all encoded in the URL
+
 ## Development
 
 ```bash
@@ -60,16 +74,19 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 ## Deployment
 
 `.github/workflows/deploy.yml` builds the site and pushes it to the `gh-pages` branch on every push to `main` that touches `web/` or `config/`, on published releases, and on demand (`workflow_dispatch`). GitHub Pages serves it at `https://translatorsri.github.io/babel-explorer/`.
-Each deploy copies the build over what is already on `gh-pages` (`keep_files: true`) rather
-than replacing the branch, because some tools are deployed there from branches that are not
-on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
-when to switch back to `force_orphan`.
+Each deploy replaces `gh-pages` with exactly that build (`force_orphan: true`), so a file the
+site no longer produces is removed. Every page therefore has to be built from `main`: a tool
+deployed to `gh-pages` from another branch disappears at the next deploy from `main`.
 Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
 together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
 ## Shared Configuration
 
 Deployment URLs for NodeNorm and NameRes are defined once in `config/translator-endpoints.json` at the repo root. The Astro frontend imports it at build time; the planned server API will read the same file, so a new deployment is added in one place.
+
+Instance keys: NodeNorm has `dev`, `exp`, `ci`, `test`, `prod`, all of CI onwards on ElasticSearch; NameRes has `dev`, `exp`, `ci` (Solr), `es_ci`, `test`, `prod`. `es_ci` is the ElasticSearch rewrite of NameRes, being tested and improved in CI before it is published, so the two services' `ci` keys point at different backends. Saved defaults and `#target=` links are shared by every tool, so a key the current service lacks (`es_ci` in NodeNorm) is ignored rather than treated as a custom URL — `resolveTarget()` in `src/lib/instances.ts`. So is a retired key, such as NodeNorm's former `redis_ci`, that an old saved default or link still names.
+
+Comparison tables always list instances in pipeline order (Exp, Dev, CI, ES CI, Test, Prod, then custom URLs). To add a named instance: (1) add its URL to `config/translator-endpoints.json`; (2) if its key is new, add one entry to `ENVIRONMENTS` in `src/lib/instances.ts`, at its place in the pipeline. That entry holds everything else: its result-table label, its selector label (and any word in it to show as an `<abbr>`), and whether it is primary, i.e. shown without expanding "Extended environments". A test in `instances.test.ts` fails if the config names a key `ENVIRONMENTS` lacks.
 
 CURIE link-outs use the [biolink-model prefix map](https://github.com/biolink/biolink-model), vendored as `src/lib/biolink-prefix-map.json` and bundled at build time. It is an exact copy of one release, named in `src/lib/biolink-prefix-map.version`; update both with `npm run update-prefix-map` (latest release) or `npm run update-prefix-map -- <tag>`.
 
@@ -89,6 +106,7 @@ src/
     index.astro                     # Landing page with tool cards
     nodenorm.astro                  # Hosts NodeNormApp Vue island
     nameres.astro                   # Hosts NameResApp Vue island
+    autocomplete.astro              # Hosts AutocompleteApp Vue island
   components/
     Navbar.astro                    # Shared navbar (Astro component)
     nodenorm/                       # NodeNorm Vue components
@@ -100,13 +118,14 @@ src/
       EquivalentIdTable.vue         # Equiv ID table with togglable columns
       ColumnVisibility.vue          # Column show/hide controls
     nameres/                        # NameRes Vue components (App, Form, ComparisonView, DetailPanel, ResultsSummary)
+    autocomplete/                   # Autocomplete Vue components (App, Form, Results, ComparisonView, HighlightedFragment, ExpectedCuriePanel, LatencyBadge)
     shared/
       InstanceSelector.vue          # Deployment checkboxes + custom URLs, shared by every tool
       CurieLink.vue                 # CURIE → external URL link
       BiolinkTypeLink.vue           # Biolink type badge → biolink-model docs
   lib/
     nodenorm-api.ts                 # NodeNorm API fetch wrapper (batched, bounded concurrency, AbortSignal)
-    instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check
+    instances.ts                    # Target (env key or URL) → instance URL, for every service; the one http(s) check; pipeline order
     curie-links.ts                  # CURIE → URL via the vendored biolink prefix map
     url-state.ts                    # Encode/decode NodeNorm query state in the URL fragment
     types.ts                        # NodeNorm TypeScript interfaces
@@ -115,6 +134,11 @@ src/
     nameres-url-state.ts            # Encode/decode NameRes query state in the URL fragment
     instance-prefs.ts               # Session and saved selection; initialSelection, the starting instances
     use-share-link.ts               # The Share button: copy the page URL, report success or failure
+    autocomplete-url-state.ts       # Encode/decode Autocomplete query state
+    autocomplete-presets.ts         # Disease/Gene/SmallMolecule/Custom presets + detectPreset
+    autocomplete-diff.ts            # Presence/rank/label/type diffs across instances
+    debounce.ts                     # debounce(fn, ms) with .cancel()
+    highlight-sanitize.ts           # Renders NameRes highlighting fragments (<strong> marks → <mark>, all else escaped)
 ```
 
 ## Adding a New Tool

@@ -1,10 +1,13 @@
 import { describe, it, expect } from 'vitest';
+import endpoints from '../../../../config/translator-endpoints.json';
 import {
+  ENVIRONMENTS,
   buildInstances,
   findInstance,
   instanceForUrl,
   normalizeInstanceUrl,
   resolveTarget,
+  sortInstances,
   urlToTarget,
 } from '../instances';
 
@@ -49,7 +52,10 @@ describe('resolveTarget', () => {
     expect(resolveTarget(instances, 'https://custom.example')).toBe('https://custom.example/');
   });
 
-  it.each(['ftp://h/', '//evil.example', 'staging'])('returns null for %j', (target) => {
+  // Share links and saved selections are shared between tools, and NodeNorm and
+  // NameRes do not have the same keys, so another service's key must not be fetched;
+  // nor must a retired one such as redis_ci, which old saved defaults still name.
+  it.each(['ftp://h/', '//evil.example', 'staging', 'redis_ci'])('returns null for %j', (target) => {
     expect(resolveTarget(instances, target)).toBeNull();
   });
 });
@@ -63,5 +69,34 @@ describe('instanceForUrl and urlToTarget', () => {
       env: 'https://custom.example/',
       url: 'https://custom.example/',
     });
+  });
+});
+
+describe('ENVIRONMENTS', () => {
+  it.each(Object.entries(endpoints))(
+    'describes every %s environment in translator-endpoints.json',
+    (_service, urlsByEnv) => {
+      for (const env of Object.keys(urlsByEnv)) expect(ENVIRONMENTS).toHaveProperty(env);
+    },
+  );
+
+  it.each(Object.entries(ENVIRONMENTS).filter(([, info]) => info.abbr))(
+    "puts %s's <abbr> text in its selector label",
+    (_env, info) => expect(info.selectorLabel).toContain(info.abbr!.text),
+  );
+});
+
+describe('sortInstances', () => {
+  it('sorts known environments into pipeline order and custom URLs last', () => {
+    const custom = { name: 'https://a.example.com/', env: 'https://a.example.com/', url: 'https://a.example.com/' };
+    const all = buildInstances('NameRes', {
+      prod: 'https://prod.example/',
+      es_ci: 'https://es-ci.example/',
+      exp: 'https://exp.example/',
+      ci: 'https://ci.example/',
+    });
+    expect(sortInstances([custom, ...all]).map((i) => i.env)).toEqual([
+      'exp', 'ci', 'es_ci', 'prod', 'https://a.example.com/',
+    ]);
   });
 });

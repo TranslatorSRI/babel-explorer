@@ -24,13 +24,62 @@ export interface Instance {
   url: string;
 }
 
-const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  test: 'Test',
-  prod: 'Production',
+/** How the site shows one named environment. */
+export interface EnvironmentInfo {
+  /** Ends the instance's name in result tables: "NameRes Dev". */
+  label: string;
+  /** The instance selector's label, which names the host: "RENCI Dev", "ITRB CI". */
+  selectorLabel: string;
+  /** A word in selectorLabel the selector wraps in <abbr>, with this title. */
+  abbr?: { text: string; title: string };
+  /** Shown in the selector without expanding "Extended environments". */
+  primary: boolean;
+}
+
+/**
+ * Every named environment, in pipeline order (Exp → Dev → CI → ES CI → Test → Prod). config/translator-endpoints.json says which environments each service has and
+ * where they are; this says how to show and order them. Adding an environment means its
+ * URL there and one entry here — a test fails if the config names an environment this
+ * table lacks.
+ *
+ * A key removed from here can still turn up in a saved default or an old share link
+ * (`redis_ci`, NodeNorm's retired Redis CI, for one); resolveTarget ignores it like any
+ * other key the service lacks.
+ */
+export const ENVIRONMENTS: Record<string, EnvironmentInfo> = {
+  exp: { label: 'Exp', selectorLabel: 'RENCI Experimental', primary: false },
+  dev: { label: 'Dev', selectorLabel: 'RENCI Dev', primary: true },
+  ci: { label: 'CI', selectorLabel: 'ITRB CI', primary: true },
+  es_ci: {
+    label: 'ES CI',
+    selectorLabel: 'ITRB ES CI',
+    abbr: { text: 'ES', title: 'ElasticSearch' },
+    primary: true,
+  },
+  test: { label: 'Test', selectorLabel: 'ITRB Test', primary: false },
+  prod: { label: 'Production', selectorLabel: 'ITRB Prod', primary: true },
 };
+
+/** Pipeline order of the known environments; anything else is a custom URL. */
+const ENV_ORDER = Object.keys(ENVIRONMENTS);
+
+function envOrder(env: string): number {
+  const i = ENV_ORDER.indexOf(env);
+  return i === -1 ? ENV_ORDER.length : i;
+}
+
+/**
+ * Sort instances into pipeline order (see ENVIRONMENTS), then custom URLs, alphabetically
+ * by URL for stability.
+ */
+export function sortInstances<T extends Instance>(instances: T[]): T[] {
+  return [...instances].sort((a, b) => {
+    const oa = envOrder(a.env);
+    const ob = envOrder(b.env);
+    if (oa !== ob) return oa - ob;
+    return a.url.localeCompare(b.url);
+  });
+}
 
 /**
  * Canonical form of an instance URL, or null if it is not an absolute http(s) URL.
@@ -52,7 +101,7 @@ export function normalizeInstanceUrl(raw: string): string | null {
 /** Build a service's instance list from its section of translator-endpoints.json. */
 export function buildInstances(service: string, urlsByEnv: Record<string, string>): Instance[] {
   return Object.entries(urlsByEnv).map(([env, url]) => ({
-    name: `${service} ${ENV_LABELS[env] ?? env}`,
+    name: `${service} ${ENVIRONMENTS[env]?.label ?? env}`,
     env,
     url: normalizeInstanceUrl(url) ?? url,
   }));

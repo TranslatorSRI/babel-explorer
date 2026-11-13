@@ -7,7 +7,7 @@ import { readNameResQueryState, buildNameResQueryUrl } from '../../lib/nameres-u
 import NameResForm from './NameResForm.vue';
 import NameResComparisonView from './NameResComparisonView.vue';
 import NameResResultsSummary from './NameResResultsSummary.vue';
-import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
+import { buildInstances, instanceForUrl, resolveTarget, sortInstances, urlToTarget } from '../../lib/instances';
 import { initialSelection } from '../../lib/instance-prefs';
 import endpoints from '../../../../config/translator-endpoints.json';
 
@@ -248,7 +248,8 @@ async function handleSubmit(payload: {
     resultsByInstance.value = resultMap;
     queriedTerms.value = terms;
     threshold.value = payload.threshold;
-    queriedInstances.value = payload.instanceUrls.map((url) => instanceForUrl(instances, url));
+    // Columns in pipeline order (Exp → … → Prod, then custom URLs), whatever the tick order.
+    queriedInstances.value = sortInstances(payload.instanceUrls.map((url) => instanceForUrl(instances, url)));
 
     if (errors.length > 0) {
       error.value = `Some lookups failed: ${errors.slice(0, 5).join('; ')}${errors.length > 5 ? ` (+${errors.length - 5} more)` : ''}`;

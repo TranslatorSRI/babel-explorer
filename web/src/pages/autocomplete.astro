@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import AutocompleteApp from '../components/autocomplete/AutocompleteApp.vue';
+---
+
+<BaseLayout title="Autocomplete - Babel Explorer" activePage="autocomplete">
+  <h2 class="mb-3">Autocomplete Playground</h2>
+  <p class="mb-4">
+    Exercise NameRes in autocomplete mode — results update as you type. Use the
+    preset dropdown to pick one of the Translator UI's query shapes, or go
+    custom. Pick one instance for a detailed view, or several to compare them
+    side-by-side. The URL stays in sync so any state you set is shareable.
+  </p>
+  <AutocompleteApp client:only="vue" />
+</BaseLayout>

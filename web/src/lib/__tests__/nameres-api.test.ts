@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, LOOKUP_TIMEOUT_MS, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
+import { buildLookupUrl, uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, LOOKUP_TIMEOUT_MS, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions, NameResResult } from '../nameres-types';
 import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
@@ -117,6 +117,22 @@ describe('parseSearchTerms', () => {
 // ---------------------------------------------------------------------------
 // fetchNameResLookup
 // ---------------------------------------------------------------------------
+
+describe('buildLookupUrl', () => {
+  it('leaves highlighting out unless asked, since NameRes defaults it to false', () => {
+    const plain = buildLookupUrl('https://nameres.example/', 'diab', DEFAULT_NAMERES_OPTIONS);
+    expect(plain.searchParams.has('highlighting')).toBe(false);
+    const off = buildLookupUrl('https://nameres.example/', 'diab', { ...DEFAULT_NAMERES_OPTIONS, highlighting: false });
+    expect(off.searchParams.has('highlighting')).toBe(false);
+  });
+
+  it('sends highlighting=true when asked', () => {
+    const url = buildLookupUrl('https://nameres.example/', 'diab', { ...DEFAULT_NAMERES_OPTIONS, highlighting: true });
+    expect(url.searchParams.get('highlighting')).toBe('true');
+    expect(url.pathname).toBe('/lookup');
+    expect(url.searchParams.get('string')).toBe('diab');
+  });
+});
 
 describe('fetchNameResLookup', () => {
   beforeEach(() => {

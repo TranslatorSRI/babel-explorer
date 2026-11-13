@@ -3,7 +3,7 @@ import { ref, shallowRef, reactive, computed, onMounted, onBeforeUnmount } from 
 import type { NormalizedNode, NodeNormResponse, NodeNormInstance, ApiOptions, NodeNormQuery } from '../../lib/types';
 import { DEFAULT_API_OPTIONS } from '../../lib/types';
 import { fetchNormalizedNodes, parseCuries } from '../../lib/nodenorm-api';
-import { buildInstances, instanceForUrl, resolveTarget, urlToTarget } from '../../lib/instances';
+import { buildInstances, instanceForUrl, resolveTarget, sortInstances, urlToTarget } from '../../lib/instances';
 import { initialSelection } from '../../lib/instance-prefs';
 import { readQueryState, buildQueryUrl } from '../../lib/url-state';
 import NodeNormForm from './NodeNormForm.vue';
@@ -227,7 +227,8 @@ async function handleSubmit(payload: NodeNormQuery) {
     resultsByInstance.value = resultMap;
     queriedCuries.value = curies;
     queriedOptions.value = payload.options;
-    queriedInstances.value = payload.instanceUrls.map((url) => instanceForUrl(instances, url));
+    // Columns in pipeline order (Exp → … → Prod, then custom URLs), whatever the tick order.
+    queriedInstances.value = sortInstances(payload.instanceUrls.map((url) => instanceForUrl(instances, url)));
     typeFilter.clear();
 
     if (errors.length > 0) {
