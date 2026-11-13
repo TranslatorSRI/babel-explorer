@@ -66,8 +66,19 @@ export function uniqueSearchTexts(terms: ParsedSearchTerm[]): string[] {
 }
 
 /**
+ * How long one lookup may take, from request to parsed body, before it is reported as
+ * failed. Without a deadline, an instance that stalls mid-response holds back every
+ * other instance's results, since NameResApp waits for all of them. Generous, as
+ * NodeNorm's BATCH_TIMEOUT_MS is, so that a slow Solr query is not mistaken for a
+ * stalled server.
+ */
+export const LOOKUP_TIMEOUT_MS = 60_000;
+
+/**
  * Call the NameRes /lookup endpoint for a single search term.
  *
+ * A lookup that takes longer than LOOKUP_TIMEOUT_MS fails on its own; the caller's
+ * signal is left alone, so the other lookups carry on.
  * @param baseUrl  NameRes instance URL (must end with /)
  * @param text     Search string
  * @param options  API query options
@@ -98,18 +109,40 @@ export async function fetchNameResLookup(
     url.searchParams.set('only_taxa', options.only_taxa);
   }
 
-  const resp = await fetch(url.toString(), { signal });
-  if (!resp.ok) {
-    throw new Error(`NameRes returned HTTP ${resp.status}: ${resp.statusText}`);
+  // Linked by hand rather than with AbortSignal.any, which Safari gained only in 17.4.
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+  let timedOut = false;
+  // The body is read under the same signal, so the deadline covers a stalled body too.
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, LOOKUP_TIMEOUT_MS);
+
+  try {
+    const resp = await fetch(url.toString(), { signal: controller.signal });
+    if (!resp.ok) {
+      throw new Error(`NameRes returned HTTP ${resp.status}: ${resp.statusText}`);
+    }
+    // A 200 that is not a list (an error object from a custom server, a proxy's page)
+    // would otherwise be stored as this term's results and crash the views that index
+    // into it; as a failed lookup it fails only its own cell.
+    const body: unknown = await resp.json();
+    if (!Array.isArray(body)) {
+      throw new Error('NameRes returned something other than a list of results');
+    }
+    return body as NameResResult[];
+  } catch (err) {
+    if (timedOut && !signal?.aborted) {
+      throw new Error(`NameRes did not answer within ${LOOKUP_TIMEOUT_MS / 1000} s`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
-  // A 200 that is not a list (an error object from a custom server, a proxy's page)
-  // would otherwise be stored as this term's results and crash the views that index
-  // into it; as a failed lookup it fails only its own cell.
-  const body: unknown = await resp.json();
-  if (!Array.isArray(body)) {
-    throw new Error('NameRes returned something other than a list of results');
-  }
-  return body as NameResResult[];
 }
 
 /** Lookups in flight at once per instance (see MAX_REQUESTS_PER_INSTANCE). */

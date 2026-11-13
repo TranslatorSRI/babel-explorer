@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
+import { uniqueSearchTexts, parseSearchTerms, fetchNameResLookup, fetchNameResLookups, LOOKUP_TIMEOUT_MS, MAX_CONCURRENT_LOOKUPS, validateExpectedCuries } from '../nameres-api';
 import { DEFAULT_NAMERES_OPTIONS } from '../nameres-types';
 import type { NameResApiOptions, NameResResult } from '../nameres-types';
 import asthmaFixture from '../../../../tests/fixtures/nameres_responses/asthma.json';
@@ -201,6 +201,69 @@ describe('fetchNameResLookup', () => {
     await expect(
       fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS),
     ).rejects.toThrow('NameRes returned HTTP 500');
+  });
+
+  it('fails a lookup that takes longer than the timeout, leaving the caller alone', async () => {
+    vi.useFakeTimers();
+    try {
+      // Never resolves on its own; settles only when aborted.
+      vi.stubGlobal('fetch', vi.fn((_url: string, init: RequestInit) =>
+        new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      ));
+      const caller = new AbortController();
+      const result = fetchNameResLookup(
+        'https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS, caller.signal,
+      ).catch((e) => e);
+
+      await vi.advanceTimersByTimeAsync(LOOKUP_TIMEOUT_MS - 1);
+      expect(caller.signal.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+
+      const err = await result;
+      expect(err.message).toBe(`NameRes did not answer within ${LOOKUP_TIMEOUT_MS / 1000} s`);
+      expect(caller.signal.aborted).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out a response whose body stalls', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal('fetch', vi.fn(async (_url: string, init: RequestInit) => ({
+        ok: true,
+        json: () => new Promise((_, reject) => init.signal!.addEventListener('abort', () =>
+          reject(Object.assign(new Error('aborted'), { name: 'AbortError' })),
+        )),
+      })));
+      const result = fetchNameResLookup('https://example.com/', 'asthma', DEFAULT_NAMERES_OPTIONS)
+        .catch((e) => e);
+      await vi.advanceTimersByTimeAsync(LOOKUP_TIMEOUT_MS);
+      expect((await result).message).toContain('did not answer');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('gives each lookup its own deadline, not the whole batch', async () => {
+    vi.useFakeTimers();
+    try {
+      // Each lookup answers just inside the timeout, so the batch as a whole takes longer.
+      vi.stubGlobal('fetch', vi.fn(() =>
+        new Promise((resolve) => setTimeout(
+          () => resolve({ ok: true, json: () => Promise.resolve([]) }),
+          LOOKUP_TIMEOUT_MS - 1,
+        )),
+      ));
+      const texts = Array.from({ length: MAX_CONCURRENT_LOOKUPS * 3 }, (_, i) => `t${i}`);
+      const result = fetchNameResLookups('https://example.com/', texts, DEFAULT_NAMERES_OPTIONS);
+      await vi.runAllTimersAsync();
+      expect((await result).every((r) => r.status === 'fulfilled')).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws AbortError when called with an already-aborted signal', async () => {
