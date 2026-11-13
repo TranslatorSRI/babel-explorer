@@ -76,6 +76,7 @@ describe.each(liveInstances('nameres'))('$name', (instance) => {
 
   it('returns highlighting in the format renderHighlight understands', async () => {
     const results = await lookup('asthma', { limit: 5, highlighting: true });
+    expect(results.length, 'results for "asthma"').toBeGreaterThan(0);
     for (const r of results) {
       for (const field of ['labels', 'synonyms']) {
         const fragments = r.highlighting?.[field];
@@ -84,7 +85,11 @@ describe.each(liveInstances('nameres'))('$name', (instance) => {
       }
     }
     // The marks must come through as <mark>, with no tag or entity left as text.
-    const rendered = renderHighlight(labelFragment(results[0]));
+    // From a result that matched in its label: one that matched only in a synonym has
+    // no marked label, and labelFragment falls back to the plain one.
+    const labelled = results.find((r) => (r.highlighting?.labels as unknown[] | undefined)?.length);
+    expect(labelled, 'a result highlighted in its label').toBeDefined();
+    const rendered = renderHighlight(labelFragment(labelled!));
     expect(rendered).toContain('<mark>');
     expect(rendered).not.toMatch(/&lt;|&#x|&amp;#/);
   });

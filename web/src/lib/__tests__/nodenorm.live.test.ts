@@ -15,7 +15,12 @@ describe.each(liveInstances('nodenorm'))('$name', (instance) => {
       instance.url,
       ['MONDO:0004979', 'NCBIGene:1756', 'FAKE:9999999'],
       DEFAULT_API_OPTIONS,
-    ));
+    ).catch((e) => {
+      // Forget a failure, so the config's retry sends a new request instead of
+      // awaiting this rejected one again.
+      cached = undefined;
+      throw e;
+    }));
 
   it('lets the published site read its responses (CORS)', async () => {
     await expectCorsAllowsSite(buildNodeNormUrl(instance.url, ['MONDO:0004979'], DEFAULT_API_OPTIONS));
