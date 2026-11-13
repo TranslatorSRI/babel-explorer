@@ -76,6 +76,22 @@ describe('NameResApp — the URL fragment', () => {
     expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('diabetes');
   });
 
+  it('clears the results for a link whose terms are only comments or annotations', async () => {
+    const fetchMock = vi.fn(async (url: string) => respond(url));
+    vi.stubGlobal('fetch', fetchMock);
+    setUrl('#term=asthma&target=prod');
+    const wrapper = mount(NameResApp, { attachTo: document.body });
+    await flushPromises();
+
+    setUrl(`#${new URLSearchParams([['term', '# a comment'], ['term', '[[X:1]]'], ['target', 'prod']])}`);
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    await flushPromises();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('table').exists()).toBe(false);
+    expect(wrapper.text()).toContain('No valid search terms provided.');
+  });
+
   it('does not re-run a query for the fragment it wrote itself', async () => {
     const fetchMock = vi.fn(async (url: string) => respond(url));
     vi.stubGlobal('fetch', fetchMock);

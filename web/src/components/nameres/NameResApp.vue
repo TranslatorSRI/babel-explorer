@@ -78,8 +78,12 @@ async function applyUrlState() {
   ignoredTargets.value = targets.filter((_, i) => resolved[i] === null);
   const instanceUrls = [...new Set(resolved.filter((u): u is string => u !== null))];
 
-  if (terms.length === 0) {
+  // A link whose terms are all comments or bare annotations runs nothing either. Leaving
+  // the previous results up would put them under an address bar describing this link,
+  // so Share would copy a link that cannot reproduce them.
+  if (parseSearchTerms(terms.join('\n')).length === 0) {
     clearQuery();
+    if (terms.length > 0) error.value = 'No valid search terms provided.';
     return;
   }
   // A link naming only unusable targets would otherwise silently query another
