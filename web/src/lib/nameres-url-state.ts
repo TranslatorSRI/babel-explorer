@@ -45,10 +45,12 @@ export function readNameResQueryState(): NameResQueryState {
     if (isValidResultCount(parsed)) options.limit = parsed;
   }
 
+  // Only the values buildNameResQueryUrl writes, plus 1 and 0. Anything else (an empty
+  // value, "no") is ignored like an unusable limit, rather than read as true, which
+  // turned autocomplete=0 on.
   const autoVal = params.get('autocomplete');
-  if (autoVal !== null) {
-    options.autocomplete = autoVal !== 'false';
-  }
+  if (autoVal === 'true' || autoVal === '1') options.autocomplete = true;
+  else if (autoVal === 'false' || autoVal === '0') options.autocomplete = false;
 
   for (const key of STRING_OPTION_KEYS) {
     const val = params.get(key);

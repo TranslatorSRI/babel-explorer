@@ -64,6 +64,23 @@ describe('readNameResQueryState', () => {
     expect(state.options.autocomplete).toBe(true);
   });
 
+  it.each([
+    ['true', true],
+    ['1', true],
+    ['false', false],
+    ['0', false],
+  ])('reads autocomplete=%s as %s', async (value, expected) => {
+    setLocation('', '/nameres', `#term=asthma&autocomplete=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().options.autocomplete).toBe(expected);
+  });
+
+  it.each(['', 'no', 'yes'])('ignores autocomplete=%j', async (value) => {
+    setLocation('', '/nameres', `#term=asthma&autocomplete=${value}`);
+    const { readNameResQueryState } = await import('../nameres-url-state');
+    expect(readNameResQueryState().options.autocomplete).toBeUndefined();
+  });
+
   it('parses threshold', async () => {
     setLocation('?term=asthma&threshold=3');
     const { readNameResQueryState } = await import('../nameres-url-state');
