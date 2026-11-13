@@ -35,6 +35,11 @@ describe('parseSearchTerms', () => {
     expect(terms[1].text).toBe('diabetes');
   });
 
+  it('keeps one copy of a CURIE annotated twice on a line', () => {
+    const [term] = parseSearchTerms('asthma [[MONDO:0004979]] [[MONDO:0004979]]');
+    expect(term.expectedCuries).toEqual(['MONDO:0004979']);
+  });
+
   it('deduplicates by search text preserving first occurrence', () => {
     const terms = parseSearchTerms('asthma\ndiabetes\nasthma');
     expect(terms).toHaveLength(2);

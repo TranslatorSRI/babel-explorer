@@ -34,12 +34,15 @@ export function parseSearchTerms(raw: string): ParsedSearchTerm[] {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
 
-    // Extract [[CURIE]] annotations
+    // Extract [[CURIE]] annotations. A CURIE annotated twice is expected once: the
+    // comparison view keys its badges by CURIE, so a repeat would also give Vue
+    // duplicate keys.
     const expectedCuries: string[] = [];
     const annotationRegex = /\[\[([^\]]+)\]\]/g;
     let match;
     while ((match = annotationRegex.exec(trimmed)) !== null) {
-      expectedCuries.push(match[1].trim());
+      const curie = match[1].trim();
+      if (!expectedCuries.includes(curie)) expectedCuries.push(curie);
     }
 
     // Strip annotations from search text
@@ -47,7 +50,7 @@ export function parseSearchTerms(raw: string): ParsedSearchTerm[] {
     if (!text) continue;
 
     // Deduplicate by search text and the set of expected CURIEs
-    const key = JSON.stringify([text, [...new Set(expectedCuries)].sort()]);
+    const key = JSON.stringify([text, [...expectedCuries].sort()]);
     if (seen.has(key)) continue;
     seen.add(key);
 
