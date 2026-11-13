@@ -24,17 +24,15 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: live-check
-  cancel-in-progress: false
-
 env:
   SITE_URL: ${{ inputs.site_url || 'https://translatorsri.github.io/babel-explorer/' }}
 
 jobs:
   api-contract:
-    # After a deploy, only one that succeeded: a failed deploy changed nothing to check.
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Not after a deploy: these call NodeNorm and NameRes directly, which a deploy does
+    # not change. A deploy that moves an endpoint in config/ has it checked at the next
+    # daily run, or sooner from workflow_dispatch.
+    if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -71,10 +69,17 @@ jobs:
         if: github.event_name == 'workflow_run'
         env:
           WANT: ${{ github.event.workflow_run.head_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           for _ in $(seq 60); do
-            got=$(curl -fsS "${SITE_URL}commit.txt?t=$(date +%s)" || true)
+            got=$(curl -fsS --max-time 15 "${SITE_URL}commit.txt?t=$(date +%s)" || true)
             [ "$got" = "$WANT" ] && exit 0
+            # A later deploy may go live first, or replace this one's Pages build; the
+            # site then serves a descendant of WANT, which includes this deploy.
+            if [[ "$got" =~ ^[0-9a-f]{40}$ ]]; then
+              status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$WANT...$got" --jq .status || true)
+              [ "$status" = ahead ] && exit 0
+            fi
             sleep 10
           done
           echo "::error::${SITE_URL}commit.txt is '$got' after 10 minutes, not $WANT"
