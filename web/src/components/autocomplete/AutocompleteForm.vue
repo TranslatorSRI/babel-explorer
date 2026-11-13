@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { MAX_RESULT_COUNT } from '../../lib/nameres-api';
+import { useShareLink } from '../../lib/use-share-link';
 import InstanceSelector from '../shared/InstanceSelector.vue';
 import ExpectedCuriePanel from './ExpectedCuriePanel.vue';
 import {
@@ -44,7 +45,6 @@ const emit = defineEmits<{
   'update:debounceMs': [value: DebounceMs];
   'update:highlight': [value: boolean];
   check: [];
-  share: [];
   stop: [];
 }>();
 
@@ -123,10 +123,8 @@ function hasNonDefaultAdvancedOptions(): boolean {
  */
 const advancedOpen = ref(hasNonDefaultAdvancedOptions());
 
-// Copy page URL as "Share" button feedback.
-function onShare() {
-  emit('share');
-}
+// The page URL always describes the current query (AutocompleteApp keeps it in sync).
+const { shareStatus, share } = useShareLink();
 </script>
 
 <template>
@@ -302,8 +300,8 @@ function onShare() {
     </details>
 
     <div class="d-flex align-items-center gap-2 flex-wrap">
-      <button type="button" class="btn btn-sm btn-outline-secondary" @click="onShare">
-        Copy link
+      <button type="button" class="btn btn-sm btn-outline-secondary" @click="share">
+        {{ shareStatus ?? 'Copy link' }}
       </button>
       <button
         v-if="anyInFlight"

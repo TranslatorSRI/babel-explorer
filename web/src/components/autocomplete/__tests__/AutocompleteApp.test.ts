@@ -303,6 +303,24 @@ describe('AutocompleteApp', () => {
     expect(wrapper.text()).toContain('Copy API URL');
   });
 
+  it('says so when copying the API URL fails', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
+    try {
+      setLocation('#q=diab&target=dev');
+      const wrapper = mount(AutocompleteApp);
+      await flushPromises();
+      vi.advanceTimersByTime(200);
+      await flushPromises();
+
+      const button = () => wrapper.findAll('button').find((b) => ['Copy API URL', 'Copy failed'].includes(b.text()))!;
+      await button().trigger('click');
+      await flushPromises();
+      expect(button().text()).toBe('Copy failed');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   // ── ES CI regression: target=es_ci must resolve to the ES CI base URL ─────────
   //
   // Bug: the comparison view showed an empty ES CI column even though clicking the

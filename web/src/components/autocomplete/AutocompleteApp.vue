@@ -281,14 +281,6 @@ async function runDeepCheck() {
   checking.value = false;
 }
 
-// ─── Copy-link ──────────────────────────────────────────────────────────────
-
-async function handleShare() {
-  try {
-    await navigator.clipboard.writeText(window.location.href);
-  } catch { /* noop */ }
-}
-
 function handleStop() {
   abortController?.abort();
   abortDeepCheck();
@@ -361,7 +353,6 @@ const initialTargets = computed<string[] | undefined>(() =>
         @update:debounce-ms="(v) => (debounceMs = v)"
         @update:highlight="(v) => (highlight = v)"
         @check="runDeepCheck"
-        @share="handleShare"
         @stop="handleStop"
       />
     </div>

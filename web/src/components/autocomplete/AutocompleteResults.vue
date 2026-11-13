@@ -16,14 +16,20 @@ const props = defineProps<{
   apiUrl: string;
 }>();
 
+/** The button whose copy just finished, and whether it failed, shown for a moment. */
 const copied = ref('');
+const copyFailed = ref(false);
 
 async function copyText(text: string, tag: string) {
   try {
+    // navigator.clipboard is undefined outside a secure context, which lands here too.
     await navigator.clipboard.writeText(text);
-    copied.value = tag;
-    setTimeout(() => { if (copied.value === tag) copied.value = ''; }, 1500);
-  } catch { /* noop */ }
+    copyFailed.value = false;
+  } catch {
+    copyFailed.value = true;
+  }
+  copied.value = tag;
+  setTimeout(() => { if (copied.value === tag) copied.value = ''; }, 1500);
 }
 
 function curieApiUrl(curie: string): string {
@@ -52,7 +58,7 @@ const hasResults = computed(() => props.state.results.length > 0);
         class="btn btn-sm btn-outline-secondary"
         @click="copyText(apiUrl, 'url')"
       >
-        {{ copied === 'url' ? '✓ Copied' : 'Copy API URL' }}
+        {{ copied === 'url' ? (copyFailed ? 'Copy failed' : '✓ Copied') : 'Copy API URL' }}
       </button>
     </div>
 
@@ -107,7 +113,7 @@ const hasResults = computed(() => props.state.results.length > 0);
                 :title="curieApiUrl(r.curie)"
                 @click="copyText(curieApiUrl(r.curie), r.curie)"
               >
-                {{ copied === r.curie ? '✓' : 'Copy URL' }}
+                {{ copied === r.curie ? (copyFailed ? 'Copy failed' : '✓') : 'Copy URL' }}
               </button>
             </td>
           </tr>

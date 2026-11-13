@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
 import AutocompleteForm from '../AutocompleteForm.vue';
 import { DEFAULT_AUTOCOMPLETE_OPTIONS, DEFAULT_DEBOUNCE_MS } from '../../../lib/autocomplete-url-state';
 import type { NameResInstance, NameResApiOptions } from '../../../lib/nameres-types';
@@ -135,5 +135,33 @@ describe('AutocompleteForm', () => {
     const wrapper = mount(AutocompleteForm, { props: makeProps() });
     await wrapper.find('#ac-highlight').setValue(false);
     expect(wrapper.emitted('update:highlight')?.[0]).toEqual([false]);
+  });
+});
+
+describe('AutocompleteForm — Copy link', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function copyButton(wrapper: ReturnType<typeof mount>) {
+    return wrapper.findAll('button').find((b) => ['Copy link', '✓ Copied!', 'Copy failed'].includes(b.text()))!;
+  }
+
+  it('copies the page URL and says so', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const wrapper = mount(AutocompleteForm, { props: makeProps() });
+    await copyButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(writeText).toHaveBeenCalledWith(window.location.href);
+    expect(copyButton(wrapper).text()).toBe('✓ Copied!');
+  });
+
+  it('reports failure rather than doing nothing when the copy is refused', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: () => Promise.reject(new Error('denied')) } });
+    const wrapper = mount(AutocompleteForm, { props: makeProps() });
+    await copyButton(wrapper).trigger('click');
+    await flushPromises();
+    expect(copyButton(wrapper).text()).toBe('Copy failed');
   });
 });
