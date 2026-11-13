@@ -11,6 +11,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "test:e2e": "playwright test",
     "typecheck": "vue-tsc --noEmit",
     "test:watch": "vitest",
     "update-prefix-map": "node scripts/update-prefix-map.mjs"
