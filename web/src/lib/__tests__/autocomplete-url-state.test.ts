@@ -5,9 +5,12 @@ import {
   parseExpectedCuries,
 } from '../autocomplete-url-state';
 
-function setLocation(search: string, pathname = '/autocomplete') {
+/** Point window.location at a link whose state is `#…` (the fragment) or `?…` (older links). */
+function setLocation(state: string, pathname = '/autocomplete') {
+  const hash = state.startsWith('#') ? state : '';
+  const search = state.startsWith('?') ? state : '';
   Object.defineProperty(window, 'location', {
-    value: { search, pathname, href: `http://localhost${pathname}${search}` },
+    value: { search, hash, pathname, href: `http://localhost${pathname}${search}${hash}` },
     writable: true,
     configurable: true,
   });
@@ -32,7 +35,7 @@ describe('readAutocompleteQueryState', () => {
   });
 
   it('parses q, preset, targets, expected', async () => {
-    setLocation('?q=diab&preset=gene&target=dev&target=prod&expected=NCBIGene:1234&expected=HGNC:5');
+    setLocation('#q=diab&preset=gene&target=dev&target=prod&expected=NCBIGene:1234&expected=HGNC:5');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     const s = readAutocompleteQueryState();
     expect(s.query).toBe('diab');
@@ -42,13 +45,13 @@ describe('readAutocompleteQueryState', () => {
   });
 
   it('falls back to default preset for invalid values', async () => {
-    setLocation('?preset=bogus');
+    setLocation('#preset=bogus');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     expect((await (await import('../autocomplete-url-state')).readAutocompleteQueryState()).preset).toBe('disease');
   });
 
   it('parses option overrides', async () => {
-    setLocation('?limit=20&autocomplete=false&biolink_type=Gene&only_prefixes=NCBIGene');
+    setLocation('#limit=20&autocomplete=false&biolink_type=Gene&only_prefixes=NCBIGene');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     const s = readAutocompleteQueryState();
     expect(s.options.limit).toBe(20);
@@ -58,21 +61,27 @@ describe('readAutocompleteQueryState', () => {
   });
 
   it.each(['0', '-3', '101', '500', '2.5', 'ten', ''])('ignores limit=%s, which the form would refuse', async (limit) => {
-    setLocation(`?limit=${limit}`);
+    setLocation(`#limit=${limit}`);
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     expect(readAutocompleteQueryState().options.limit).toBeUndefined();
   });
 
   it('reads autocomplete=0 as false and ignores values it does not recognise', async () => {
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
-    setLocation('?autocomplete=0');
+    setLocation('#autocomplete=0');
     expect(readAutocompleteQueryState().options.autocomplete).toBe(false);
-    setLocation('?autocomplete=no');
+    setLocation('#autocomplete=no');
     expect(readAutocompleteQueryState().options.autocomplete).toBeUndefined();
   });
 
+  it('reads a link that keeps its state in the query string when there is no fragment', async () => {
+    const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
+    setLocation('?q=diab&target=ci');
+    expect(readAutocompleteQueryState()).toMatchObject({ query: 'diab', targets: ['ci'] });
+  });
+
   it('parses debounce and highlight', async () => {
-    setLocation('?debounce=300&highlight=false');
+    setLocation('#debounce=300&highlight=false');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     const s = readAutocompleteQueryState();
     expect(s.debounceMs).toBe(300);
@@ -80,7 +89,7 @@ describe('readAutocompleteQueryState', () => {
   });
 
   it('ignores debounce that is not in the allowlist', async () => {
-    setLocation('?debounce=999');
+    setLocation('#debounce=999');
     const { readAutocompleteQueryState } = await import('../autocomplete-url-state');
     const s = readAutocompleteQueryState();
     expect(s.debounceMs).toBeUndefined();
@@ -103,7 +112,7 @@ describe('buildAutocompleteQueryUrl', () => {
       debounceMs: DEFAULT_DEBOUNCE_MS,
       highlight: true,
     });
-    expect(url).toBe('/autocomplete?q=diab');
+    expect(url).toBe('/autocomplete#q=diab');
   });
 
   it('includes preset, targets, expected, and advanced flags when non-default', async () => {

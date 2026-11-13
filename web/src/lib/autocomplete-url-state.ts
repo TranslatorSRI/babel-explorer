@@ -45,8 +45,16 @@ function parseDebounce(raw: string | null): DebounceMs | undefined {
   return (ALLOWED_DEBOUNCE_MS as readonly number[]).includes(n) ? (n as DebounceMs) : undefined;
 }
 
+/**
+ * Read the Autocomplete state from the current URL.
+ *
+ * Share links keep it in the fragment (#q=…&target=…), like every other tool's, so
+ * `#target=` links work the same everywhere and a long `expected=` list never reaches a
+ * server's URL length limit. A link that puts it in the query string is read when there
+ * is no fragment.
+ */
 export function readAutocompleteQueryState(): AutocompleteQueryState {
-  const params = new URLSearchParams(window.location.search);
+  const params = new URLSearchParams(window.location.hash.slice(1) || window.location.search);
 
   const query = params.get('q') ?? '';
   const preset = parsePreset(params.get('preset'));
@@ -78,6 +86,7 @@ export function readAutocompleteQueryState(): AutocompleteQueryState {
   return { query, preset, targets, options, expected, debounceMs, highlight };
 }
 
+/** Build the shareable relative URL for the current state, in the fragment (see above). */
 export function buildAutocompleteQueryUrl(state: {
   query: string;
   preset: AutocompletePresetId;
@@ -126,7 +135,7 @@ export function buildAutocompleteQueryUrl(state: {
   }
 
   const qs = params.toString();
-  return qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+  return qs ? `${window.location.pathname}#${qs}` : window.location.pathname;
 }
 
 /** Parse a raw textarea string of expected CURIEs into a deduped list, kept as typed. */

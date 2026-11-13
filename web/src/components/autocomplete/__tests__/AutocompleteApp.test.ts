@@ -15,13 +15,12 @@ vi.mock('../../../lib/curie-links', () => ({
 import AutocompleteApp from '../AutocompleteApp.vue';
 import * as nameresApi from '../../../lib/nameres-api';
 
-function setLocation(search: string, pathname = '/autocomplete') {
+/** Point window.location at a link whose state is `#…` (the fragment) or `?…` (older links). */
+function setLocation(state: string, pathname = '/autocomplete') {
+  const hash = state.startsWith('#') ? state : '';
+  const search = state.startsWith('?') ? state : '';
   Object.defineProperty(window, 'location', {
-    value: {
-      search,
-      pathname,
-      href: `http://localhost${pathname}${search}`,
-    },
+    value: { search, hash, pathname, href: `http://localhost${pathname}${search}${hash}` },
     writable: true,
     configurable: true,
   });
@@ -148,7 +147,7 @@ describe('AutocompleteApp', () => {
   });
 
   it('does not cancel the live lookup when the deep check starts', async () => {
-    setLocation('?q=diab&expected=MONDO%3A1&target=dev');
+    setLocation('#q=diab&expected=MONDO%3A1&target=dev');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -170,7 +169,7 @@ describe('AutocompleteApp', () => {
   });
 
   it('still fires a waiting lookup when the debounce delay changes', async () => {
-    setLocation('?debounce=500&target=dev');
+    setLocation('#debounce=500&target=dev');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.mocked(nameresApi.fetchNameResLookup).mockClear();
@@ -193,7 +192,7 @@ describe('AutocompleteApp', () => {
           signal!.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
         }),
     );
-    setLocation('?target=dev');
+    setLocation('#target=dev');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
 
@@ -214,7 +213,7 @@ describe('AutocompleteApp', () => {
   it('passes limit=100 when Check button fires the deep lookup', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([mkResult('MONDO:1', 'x')]);
 
-    setLocation('?q=diab&expected=MONDO%3A1');
+    setLocation('#q=diab&expected=MONDO%3A1');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -238,7 +237,7 @@ describe('AutocompleteApp', () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([
       { ...mkResult('MONDO:0005011', "Crohn's colitis"), highlighting: { labels: ['<strong>Crohn&#x27;s</strong> colitis'], synonyms: [] } },
     ]);
-    setLocation('?q=crohn&target=dev');
+    setLocation('#q=crohn&target=dev');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -251,7 +250,7 @@ describe('AutocompleteApp', () => {
   });
 
   it('leaves highlighting out of the request once the toggle is off', async () => {
-    setLocation('?q=crohn&target=dev&highlight=false');
+    setLocation('#q=crohn&target=dev&highlight=false');
     mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -266,7 +265,7 @@ describe('AutocompleteApp', () => {
         ? Promise.reject(new Error('NameRes returned HTTP 500: Internal Server Error'))
         : Promise.resolve([mkResult('MONDO:1', 'diabetes')]),
     );
-    setLocation('?q=diab&target=dev&target=es_ci');
+    setLocation('#q=diab&target=dev&target=es_ci');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -279,7 +278,7 @@ describe('AutocompleteApp', () => {
 
   it('says every instance failed rather than that none had results', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockRejectedValue(new Error('NameRes did not answer within 60 s'));
-    setLocation('?q=diab&target=dev&target=prod');
+    setLocation('#q=diab&target=dev&target=prod');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -292,7 +291,7 @@ describe('AutocompleteApp', () => {
 
   it('renders the single-instance Results view when only one instance is selected', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([mkResult('MONDO:1', 'diabetes')]);
-    setLocation('?q=diab&target=dev');
+    setLocation('#q=diab&target=dev');
 
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
@@ -314,7 +313,7 @@ describe('AutocompleteApp', () => {
     const esCiResult = mkResult('MONDO:0004979', 'asthma');
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([esCiResult]);
 
-    setLocation('?q=asthma&target=es_ci');
+    setLocation('#q=asthma&target=es_ci');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -340,7 +339,7 @@ describe('AutocompleteApp', () => {
       return Promise.resolve([mkResult('MONDO:OTHER', 'shared result')]);
     });
 
-    setLocation('?q=diabetes&target=dev&target=prod&target=ci&target=es_ci');
+    setLocation('#q=diabetes&target=dev&target=prod&target=ci&target=es_ci');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
@@ -371,7 +370,7 @@ describe('AutocompleteApp', () => {
       return Promise.resolve([]);
     });
 
-    setLocation('?q=diabetes&target=dev&target=es_ci');
+    setLocation('#q=diabetes&target=dev&target=es_ci');
     const wrapper = mount(AutocompleteApp);
     await flushPromises();
     vi.advanceTimersByTime(200);
