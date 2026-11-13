@@ -222,3 +222,7 @@ __marimo__/
 node_modules/
 web/dist/
 web/.astro/
+# Playwright output (npm run test:e2e)
+web/test-results/
+web/playwright-report/
+web/blob-report/
