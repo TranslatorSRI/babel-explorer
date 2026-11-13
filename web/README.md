@@ -74,10 +74,9 @@ Output goes to `web/dist/`. This is a fully static site that can be served from 
 ## Deployment
 
 `.github/workflows/deploy.yml` builds the site and pushes it to the `gh-pages` branch on every push to `main` that touches `web/` or `config/`, on published releases, and on demand (`workflow_dispatch`). GitHub Pages serves it at `https://translatorsri.github.io/babel-explorer/`.
-Each deploy copies the build over what is already on `gh-pages` (`keep_files: true`) rather
-than replacing the branch, because some tools are deployed there from branches that are not
-on `main` yet. Stale files are therefore never removed; see the comment in `deploy.yml` for
-when to switch back to `force_orphan`.
+Each deploy replaces `gh-pages` with exactly that build (`force_orphan: true`), so a file the
+site no longer produces is removed. Every page therefore has to be built from `main`: a tool
+deployed to `gh-pages` from another branch disappears at the next deploy from `main`.
 Deploys run one at a time (a `pages` concurrency group), so two cannot push to `gh-pages`
 together; a deploy that arrives while one is running waits, and only the newest waiting one runs.
 
