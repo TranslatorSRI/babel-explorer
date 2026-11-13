@@ -33,19 +33,13 @@ function strings(value: unknown): string[] {
 /**
  * Read a stored selection, or null if there is none or it is unreadable. Storage can be
  * unavailable (a private window, blocked site data), which reads as nothing stored.
- *
- * A bare array is the format earlier builds of this branch wrote, without the service
- * that chose each URL; only its env keys are trusted.
  */
 function read(storage: () => Storage): StoredSelection | null {
   try {
     const raw = storage().getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return { envs: strings(parsed).filter((t) => !isUrl(t)), custom: {} };
-    }
-    if (typeof parsed !== 'object' || parsed === null) return null;
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
     const { envs, custom } = parsed as Record<string, unknown>;
     const customByService: Record<string, string[]> = {};
     if (typeof custom === 'object' && custom !== null) {

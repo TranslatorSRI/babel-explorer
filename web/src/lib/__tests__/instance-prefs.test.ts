@@ -39,9 +39,9 @@ describe('instance-prefs — custom URLs stay with their service', () => {
     expect(loadPrefs('nodenorm')).toEqual(['prod', 'http://localhost:8080/']);
   });
 
-  it('trusts only the env keys of a selection stored as a bare array', () => {
+  it('ignores a selection stored as a bare array', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['prod', 'http://localhost:8080/']));
-    expect(loadPrefs('nameres')).toEqual(['prod']);
+    expect(loadPrefs('nameres')).toEqual([]);
   });
 
   it('ignores unreadable storage', () => {
