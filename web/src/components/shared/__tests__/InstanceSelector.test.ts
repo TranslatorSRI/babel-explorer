@@ -395,6 +395,7 @@ describe('InstanceSelector — several custom URLs', () => {
     expect(JSON.parse(localStorage.getItem(STORAGE_KEY)!)).toEqual({
       envs: ['dev'],
       custom: { nodenorm: ['https://a.example/'] },
+      withoutEnvs: [],
     });
   });
 });

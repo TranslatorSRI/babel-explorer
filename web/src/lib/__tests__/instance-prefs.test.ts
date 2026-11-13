@@ -39,6 +39,27 @@ describe('instance-prefs — custom URLs stay with their service', () => {
     expect(loadPrefs('nodenorm')).toEqual(['prod', 'http://localhost:8080/']);
   });
 
+  it("keeps the shared envs when another service selects only a custom URL", () => {
+    rememberSelection('nodenorm', ['dev', 'http://localhost:8080/']);
+    rememberSelection('nameres', ['http://localhost:2433/']);
+    expect(loadSessionPrefs('nodenorm')).toEqual(['dev', 'http://localhost:8080/']);
+    expect(loadSessionPrefs('nameres')).toEqual(['http://localhost:2433/']);
+  });
+
+  it('keeps the shared envs when another service selects nothing', () => {
+    rememberSelection('nodenorm', ['dev']);
+    rememberSelection('nameres', []);
+    expect(loadSessionPrefs('nodenorm')).toEqual(['dev']);
+    expect(loadSessionPrefs('nameres')).toEqual([]);
+  });
+
+  it('gives a service the shared envs again once its own selection names one', () => {
+    rememberSelection('nameres', ['http://localhost:2433/']);
+    rememberSelection('nameres', ['prod', 'http://localhost:2433/']);
+    rememberSelection('nodenorm', ['ci']);
+    expect(loadSessionPrefs('nameres')).toEqual(['ci', 'http://localhost:2433/']);
+  });
+
   it('ignores a selection stored as a bare array', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(['prod', 'http://localhost:8080/']));
     expect(loadPrefs('nameres')).toEqual([]);

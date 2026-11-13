@@ -16,10 +16,18 @@ export const PRIMARY_ENVS = new Set(['dev', 'ci', 'prod']);
  * service, so they are shared: ticking CI and Prod in NodeNorm carries over to NameRes.
  * A custom URL is one service's server, so each service keeps its own: a local NodeNorm
  * saved as the default must never become a NameRes target.
+ *
+ * A selection that names no environment (only custom URLs, or nothing) says nothing
+ * about which environments the user wants, so it leaves `envs` alone and instead puts
+ * its service in `withoutEnvs`. Writing its empty env list over `envs` would silently
+ * drop the environments every other service had ticked: choose only a local NameRes,
+ * and NodeNorm would lose Dev.
  */
 interface StoredSelection {
   envs: string[];
   custom: Record<string, string[]>;
+  /** Services whose own last selection named no environment. */
+  withoutEnvs: string[];
 }
 
 function isUrl(target: string): boolean {
@@ -40,22 +48,28 @@ function read(storage: () => Storage): StoredSelection | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
-    const { envs, custom } = parsed as Record<string, unknown>;
+    const { envs, custom, withoutEnvs } = parsed as Record<string, unknown>;
     const customByService: Record<string, string[]> = {};
     if (typeof custom === 'object' && custom !== null) {
       for (const [service, urls] of Object.entries(custom)) customByService[service] = strings(urls);
     }
-    return { envs: strings(envs), custom: customByService };
+    return { envs: strings(envs), custom: customByService, withoutEnvs: strings(withoutEnvs) };
   } catch {
     return null;
   }
 }
 
-/** Record one service's selection, keeping the other services' custom URLs. */
+/**
+ * Record one service's selection, keeping the other services' custom URLs, and the
+ * shared envs when this selection names none (see StoredSelection).
+ */
 function write(storage: () => Storage, service: string, targets: string[]): void {
   try {
-    const stored = read(storage) ?? { envs: [], custom: {} };
-    stored.envs = targets.filter((t) => !isUrl(t));
+    const stored = read(storage) ?? { envs: [], custom: {}, withoutEnvs: [] };
+    const envs = targets.filter((t) => !isUrl(t));
+    if (envs.length > 0) stored.envs = envs;
+    stored.withoutEnvs = stored.withoutEnvs.filter((s) => s !== service);
+    if (envs.length === 0) stored.withoutEnvs.push(service);
     stored.custom[service] = targets.filter(isUrl);
     storage().setItem(STORAGE_KEY, JSON.stringify(stored));
   } catch {
@@ -63,9 +77,14 @@ function write(storage: () => Storage, service: string, targets: string[]): void
   }
 }
 
-/** The targets a stored selection gives one service: the shared envs and its own URLs. */
+/**
+ * The targets a stored selection gives one service: the shared envs, unless its own
+ * last selection named none, and its own URLs.
+ */
 function targetsFor(stored: StoredSelection | null, service: string): string[] {
-  return stored ? [...stored.envs, ...(stored.custom[service] ?? [])] : [];
+  if (!stored) return [];
+  const envs = stored.withoutEnvs.includes(service) ? [] : stored.envs;
+  return [...envs, ...(stored.custom[service] ?? [])];
 }
 
 /**
