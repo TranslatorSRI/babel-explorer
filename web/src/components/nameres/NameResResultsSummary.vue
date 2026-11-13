@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { NameResResult, NameResInstance, ParsedSearchTerm, ExpectedCurieStatus } from '../../lib/nameres-types';
-import { validateExpectedCuries } from '../../lib/nameres-api';
+import { uniqueSearchTexts, validateExpectedCuries } from '../../lib/nameres-api';
 
 const props = defineProps<{
   resultsByInstance: Map<string, Map<string, NameResResult[]>>;
@@ -17,41 +17,39 @@ const props = defineProps<{
  * resultsByInstance and is left out: it is reported separately, not counted as a term
  * that found nothing.
  */
-function answeredResults(term: ParsedSearchTerm): NameResResult[][] {
+function answeredResults(text: string): NameResResult[][] {
   return props.queriedInstances
-    .map((inst) => props.resultsByInstance.get(inst.url)?.get(term.text))
+    .map((inst) => props.resultsByInstance.get(inst.url)?.get(text))
     .filter((results): results is NameResResult[] => results !== undefined);
 }
 
 /**
- * One term per distinct search text, for the tiles about the lookups themselves. Two
- * lines that search for the same text with different expected CURIEs are one lookup,
- * and counting it twice would report "diabetes, diabetes" as two terms with no results.
+ * The distinct search texts, for the tiles about the lookups themselves: the lookups
+ * NameResApp actually ran. Two lines that search for the same text with different
+ * expected CURIEs are one lookup, and counting it twice would report "diabetes,
+ * diabetes" as two terms with no results.
  */
-const lookupTerms = computed(() => {
-  const seen = new Set<string>();
-  return props.terms.filter((t) => !seen.has(t.text) && seen.add(t.text));
-});
+const lookupTexts = computed(() => uniqueSearchTexts(props.terms));
 
 /** Terms with at least one result on every instance that answered. */
 const resolvedByAll = computed(() =>
-  lookupTerms.value.filter((t) => {
-    const answered = answeredResults(t);
+  lookupTexts.value.filter((text) => {
+    const answered = answeredResults(text);
     return answered.length > 0 && answered.every((results) => results.length > 0);
   }),
 );
 
 /** Terms with no results on any instance that answered. */
 const noResultsAny = computed(() =>
-  lookupTerms.value.filter((t) => {
-    const answered = answeredResults(t);
+  lookupTexts.value.filter((text) => {
+    const answered = answeredResults(text);
     return answered.length > 0 && answered.every((results) => results.length === 0);
   }),
 );
 
 /** Terms whose lookup failed on at least one instance. */
 const failedTerms = computed(() =>
-  lookupTerms.value.filter((t) => answeredResults(t).length < props.queriedInstances.length),
+  lookupTexts.value.filter((text) => answeredResults(text).length < props.queriedInstances.length),
 );
 
 // ── Agreement tile ───────────────────────────────────────────────────────────
@@ -59,9 +57,9 @@ const failedTerms = computed(() =>
 /** Terms where instances disagree on #1 result (only when 2+ instances). */
 const disagreements = computed(() => {
   if (props.queriedInstances.length < 2) return [];
-  return lookupTerms.value.filter((t) => {
+  return lookupTexts.value.filter((text) => {
     const curies = new Set<string>();
-    for (const results of answeredResults(t)) {
+    for (const results of answeredResults(text)) {
       curies.add(results.length > 0 ? results[0].curie : '(no results)');
     }
     return curies.size > 1;
@@ -78,7 +76,7 @@ const hasAnnotations = computed(() => annotatedTerms.value.length > 0);
  * success < partial < failure (worst wins). Null when no instance answered.
  */
 function worstStatus(term: ParsedSearchTerm): ExpectedCurieStatus | null {
-  const answered = answeredResults(term);
+  const answered = answeredResults(term.text);
   if (answered.length === 0) return null;
   let worst: ExpectedCurieStatus = 'success';
   for (const results of answered) {
@@ -109,8 +107,7 @@ const statusCounts = computed(() => {
 
 const INLINE_LIMIT = 3;
 
-function formatTermList(termsList: ParsedSearchTerm[]): string {
-  const texts = termsList.map((t) => t.text);
+function formatTermList(texts: string[]): string {
   if (texts.length <= INLINE_LIMIT) return texts.join(', ');
   return `${texts.slice(0, INLINE_LIMIT).join(', ')} +${texts.length - INLINE_LIMIT} more`;
 }
@@ -125,7 +122,7 @@ function formatTermList(termsList: ParsedSearchTerm[]): string {
         <div class="text-muted small mb-1">Resolved</div>
         <div class="fs-5 fw-semibold">
           {{ resolvedByAll.length }}
-          <span class="fs-6 fw-normal text-muted">/ {{ lookupTerms.length }}</span>
+          <span class="fs-6 fw-normal text-muted">/ {{ lookupTexts.length }}</span>
         </div>
         <div v-if="noResultsAny.length > 0" class="text-danger small mt-1">
           {{ noResultsAny.length }} no results
