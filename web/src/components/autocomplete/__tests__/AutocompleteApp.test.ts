@@ -218,6 +218,36 @@ describe('AutocompleteApp', () => {
     expect(vi.mocked(nameresApi.fetchNameResLookup).mock.calls[0][2].highlighting).toBe(false);
   });
 
+  it('shows why an instance failed in the comparison view, not an empty column', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation((baseUrl) =>
+      baseUrl.includes('namelookup-es.ci.transltr.io')
+        ? Promise.reject(new Error('NameRes returned HTTP 500: Internal Server Error'))
+        : Promise.resolve([mkResult('MONDO:1', 'diabetes')]),
+    );
+    setLocation('?q=diab&target=dev&target=es_ci');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('HTTP 500');
+    // The failed instance's cell says it failed, rather than marking MONDO:1 missing.
+    expect(wrapper.find('td.bg-danger-subtle').exists()).toBe(false);
+  });
+
+  it('says every instance failed rather than that none had results', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockRejectedValue(new Error('NameRes did not answer within 60 s'));
+    setLocation('?q=diab&target=dev&target=prod');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.advanceTimersByTime(200);
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Every instance failed');
+    expect(wrapper.text()).not.toContain('No results from any instance');
+    expect(wrapper.findAll('[role="alert"]')).toHaveLength(2);
+  });
+
   it('renders the single-instance Results view when only one instance is selected', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([mkResult('MONDO:1', 'diabetes')]);
     setLocation('?q=diab&target=dev');

@@ -28,6 +28,18 @@ const resultsMap = computed(() => {
 const diffs = computed(() => computeInstanceDiffs(resultsMap.value));
 const expectedSet = computed(() => new Set(props.expected));
 
+/**
+ * Why an instance has no results, when it failed. Shown in its column header and cells,
+ * so a failed instance is not mistaken for one that answered with nothing.
+ */
+function errorFor(url: string): string | null {
+  return props.perInstance.get(url)?.error ?? null;
+}
+
+const failedCount = computed(
+  () => props.queriedInstances.filter((inst) => errorFor(inst.url) !== null).length,
+);
+
 function resultFor(url: string, curie: string): NameResResult | undefined {
   const results = props.perInstance.get(url)?.results ?? [];
   return results.find((r) => r.curie === curie);
@@ -106,6 +118,12 @@ function uniqueLabelsForCurie(curie: string): string[] {
                   :state="perInstance.get(inst.url)?.state ?? 'idle'"
                   :parallel="queriedInstances.length > 1"
                 />
+                <div
+                  v-if="errorFor(inst.url)"
+                  class="small text-danger fw-normal text-wrap"
+                  style="max-width: 220px"
+                  role="alert"
+                >{{ errorFor(inst.url) }}</div>
               </div>
             </th>
           </tr>
@@ -113,7 +131,9 @@ function uniqueLabelsForCurie(curie: string): string[] {
         <tbody>
           <tr v-if="diffs.unionCuries.length === 0">
             <td :colspan="queriedInstances.length + 1" class="text-muted text-center py-3">
-              <em>No results from any instance.</em>
+              <em v-if="failedCount === queriedInstances.length">Every instance failed; the errors are above.</em>
+              <em v-else-if="failedCount > 0">No results from the instances that answered.</em>
+              <em v-else>No results from any instance.</em>
             </td>
           </tr>
           <tr
@@ -142,7 +162,7 @@ function uniqueLabelsForCurie(curie: string): string[] {
               v-for="inst in queriedInstances"
               :key="inst.url"
               class="text-center"
-              :class="!resultFor(inst.url, curie) ? 'bg-danger-subtle' : ''"
+              :class="!resultFor(inst.url, curie) && !errorFor(inst.url) ? 'bg-danger-subtle' : ''"
             >
               <template v-if="resultFor(inst.url, curie)">
                 <div>
@@ -168,6 +188,7 @@ function uniqueLabelsForCurie(curie: string): string[] {
                   <BiolinkTypeLink :type="resultFor(inst.url, curie)!.types[0]" />
                 </div>
               </template>
+              <span v-else-if="errorFor(inst.url)" class="text-danger small" :title="errorFor(inst.url)!">error</span>
               <span v-else class="text-muted small">—</span>
             </td>
           </tr>
