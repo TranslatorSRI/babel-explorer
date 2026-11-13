@@ -1,0 +1,77 @@
+name: Live check
+
+# Checks the published site and the NodeNorm and NameRes interfaces it relies on,
+# daily and after every deploy, since those services can change under the site without
+# any commit here. See "Live checks" in web/tests/README.md.
+#
+# A failure is reported only by GitHub's failed-workflow email, which for a scheduled
+# run goes to whoever last changed the cron line below. GitHub also disables scheduled
+# workflows in a public repository after 60 days with no activity, emailing a warning
+# first; re-enable it from the Actions tab.
+
+on:
+  schedule:
+    - cron: "0 13 * * *"  # Daily 13:00 UTC; clear of ci.yml (Tue) and update-prefix-map.yml (Mon)
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Site to test (must end in /)"
+        default: "https://translatorsri.github.io/babel-explorer/"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-check
+  cancel-in-progress: false
+
+env:
+  SITE_URL: ${{ inputs.site_url || 'https://translatorsri.github.io/babel-explorer/' }}
+
+jobs:
+  api-contract:
+    # After a deploy, only one that succeeded: a failed deploy changed nothing to check.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run test:live
+        working-directory: web
+
+  site:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      # SITE_URL (above) points the tests at the published site rather than a local build.
+      - run: npm run test:e2e
+        working-directory: web
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 14

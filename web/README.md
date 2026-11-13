@@ -59,9 +59,11 @@ This starts a local dev server at `http://localhost:4321/babel-explorer/`.
 npm test            # Run the Vitest unit + component tests
 npm run test:watch  # Watch mode
 npm run typecheck   # vue-tsc over the .ts and .vue files
+npm run test:live   # Contract tests against live NodeNorm and NameRes (not in npm test)
+npm run test:e2e    # Playwright tests of a local build; SITE_URL=… tests a deployment
 ```
 
-Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`), along with the type check. Vitest and the Astro build strip types without checking them, so a type error passes both; only `npm run typecheck` catches it. TypeScript stays on 5.x because Astro's `tsconfck` requires `^5.0.0`. See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it.
+Tests are co-located with source in `__tests__/` directories and run in CI (the `web` job in `.github/workflows/ci.yml`), along with the type check. Vitest and the Astro build strip types without checking them, so a type error passes both; only `npm run typecheck` catches it. TypeScript stays on 5.x because Astro's `tsconfck` requires `^5.0.0`. See [`web/tests/README.md`](tests/README.md) for the fixture catalogue and how to regenerate it, and its "Live checks" section for the two live suites and the daily workflow that runs them.
 
 ## Building
 

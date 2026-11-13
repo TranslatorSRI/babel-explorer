@@ -288,6 +288,10 @@ island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch
 - **Tests** are Vitest + @vue/test-utils + happy-dom, co-located in `__tests__/` directories and
   run by the `web` job in CI. Recorded API responses live in `tests/fixtures/` at the repo root so
   Python tests can share them; `web/tests/README.md` catalogues them.
+- **Live checks** (`npm run test:live`, `npm run test:e2e`) test the published site and the
+  NodeNorm/NameRes interface it relies on against the real services, daily via
+  `.github/workflows/live-check.yml`. They are excluded from `npm test` and PR CI on purpose;
+  see "Live checks" in `web/tests/README.md`.
 - `web/README.md` covers development, the component layout and how to add a tool;
   `web/FUTURE.md` lists deferred features.
 

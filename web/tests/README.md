@@ -25,6 +25,7 @@ npm run test:watch  # Watch mode (re-runs on file changes)
 Tests are **co-located** with source using `__tests__/` directories:
 
 ```
+web/e2e/                               # Playwright tests, run only by npm run test:e2e (see Live checks)
 web/src/
   lib/
     __tests__/
@@ -38,6 +39,9 @@ web/src/
       highlight-sanitize.test.ts       # NameRes <strong> marks → <mark>, entity decoding, script/attribute escaping
       autocomplete-url-state.test.ts   # read/build round-trip, preset-implied value handling, parseExpectedCuries
       autocomplete-diff.test.ts        # computeInstanceDiffs (presence/rank/label/types) + classifyExpectedCurie
+      nodenorm.live.test.ts            # live contract tests, run only by npm run test:live (see Live checks)
+      nameres.live.test.ts
+      live.ts                          # the instances they query, and the CORS check
   components/
     nodenorm/
       __tests__/
@@ -111,6 +115,7 @@ These facts are verified by tests in `nodenorm-api.test.ts` and should be kept i
 - **`equivalent_identifiers[i].description`** — plain `string` when present (not an array). Not every identifier has one.
 - **Not-found CURIEs** — the key is present in the response with a `null` value (not a missing key).
 - **Conflation** — `conflate=true` merges Chemical/SmallMolecule/Drug cliques, significantly expanding the equivalent identifier set. MESH:D014867 (water): 206 equiv IDs conflated vs. 30 without.
+- **Taxa** — the fixtures, recorded from NodeNorm Dev, carry `taxa` on each equivalent identifier, and the equivalent-identifier table's Taxa column reads it there. The ElasticSearch deployments (CI, Prod) ignore `include_taxa` and return `taxa` only on the node, so that column is empty against them; `nodenorm.live.test.ts` tracks the gap.
 - **Multi-CURIE requests** — send repeated `curie=` params in GET, or send a JSON body `{"curies": [...]}` via POST to the same endpoint. All options (`conflate`, `description`, etc.) apply to the whole batch.
 
 ### Regenerating fixtures
@@ -176,6 +181,26 @@ The happy-dom environment leaves both undefined. [`setup.ts`](setup.ts), Vitest'
 file, installs in-memory versions and clears them before every test, so a test that
 needs a remembered instance selection sets one (`rememberSelection`, `savePrefs`) rather
 than mocking storage itself, and never inherits the previous test's.
+
+## Live checks
+
+Everything above runs against recorded responses, so it cannot notice NodeNorm or NameRes changing under the site. Two further suites run against the real services. Neither is part of `npm test` or the PR checks, because an outage there is not a defect here.
+
+```bash
+npm run test:live                  # API contract tests, ~2 s
+npm run test:e2e                   # browser tests against a local build (npm run build && astro preview)
+SITE_URL=https://translatorsri.github.io/babel-explorer/ npm run test:e2e   # ... against the published site
+npx playwright install chromium    # once, before the first test:e2e
+```
+
+- **API contract tests** (`src/lib/__tests__/*.live.test.ts`, `vitest.live.config.ts`) send the site's own requests, through `fetchNormalizedNodes`, `fetchNameResLookup` and `buildLookupUrl`, and assert what the pages read: the response fields, each NodeNorm option and NameRes filter, the highlighting format `renderHighlight` expects, and CORS for the published origin (Node's `fetch` ignores CORS, so it is checked by header). A failure names the instance and the field.
+- **Browser tests** (`e2e/`, `playwright.config.ts`) open each page and drive every tool from a share link, checking the answer renders. A fixture in `e2e/fixtures.ts` fails any test whose page logged a console error or saw a failed request, which is how a CORS refusal or a bundle missing after a deploy shows up.
+
+**They check the interface, not the data.** Babel Validation's daily dashboard tests every environment's data; these ask only whether NodeNorm and NameRes still accept the requests Babel Explorer makes and answer in the shape it reads. So they query only the `LIVE_ENVS` in `src/lib/__tests__/live.ts`: CI, which shows a change first, and Prod. `es_ci` is left out until it replaces `ci`. Keep any known-answer assertion to the one or two needed to notice a lookup that "works" but returns nonsense.
+
+**When one fails because an API changed**, fix the code, then re-record the matching fixture under `tests/fixtures/` so the unit tests describe the API as it now is. A gap that is upstream's to fix can be marked `it.fails` with a comment saying why, as the per-identifier `taxa` test is: it stays green while the gap lasts and turns red once it is fixed, which is the reminder to make it a plain `it`.
+
+**`.github/workflows/live-check.yml`** runs both daily at 13:00 UTC, after every successful deploy, and on demand (with a `site_url` input). A failure is reported only by GitHub's failed-workflow email, which for a scheduled run goes to whoever last edited the `cron` line. GitHub disables scheduled workflows in a public repository after 60 days without activity, emailing a warning first; re-enable it from the Actions tab. Scheduled, `workflow_run` and `workflow_dispatch` runs all use the workflow on `main`.
 
 ## Future Improvements
 
