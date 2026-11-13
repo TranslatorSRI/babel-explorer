@@ -31,7 +31,7 @@ jobs:
   api-contract:
     # Not after a deploy: these call NodeNorm and NameRes directly, which a deploy does
     # not change. A deploy that moves an endpoint in config/ has it checked at the next
-    # daily run, or sooner from workflow_dispatch.
+    # daily run, or sooner from workflow_dispatch (#44).
     if: github.event_name != 'workflow_run'
     runs-on: ubuntu-latest
     timeout-minutes: 15
