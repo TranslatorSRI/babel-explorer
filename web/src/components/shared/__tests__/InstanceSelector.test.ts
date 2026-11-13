@@ -171,6 +171,12 @@ describe('InstanceSelector — checkbox interaction', () => {
     expect(last).toContain(ciInstance.url);
   });
 
+  it("does not replace the session selection with a link's targets on mount", () => {
+    rememberSelection('nodenorm', ['ci', 'prod']);
+    mountSelector({ initialTargets: ['exp'] });
+    expect(loadSessionPrefs('nodenorm')).toEqual(['ci', 'prod']);
+  });
+
   it('remembers the selection for the session on every change', async () => {
     const wrapper = mountSelector({ initialTargets: ['dev'] });
     // Clear the session selection to isolate this check

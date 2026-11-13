@@ -13,7 +13,7 @@ A server-side JSON API over the Python code, so that `xrefs`/`ids`/`test-concord
 ### NodeNorm Lookup (`/nodenorm`)
 
 - **Bulk normalization**: Enter multiple CURIEs, toggle API options (conflation, descriptions, taxa)
-- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus any number of custom http(s) URLs, each with its own checkbox; any combination can be queried together. The selection is remembered for the tab's session (in `sessionStorage`, since each tool is a separate page load) and can be saved as a default; environments carry over between tools, while custom URLs stay with the tool they were added in, so a custom NodeNorm server is never queried as NameRes
+- **Unified instance selection**: Checkboxes for known NodeNorm deployments (Dev, Exp, CI, Test, Prod) plus any number of custom http(s) URLs, each with its own checkbox; any combination can be queried together. A selection you make is remembered for the tab's session (in `sessionStorage`, since each tool is a separate page load; opening a share link does not overwrite it) and can be saved as a default; environments carry over between tools, while custom URLs stay with the tool they were added in, so a custom NodeNorm server is never queried as NameRes
 - **Comparison table**: Results shown as a table — rows = CURIEs, columns = selected instances; rows highlighted amber when instances disagree on preferred ID
 - **Expandable row detail**: Click any CURIE row to reveal per-instance panels showing description, biolink types, IC score, and equivalent identifiers (prefix summary + expand/collapse for large cliques)
 - **Column visibility**: Toggle biolink type, taxa, description columns page-wide

@@ -69,19 +69,16 @@ function selectionTargets(): string[] {
 
 // ─── Reactivity ──────────────────────────────────────────────────────────────
 
+/** Emit every selection to the parent v-model, the starting one included. */
+watch(selectedUrls, (urls) => emit('update:modelValue', [...urls]), { immediate: true });
+
 /**
- * On every selection change: remember it for this tab's session (so the next tool
- * opened in the tab starts with the same environments) and emit to the parent v-model.
- * immediate: true also emits the initial value on mount.
+ * Remember a selection the user made for the rest of this tab's session, so the next
+ * tool opened in the tab starts with the same environments. Not immediate: the
+ * starting selection may come from a share link, and merely opening a colleague's
+ * link must not replace the environments the user chose for the tab.
  */
-watch(
-  selectedUrls,
-  (urls) => {
-    rememberSelection(props.service, selectionTargets());
-    emit('update:modelValue', [...urls]);
-  },
-  { immediate: true },
-);
+watch(selectedUrls, () => rememberSelection(props.service, selectionTargets()));
 
 // ─── Computed ────────────────────────────────────────────────────────────────
 
