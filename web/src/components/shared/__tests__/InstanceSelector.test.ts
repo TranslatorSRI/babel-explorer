@@ -161,7 +161,7 @@ describe('InstanceSelector — default selection', () => {
   });
 
   it('drops env keys this service lacks instead of treating them as custom URLs', () => {
-    // Saved from NodeNorm, which has redis_ci; this instance list does not.
+    // redis_ci was NodeNorm's Redis CI, since retired, and may still be in a saved default.
     savePrefs('nodenorm', ['redis_ci', 'prod']);
     const wrapper = mountSelector({ service: 'nameres' });
     const emitted = wrapper.emitted('update:modelValue') as string[][];
@@ -170,6 +170,7 @@ describe('InstanceSelector — default selection', () => {
   });
 
   it('falls through to the default when no saved key resolves', () => {
+    // As above: a retired key, or one only another service has.
     rememberSelection('nodenorm', ['redis_ci']);
     const wrapper = mountSelector({ service: 'nameres', initialTargets: ['redis_ci'] });
     const emitted = wrapper.emitted('update:modelValue') as string[][];

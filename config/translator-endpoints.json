@@ -3,7 +3,6 @@
     "dev": "https://nodenormalization-sri.renci.org/",
     "exp": "https://nodenormalization-exp.apps.renci.org/",
     "ci": "https://nodenorm-es.ci.transltr.io/",
-    "redis_ci": "https://nodenorm.ci.transltr.io/",
     "test": "https://nodenorm-es.test.transltr.io/",
     "prod": "https://nodenorm-es.transltr.io/"
   },

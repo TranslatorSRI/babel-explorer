@@ -37,11 +37,14 @@ export interface EnvironmentInfo {
 }
 
 /**
- * Every named environment, in pipeline order (Exp → Dev → CI → ES CI → Redis CI → Test →
- * Prod). config/translator-endpoints.json says which environments each service has and
+ * Every named environment, in pipeline order (Exp → Dev → CI → ES CI → Test → Prod). config/translator-endpoints.json says which environments each service has and
  * where they are; this says how to show and order them. Adding an environment means its
  * URL there and one entry here — a test fails if the config names an environment this
- * table lacks. Each service has only one of es_ci and redis_ci.
+ * table lacks.
+ *
+ * A key removed from here can still turn up in a saved default or an old share link
+ * (`redis_ci`, NodeNorm's retired Redis CI, for one); resolveTarget ignores it like any
+ * other key the service lacks.
  */
 export const ENVIRONMENTS: Record<string, EnvironmentInfo> = {
   exp: { label: 'Exp', selectorLabel: 'RENCI Experimental', primary: false },
@@ -53,7 +56,6 @@ export const ENVIRONMENTS: Record<string, EnvironmentInfo> = {
     abbr: { text: 'ES', title: 'ElasticSearch' },
     primary: true,
   },
-  redis_ci: { label: 'Redis CI', selectorLabel: 'ITRB Redis CI', primary: true },
   test: { label: 'Test', selectorLabel: 'ITRB Test', primary: false },
   prod: { label: 'Production', selectorLabel: 'ITRB Prod', primary: true },
 };

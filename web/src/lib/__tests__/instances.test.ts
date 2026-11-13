@@ -53,7 +53,8 @@ describe('resolveTarget', () => {
   });
 
   // Share links and saved selections are shared between tools, and NodeNorm and
-  // NameRes do not have the same keys, so another service's key must not be fetched.
+  // NameRes do not have the same keys, so another service's key must not be fetched;
+  // nor must a retired one such as redis_ci, which old saved defaults still name.
   it.each(['ftp://h/', '//evil.example', 'staging', 'redis_ci'])('returns null for %j', (target) => {
     expect(resolveTarget(instances, target)).toBeNull();
   });
