@@ -8,6 +8,15 @@
  * `#target=` value in a share link skipped it and was fetched on page load.
  */
 
+/**
+ * Requests one tool keeps in flight at once against one instance: NodeNorm's batches
+ * and NameRes's lookups. A long CURIE list or regression list against every instance
+ * would otherwise start dozens or hundreds of requests together, which the browser
+ * queues anyway and the servers may answer with HTTP 429 or 503, showing up as failures
+ * unrelated to what is being checked. One constant, so the two tools cannot drift apart.
+ */
+export const MAX_REQUESTS_PER_INSTANCE = 4;
+
 /** A named deployment of a service. NodeNormInstance and NameResInstance are aliases of it. */
 export interface Instance {
   name: string;

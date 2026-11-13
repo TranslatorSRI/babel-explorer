@@ -1,4 +1,5 @@
 import type { NameResResult, NameResApiOptions, ParsedSearchTerm, ExpectedCurieValidation } from './nameres-types';
+import { MAX_REQUESTS_PER_INSTANCE } from './instances';
 
 /** The largest Limit or "Fail if in top" value the form accepts. */
 export const MAX_RESULT_COUNT = 100;
@@ -111,14 +112,8 @@ export async function fetchNameResLookup(
   return body as NameResResult[];
 }
 
-/**
- * Lookups in flight at once per instance. A regression list of a few hundred terms
- * against every instance would otherwise start a thousand requests together, which the
- * browser queues anyway and the servers may answer with HTTP 429 or 503, showing up as
- * failed lookups unrelated to the regression being checked. Matches NodeNorm's
- * MAX_CONCURRENT_BATCHES.
- */
-export const MAX_CONCURRENT_LOOKUPS = 4;
+/** Lookups in flight at once per instance (see MAX_REQUESTS_PER_INSTANCE). */
+export const MAX_CONCURRENT_LOOKUPS = MAX_REQUESTS_PER_INSTANCE;
 
 /**
  * Look up several texts on one instance, at most MAX_CONCURRENT_LOOKUPS at a time.
