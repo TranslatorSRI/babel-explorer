@@ -14,12 +14,7 @@ import {
   DEFAULT_AUTOCOMPLETE_OPTIONS,
 } from '../../lib/autocomplete-url-state';
 import type { DebounceMs } from '../../lib/autocomplete-url-state';
-import type { NameResResult } from '../../lib/nameres-types';
-
-interface InstanceState {
-  results: NameResResult[];
-  deepResults?: NameResResult[];
-}
+import type { InstanceState } from '../../lib/autocomplete-state';
 
 const props = defineProps<{
   instances: NameResInstance[];
@@ -53,7 +48,7 @@ const emit = defineEmits<{
 
 const anyInFlight = computed(() => {
   for (const s of props.perInstance.values()) {
-    if ((s as InstanceState & { inFlight?: boolean }).inFlight) return true;
+    if (s.inFlight) return true;
   }
   return false;
 });

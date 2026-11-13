@@ -2,18 +2,11 @@
 import { computed } from 'vue';
 import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
 import { computeInstanceDiffs } from '../../lib/autocomplete-diff';
+import type { InstanceState } from '../../lib/autocomplete-state';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
 import CurieLink from '../shared/CurieLink.vue';
 import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
-
-interface InstanceState {
-  results: NameResResult[];
-  elapsedMs: number | null;
-  error: string | null;
-  inFlight: boolean;
-  state: 'ok' | 'error' | 'cancelled' | 'idle';
-}
 
 const props = defineProps<{
   queriedInstances: NameResInstance[];

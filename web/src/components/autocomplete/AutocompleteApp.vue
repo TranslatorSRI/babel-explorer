@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
-import type { NameResInstance, NameResResult, NameResApiOptions } from '../../lib/nameres-types';
+import type { NameResInstance, NameResApiOptions } from '../../lib/nameres-types';
 import { fetchNameResLookup } from '../../lib/nameres-api';
 import { buildInstances, instanceForUrl, sortInstances, urlToTarget } from '../../lib/instances';
 import {
@@ -12,6 +12,8 @@ import {
 } from '../../lib/autocomplete-url-state';
 import type { DebounceMs } from '../../lib/autocomplete-url-state';
 import { debounce } from '../../lib/debounce';
+import { emptyInstanceState } from '../../lib/autocomplete-state';
+import type { InstanceState } from '../../lib/autocomplete-state';
 import {
   DEFAULT_PRESET_ID,
   getPreset,
@@ -35,19 +37,6 @@ function instanceFor(url: string): NameResInstance {
 }
 
 // ─── State ──────────────────────────────────────────────────────────────────
-
-interface InstanceState {
-  results: NameResResult[];
-  deepResults?: NameResResult[];
-  elapsedMs: number | null;
-  error: string | null;
-  inFlight: boolean;
-  state: 'ok' | 'error' | 'cancelled' | 'idle';
-}
-
-function emptyInstanceState(): InstanceState {
-  return { results: [], elapsedMs: null, error: null, inFlight: false, state: 'idle' };
-}
 
 // Read URL state synchronously so initial form matches the URL.
 const urlState = typeof window !== 'undefined' ? readAutocompleteQueryState() : null;
@@ -73,6 +62,9 @@ const queriedInstances = computed<NameResInstance[]>(() =>
   sortInstances(selectedUrls.value.map(instanceFor))
 );
 const checking = ref(false);
+const singleState = computed<InstanceState>(() =>
+  perInstance.value.get(queriedInstances.value[0]?.url) ?? emptyInstanceState(),
+);
 const hasDeepResults = computed(() => {
   for (const s of perInstance.value.values()) if (s.deepResults) return true;
   return false;
@@ -364,7 +356,7 @@ const initialTargets = computed<string[] | undefined>(() =>
   <div v-if="queriedInstances.length === 1">
     <AutocompleteResults
       :instance="queriedInstances[0]"
-      :state="perInstance.get(queriedInstances[0].url) ?? { results: [], elapsedMs: null, error: null, inFlight: false, state: 'idle' }"
+      :state="singleState"
       :highlight="highlight"
       :api-url="apiUrlFor(queriedInstances[0].url)"
     />

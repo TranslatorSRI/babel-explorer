@@ -1,13 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
+import type { NameResInstance } from '../../lib/nameres-types';
+import type { InstanceState } from '../../lib/autocomplete-state';
 import { classifyExpectedCurie } from '../../lib/autocomplete-diff';
 import CurieLink from '../shared/CurieLink.vue';
-
-interface InstanceState {
-  results: NameResResult[];
-  deepResults?: NameResResult[];
-}
 
 const props = defineProps<{
   expected: string[];

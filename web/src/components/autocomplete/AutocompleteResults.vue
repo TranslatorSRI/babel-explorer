@@ -1,19 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import type { NameResResult, NameResInstance } from '../../lib/nameres-types';
+import type { InstanceState } from '../../lib/autocomplete-state';
 import HighlightedFragment from './HighlightedFragment.vue';
 import LatencyBadge from './LatencyBadge.vue';
 import CurieLink from '../shared/CurieLink.vue';
 import BiolinkTypeLink from '../shared/BiolinkTypeLink.vue';
-
-interface InstanceState {
-  results: NameResResult[];
-  elapsedMs: number | null;
-  error: string | null;
-  inFlight: boolean;
-  /** 'ok' | 'error' | 'cancelled' | 'idle' */
-  state: 'ok' | 'error' | 'cancelled' | 'idle';
-}
 
 const props = defineProps<{
   instance: NameResInstance;
