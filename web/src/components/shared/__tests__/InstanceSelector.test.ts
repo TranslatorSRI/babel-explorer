@@ -55,6 +55,7 @@ describe('InstanceSelector — rendering', () => {
     expect(abbr.exists()).toBe(true);
     expect(abbr.attributes('title')).toBe('ElasticSearch');
     expect(abbr.text()).toBe('ES');
+    expect(label.text()).toBe('ITRB ES CI');
     // es_ci must be in the primary section, not inside <details>
     expect(wrapper.find('details').html()).not.toContain('inst-es_ci');
   });

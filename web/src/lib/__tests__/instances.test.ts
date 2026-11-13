@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import endpoints from '../../../../config/translator-endpoints.json';
 import {
+  ENVIRONMENTS,
   buildInstances,
   findInstance,
   instanceForUrl,
@@ -67,6 +69,20 @@ describe('instanceForUrl and urlToTarget', () => {
       url: 'https://custom.example/',
     });
   });
+});
+
+describe('ENVIRONMENTS', () => {
+  it.each(Object.entries(endpoints))(
+    'describes every %s environment in translator-endpoints.json',
+    (_service, urlsByEnv) => {
+      for (const env of Object.keys(urlsByEnv)) expect(ENVIRONMENTS).toHaveProperty(env);
+    },
+  );
+
+  it.each(Object.entries(ENVIRONMENTS).filter(([, info]) => info.abbr))(
+    "puts %s's <abbr> text in its selector label",
+    (_env, info) => expect(info.selectorLabel).toContain(info.abbr!.text),
+  );
 });
 
 describe('sortInstances', () => {

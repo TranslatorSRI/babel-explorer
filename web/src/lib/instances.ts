@@ -24,35 +24,56 @@ export interface Instance {
   url: string;
 }
 
-const ENV_LABELS: Record<string, string> = {
-  dev: 'Dev',
-  exp: 'Exp',
-  ci: 'CI',
-  es_ci: 'ES CI',
-  redis_ci: 'Redis CI',
-  test: 'Test',
-  prod: 'Production',
+/** How the site shows one named environment. */
+export interface EnvironmentInfo {
+  /** Ends the instance's name in result tables: "NameRes Dev". */
+  label: string;
+  /** The instance selector's label, which names the host: "RENCI Dev", "ITRB CI". */
+  selectorLabel: string;
+  /** A word in selectorLabel the selector wraps in <abbr>, with this title. */
+  abbr?: { text: string; title: string };
+  /** Shown in the selector without expanding "Extended environments". */
+  primary: boolean;
+}
+
+/**
+ * Every named environment, in pipeline order (Exp → Dev → CI → ES CI → Redis CI → Test →
+ * Prod). config/translator-endpoints.json says which environments each service has and
+ * where they are; this says how to show and order them. Adding an environment means its
+ * URL there and one entry here — a test fails if the config names an environment this
+ * table lacks. Each service has only one of es_ci and redis_ci.
+ */
+export const ENVIRONMENTS: Record<string, EnvironmentInfo> = {
+  exp: { label: 'Exp', selectorLabel: 'RENCI Experimental', primary: false },
+  dev: { label: 'Dev', selectorLabel: 'RENCI Dev', primary: true },
+  ci: { label: 'CI', selectorLabel: 'ITRB CI', primary: true },
+  es_ci: {
+    label: 'ES CI',
+    selectorLabel: 'ITRB ES CI',
+    abbr: { text: 'ES', title: 'ElasticSearch' },
+    primary: true,
+  },
+  redis_ci: { label: 'Redis CI', selectorLabel: 'ITRB Redis CI', primary: true },
+  test: { label: 'Test', selectorLabel: 'ITRB Test', primary: false },
+  prod: { label: 'Production', selectorLabel: 'ITRB Prod', primary: true },
 };
 
 /** Pipeline order of the known environments; anything else is a custom URL. */
-const ENV_ORDER: Record<string, number> = {
-  exp: 0,
-  dev: 1,
-  ci: 2,
-  es_ci: 3,
-  redis_ci: 4,
-  test: 5,
-  prod: 6,
-};
+const ENV_ORDER = Object.keys(ENVIRONMENTS);
+
+function envOrder(env: string): number {
+  const i = ENV_ORDER.indexOf(env);
+  return i === -1 ? ENV_ORDER.length : i;
+}
 
 /**
- * Sort instances into pipeline order: Exp → Dev → CI → ES CI → Redis CI → Test → Prod,
- * then custom URLs, alphabetically by URL for stability.
+ * Sort instances into pipeline order (see ENVIRONMENTS), then custom URLs, alphabetically
+ * by URL for stability.
  */
 export function sortInstances<T extends Instance>(instances: T[]): T[] {
   return [...instances].sort((a, b) => {
-    const oa = ENV_ORDER[a.env] ?? 7;
-    const ob = ENV_ORDER[b.env] ?? 7;
+    const oa = envOrder(a.env);
+    const ob = envOrder(b.env);
     if (oa !== ob) return oa - ob;
     return a.url.localeCompare(b.url);
   });
@@ -78,7 +99,7 @@ export function normalizeInstanceUrl(raw: string): string | null {
 /** Build a service's instance list from its section of translator-endpoints.json. */
 export function buildInstances(service: string, urlsByEnv: Record<string, string>): Instance[] {
   return Object.entries(urlsByEnv).map(([env, url]) => ({
-    name: `${service} ${ENV_LABELS[env] ?? env}`,
+    name: `${service} ${ENVIRONMENTS[env]?.label ?? env}`,
     env,
     url: normalizeInstanceUrl(url) ?? url,
   }));

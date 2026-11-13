@@ -281,7 +281,9 @@ by `.github/workflows/deploy.yml` (pushes to `main` touching `web/` or `config/`
 island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch()`.
 
 - **Instance URLs** come from `config/translator-endpoints.json`, imported at build time. That file
-  is the one place to add a deployment; the planned server API (#9) reads it too. The CLI does not:
+  is the one place to add or move a deployment; the planned server API (#9) reads it too. A new
+  environment key also needs one `ENVIRONMENTS` entry in `web/src/lib/instances.ts` (labels,
+  order, primary or extended), which a test enforces. The CLI does not:
   it takes a single `NODENORM_URL` from `.env`.
 - **Tests** are Vitest + @vue/test-utils + happy-dom, co-located in `__tests__/` directories and
   run by the `web` job in CI. Recorded API responses live in `tests/fixtures/` at the repo root so

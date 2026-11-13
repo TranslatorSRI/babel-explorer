@@ -1,4 +1,4 @@
-import { normalizeInstanceUrl, resolveTargets, type Instance } from './instances';
+import { ENVIRONMENTS, normalizeInstanceUrl, resolveTargets, type Instance } from './instances';
 
 /**
  * Where the selection is remembered: localStorage for "Save as default", sessionStorage
@@ -9,10 +9,14 @@ import { normalizeInstanceUrl, resolveTargets, type Instance } from './instances
 const STORAGE_KEY = 'babel-explorer:instance-prefs';
 
 /**
- * Environments the instance selector shows without expanding "Extended environments".
- * Each service has only one of es_ci and redis_ci (see translator-endpoints.json).
+ * Environments the instance selector shows without expanding "Extended environments":
+ * those marked primary in ENVIRONMENTS.
  */
-export const PRIMARY_ENVS = new Set(['dev', 'ci', 'es_ci', 'redis_ci', 'prod']);
+export const PRIMARY_ENVS = new Set(
+  Object.entries(ENVIRONMENTS)
+    .filter(([, info]) => info.primary)
+    .map(([env]) => env),
+);
 
 /**
  * A remembered selection. Env keys ('dev', 'ci', …) name the same environment in every
