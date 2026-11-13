@@ -8,6 +8,8 @@
 export interface DebouncedFn<F extends (...args: unknown[]) => void> {
   (...args: Parameters<F>): void;
   cancel: () => void;
+  /** True while a call is waiting for its delay to pass. */
+  pending: () => boolean;
 }
 
 export function debounce<F extends (...args: unknown[]) => void>(
@@ -34,6 +36,8 @@ export function debounce<F extends (...args: unknown[]) => void>(
       timer = null;
     }
   };
+
+  wrapped.pending = () => timer !== null;
 
   return wrapped;
 }

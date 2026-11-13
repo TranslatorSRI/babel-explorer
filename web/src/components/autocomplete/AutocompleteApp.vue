@@ -143,7 +143,13 @@ async function fire() {
     return;
   }
 
-  if (selectedUrls.value.length === 0) return;
+  // Nothing to query. The watcher that brought us here has already aborted any lookup
+  // in flight, so drop its state too, or its inFlight flags keep the spinner and the
+  // "Cancel lookup" button up for good.
+  if (selectedUrls.value.length === 0) {
+    prunePerInstance();
+    return;
+  }
 
   abortController?.abort();
   abortController = new AbortController();
@@ -192,13 +198,18 @@ async function fire() {
   perInstance.value = new Map(perInstance.value);
 }
 
-// Rebuild the debounced fire whenever the delay changes.
+// Rebuild the debounced fire whenever the delay changes. A lookup still waiting out the
+// old delay is re-scheduled under the new one, not dropped: the query watcher has
+// already aborted the previous lookup, so dropping it left the old query's results on
+// screen until the next keystroke.
 let debouncedFire: ReturnType<typeof debounce<(...a: unknown[]) => void>> = debounce(fire, DEFAULT_DEBOUNCE_MS);
 watch(
   debounceMs,
   (ms) => {
+    const wasPending = debouncedFire.pending();
     debouncedFire.cancel();
     debouncedFire = debounce(fire, ms);
+    if (wasPending) debouncedFire();
   },
   { immediate: true },
 );

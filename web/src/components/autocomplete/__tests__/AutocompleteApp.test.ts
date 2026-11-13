@@ -169,6 +169,48 @@ describe('AutocompleteApp', () => {
     expect(liveSignal.aborted).toBe(false);
   });
 
+  it('still fires a waiting lookup when the debounce delay changes', async () => {
+    setLocation('?debounce=500&target=dev');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+    vi.mocked(nameresApi.fetchNameResLookup).mockClear();
+
+    await wrapper.find('#ac-query').setValue('asthm');
+    vi.advanceTimersByTime(100);
+    await wrapper.find('#ac-debounce').setValue('300');
+    vi.advanceTimersByTime(300);
+    await flushPromises();
+
+    const calls = vi.mocked(nameresApi.fetchNameResLookup).mock.calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0][1]).toBe('asthm');
+  });
+
+  it('clears the spinner when every instance is deselected mid-lookup', async () => {
+    vi.mocked(nameresApi.fetchNameResLookup).mockImplementation(
+      (_url, _q, _opts, signal) =>
+        new Promise((_resolve, reject) => {
+          signal!.addEventListener('abort', () => reject(Object.assign(new Error('aborted'), { name: 'AbortError' })));
+        }),
+    );
+    setLocation('?target=dev');
+    const wrapper = mount(AutocompleteApp);
+    await flushPromises();
+
+    await wrapper.find('#ac-query').setValue('diab');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+    expect(wrapper.find('.spinner-border').exists()).toBe(true);
+
+    await wrapper.findAll('button').find((b) => b.text() === 'None')!.trigger('click');
+    vi.advanceTimersByTime(150);
+    await flushPromises();
+
+    expect(wrapper.find('.spinner-border').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Cancel lookup');
+    expect(wrapper.text()).toContain('Select at least one NameRes instance');
+  });
+
   it('passes limit=100 when Check button fires the deep lookup', async () => {
     vi.mocked(nameresApi.fetchNameResLookup).mockResolvedValue([mkResult('MONDO:1', 'x')]);
 

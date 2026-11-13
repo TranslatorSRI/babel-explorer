@@ -40,6 +40,19 @@ describe('debounce', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it('pending() is true only while a call waits for its delay', () => {
+    const d = debounce(vi.fn(), 100);
+    expect(d.pending()).toBe(false);
+    d('x');
+    expect(d.pending()).toBe(true);
+    vi.advanceTimersByTime(100);
+    expect(d.pending()).toBe(false);
+    d('y');
+    d.cancel();
+    expect(d.pending()).toBe(false);
+    expect(debounce(vi.fn(), 0).pending()).toBe(false);
+  });
+
   it('invokes synchronously when ms is 0', () => {
     const spy = vi.fn();
     const d = debounce(spy, 0);
