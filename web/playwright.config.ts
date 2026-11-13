@@ -18,11 +18,13 @@ const baseURL = siteUrl
 
 export default defineConfig({
   testDir: 'e2e',
+  // All generated output goes under reports/, which .gitignore ignores as a whole.
+  outputDir: 'reports/test-results',
   // Every spec queries live services; a slow instance is not a failure of the site.
   timeout: 120_000,
   expect: { timeout: 70_000 },
   retries: process.env.CI ? 1 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'reports/playwright' }]] : 'list',
   use: {
     baseURL,
     trace: 'retain-on-failure',
