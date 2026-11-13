@@ -398,6 +398,9 @@ since the initial commit. Consequences a future contributor will trip over:
 - Tests: `tests/`
 - Test CURIEs: `tests/data/valid_curies.txt`
 - Downloaded Babel files: `<BABEL_LOCAL_DIR>/duckdb/*.parquet` (default `data/duckdb/`)
+- Scratch space: `data/` (gitignored) is also free for agents to use for any purpose, especially
+  output a later job could reuse. Not `data/test`, which every integration run deletes, and not for
+  `web/` output, which stays inside that npm project (`web/reports/`, also gitignored)
 - DuckDB query spill: `<BABEL_LOCAL_DIR>/duckdb-spill/` (default `data/duckdb-spill/`)
 - Endpoint configuration: `.env` (gitignored), template in `env.default`
 - Entry point: `src/babel_explorer/cli.py`
