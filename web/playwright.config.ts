@@ -14,7 +14,8 @@ import { defineConfig, devices } from '@playwright/test';
 const siteUrl = process.env.SITE_URL;
 const baseURL = siteUrl
   ? siteUrl.endsWith('/') ? siteUrl : `${siteUrl}/`
-  : 'http://localhost:4321/babel-explorer/';
+  // Not 4321, which `npm run dev` uses: the tests must run against a fresh build.
+  : 'http://localhost:4322/babel-explorer/';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -33,9 +34,11 @@ export default defineConfig({
   webServer: siteUrl
     ? undefined
     : {
-        command: 'npm run build && npm run preview -- --port 4321',
+        command: 'npm run build && npm run preview -- --port 4322',
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        // Never test whatever already answers on the port: that would be an old build,
+        // or not a build at all. A busy port is an error instead.
+        reuseExistingServer: false,
         timeout: 180_000,
       },
 });
