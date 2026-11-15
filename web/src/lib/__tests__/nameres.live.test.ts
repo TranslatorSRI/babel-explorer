@@ -77,11 +77,15 @@ describe.each(liveInstances('nameres'))('$name', (instance) => {
   it('returns highlighting in the format renderHighlight understands', async () => {
     const results = await lookup('asthma', { limit: 5, highlighting: true });
     expect(results.length, 'results for "asthma"').toBeGreaterThan(0);
-    // Solr leaves out a field it has no snippet for, and the page copes (labelFragment
-    // falls back to the plain label, highlightEntries skips it), so require only that
-    // every field it does send is a list of strings.
+    // No stricter than the page: Solr leaves out a field it has no snippet for, and the
+    // page reads every field through stringList, ignoring any that is not a list of
+    // strings, so a new field of another shape is harmless. Only labels and synonyms,
+    // the fields NameRes highlights today, must have the shape the page reads when they
+    // are present; otherwise their highlighting silently disappears.
     for (const r of results) {
-      for (const [field, fragments] of Object.entries(r.highlighting ?? {})) {
+      for (const field of ['labels', 'synonyms']) {
+        const fragments = r.highlighting?.[field];
+        if (fragments === undefined) continue;
         expect(Array.isArray(fragments), `${r.curie} highlighting.${field}`).toBe(true);
         for (const f of fragments as unknown[]) expect(typeof f, `${r.curie} highlighting.${field}`).toBe('string');
       }
