@@ -26,12 +26,11 @@ export const test = base.extend({
       }
     });
     page.on('requestfailed', (req) => {
-      // Another host's failure is its outage; see the console handler above.
+      // Another host's failure is its outage; see the console handler above. That
+      // includes the NodeNorm and NameRes fetches a page aborts when a newer query
+      // replaces one, so those need no exemption of their own: the pages fetch nothing
+      // from the site's origin, where any failure, aborted or not, is a broken page.
       if (!req.url().startsWith(site)) return;
-      // A fetch the page aborts on purpose (a newer query replaced it) is not a failure,
-      // but an aborted script or stylesheet is a broken page.
-      const aborted = req.failure()?.errorText.includes('ERR_ABORTED');
-      if (aborted && ['fetch', 'xhr'].includes(req.resourceType())) return;
       problems.push(`request failed: ${req.url()} (${req.failure()?.errorText})`);
     });
 

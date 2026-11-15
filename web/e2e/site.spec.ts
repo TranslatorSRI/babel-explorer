@@ -32,6 +32,10 @@ test('Autocomplete compares instances with highlighting from a link', async ({ p
   await page.goto('autocomplete/#q=asthm&target=prod&target=ci');
   await expect(page.getByText('Comparison —')).toBeVisible();
   await expect(page.locator('tbody mark').first()).toBeVisible();
+  // Both instances must have answered before "no error" means anything. The page writes
+  // them together today, but a page that rendered each as it arrived would otherwise let
+  // a failing CI pass this check while it was still loading.
+  await expect(page.getByRole('button', { name: 'Cancel lookup' })).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
