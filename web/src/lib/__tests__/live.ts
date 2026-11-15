@@ -20,7 +20,15 @@ export const SITE_ORIGIN = 'https://translatorsri.github.io';
 
 export function liveInstances(service: 'nodenorm' | 'nameres'): Instance[] {
   const label = service === 'nodenorm' ? 'NodeNorm' : 'NameRes';
-  return buildInstances(label, endpoints[service]).filter((i) => LIVE_ENVS.includes(i.env));
+  const found = buildInstances(label, endpoints[service]).filter((i) => LIVE_ENVS.includes(i.env));
+  // Fail loudly rather than quietly test fewer environments: a renamed or removed key
+  // in config/translator-endpoints.json would otherwise leave the daily check green
+  // while no longer covering it.
+  const missing = LIVE_ENVS.filter((env) => !found.some((i) => i.env === env));
+  if (missing.length > 0) {
+    throw new Error(`${label}: no ${missing.join(', ')} in config/translator-endpoints.json; update LIVE_ENVS`);
+  }
+  return found;
 }
 
 /**
