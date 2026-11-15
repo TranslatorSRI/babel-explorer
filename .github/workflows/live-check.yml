@@ -60,7 +60,23 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci
         working-directory: web
-      - run: npx playwright install --with-deps chromium
+      # The browser is keyed on the exact @playwright/test version (pinned in package.json),
+      # so it downloads once per upgrade. The system libraries it needs are not in the
+      # cache and are installed on every run either way.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        working-directory: web
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
         working-directory: web
       # "Deploy to GitHub Pages" completes when it pushes gh-pages; Pages publishes it
       # in a separate run some seconds later. Wait for the deployed commit to be served,
@@ -70,8 +86,12 @@ jobs:
         env:
           WANT: ${{ github.event.workflow_run.head_sha }}
           GH_TOKEN: ${{ github.token }}
+        # Bounded by elapsed time, not a count of passes: a hanging curl or compare call
+        # makes each pass longer, and a pass count would then outlast the job's
+        # timeout-minutes, which cancels the job without the error below.
         run: |
-          for _ in $(seq 60); do
+          got=
+          while [ "$SECONDS" -lt 600 ]; do
             got=$(curl -fsS --max-time 15 "${SITE_URL}commit.txt?t=$(date +%s)" || true)
             [ "$got" = "$WANT" ] && exit 0
             # A later deploy may go live first, or replace this one's Pages build; the
