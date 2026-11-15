@@ -61,11 +61,19 @@ describe.each(liveInstances('nodenorm'))('$name', (instance) => {
   // `taxa` on each identifier, as Redis-backed NodeNorm returned it. NodeNorm-ES ignores
   // include_taxa and returns taxa only on the node (src/nodenorm/handlers/
   // normalized_nodes.py), so that column is empty on every ElasticSearch deployment.
-  // it.fails keeps this green while the gap lasts and turns it red once per-identifier
-  // taxa return: then make it a plain `it` and close #43.
-  it.fails('puts taxa on a gene\'s equivalent identifiers (include_taxa)', async () => {
-    const gene = (await batch())['NCBIGene:1756']!;
-    expect(gene.equivalent_identifiers.some((eq) => (eq.taxa ?? []).length > 0)).toBe(true);
+  // This asserts the gap, so it goes red once per-identifier taxa return: then assert
+  // the opposite and close #43. Not `it.fails`, which passed on any failure at all
+  // (a network error, or the gene coming back null) and so stayed green for the wrong
+  // reason; here those fail the test like any other.
+  it('still omits taxa on a gene\'s equivalent identifiers (include_taxa, #43)', async () => {
+    const gene = (await batch())['NCBIGene:1756'];
+    expect(gene, 'NCBIGene:1756 normalizes').toBeTruthy();
+    expect(gene!.equivalent_identifiers.length).toBeGreaterThan(0);
+    const withTaxa = gene!.equivalent_identifiers.filter((eq) => (eq.taxa ?? []).length > 0);
+    expect(
+      withTaxa.map((eq) => eq.identifier),
+      'per-identifier taxa are back: assert they are present instead, and close #43',
+    ).toEqual([]);
   });
 
   it('gives a different clique for water with conflation on and off', async () => {
