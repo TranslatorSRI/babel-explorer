@@ -181,7 +181,7 @@ Disable it with `-n0`, **not** `-p no:xdist` — unloading the plugin leaves the
 
 ### Linting
 
-**Run both of these before committing or pushing.** CI checks them on every PR, and a push
+**Run these before committing or pushing.** CI checks them on every PR, and a push
 that skips them turns the PR red for reasons unrelated to the change under review.
 
 ```bash
@@ -189,7 +189,17 @@ uv run ruff check          # Python lint
 uv run ruff check --fix    # Python auto-fix
 uv run ruff format --check # Python format check
 uv run ruff format         # Python auto-format
+uv run actionlint          # .github/workflows/*.yml
 ```
+
+**For a workflow with no `pull_request` trigger, actionlint is the only check it gets before
+it merges.** Scheduled and `workflow_run` runs use the copy on `main`, a `push` trigger limited
+to `main` fires only after the merge, and GitHub offers a workflow for `workflow_dispatch` only
+once it is on `main`. So in `deploy.yml`, `live-check.yml` or `update-prefix-map.yml` a broken
+step reference or `if:` expression otherwise surfaces as a failed run after the merge. It comes from `actionlint-py` in the `dev`
+group, pinned in `uv.lock` like ruff. It checks `run:` scripts with shellcheck only when
+`shellcheck` is on `PATH` (`brew install shellcheck`; GitHub's Ubuntu runners have it), and
+silently skips them otherwise.
 
 Run them over the whole repository, not just the files you touched — `[tool.ruff]` in
 `pyproject.toml` sets the scope. If `ruff format` reports files you did not edit, the repository
