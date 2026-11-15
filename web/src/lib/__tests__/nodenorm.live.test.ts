@@ -82,6 +82,8 @@ describe.each(liveInstances('nodenorm'))('$name', (instance) => {
       fetchNormalizedNodes(instance.url, ['MESH:D014867'], DEFAULT_API_OPTIONS),
       fetchNormalizedNodes(instance.url, ['MESH:D014867'], off),
     ]);
+    expect(on['MESH:D014867'], 'MESH:D014867 normalizes with conflation on').toBeTruthy();
+    expect(without['MESH:D014867'], 'MESH:D014867 normalizes with conflation off').toBeTruthy();
     expect(on['MESH:D014867']!.equivalent_identifiers.length).toBeGreaterThan(
       without['MESH:D014867']!.equivalent_identifiers.length,
     );
