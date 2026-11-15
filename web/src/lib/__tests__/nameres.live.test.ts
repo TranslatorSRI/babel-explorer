@@ -77,11 +77,13 @@ describe.each(liveInstances('nameres'))('$name', (instance) => {
   it('returns highlighting in the format renderHighlight understands', async () => {
     const results = await lookup('asthma', { limit: 5, highlighting: true });
     expect(results.length, 'results for "asthma"').toBeGreaterThan(0);
+    // Solr leaves out a field it has no snippet for, and the page copes (labelFragment
+    // falls back to the plain label, highlightEntries skips it), so require only that
+    // every field it does send is a list of strings.
     for (const r of results) {
-      for (const field of ['labels', 'synonyms']) {
-        const fragments = r.highlighting?.[field];
+      for (const [field, fragments] of Object.entries(r.highlighting ?? {})) {
         expect(Array.isArray(fragments), `${r.curie} highlighting.${field}`).toBe(true);
-        for (const f of fragments as unknown[]) expect(typeof f).toBe('string');
+        for (const f of fragments as unknown[]) expect(typeof f, `${r.curie} highlighting.${field}`).toBe('string');
       }
     }
     // The marks must come through as <mark>, with no tag or entity left as text.
