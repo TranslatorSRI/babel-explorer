@@ -25,6 +25,10 @@ export default defineConfig({
   timeout: 120_000,
   expect: { timeout: 70_000 },
   retries: process.env.CI ? 1 : 0,
+  // In CI, stop and write the report well before the live-check job's timeout-minutes,
+  // which would cancel the job with no report at all. Every test hanging to its
+  // timeout and retrying would otherwise take over half an hour.
+  globalTimeout: process.env.CI ? 25 * 60_000 : undefined,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'reports/playwright' }]] : 'list',
   use: {
     baseURL,
