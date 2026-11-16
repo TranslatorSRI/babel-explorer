@@ -1,0 +1,68 @@
+# Dependabot configuration. See "Dependency updates" in AGENTS.md for the repository
+# settings this relies on, which live in the GitHub UI rather than in any file.
+#
+# Two kinds of update come from here, and they behave differently:
+#
+# - Security updates open as soon as an advisory matches something we depend on. They
+#   ignore `schedule` and `cooldown` entirely, so the weekly schedule below does not
+#   slow down a fix for the deployed site.
+# - Version updates are routine bumps, proposed on the weekly schedule. Weekly and
+#   grouped keeps them to a handful of PRs; making them daily would not make the site
+#   any safer, only noisier.
+#
+# `cooldown` holds back a version update until the release has been public for a while.
+# A hijacked npm release is usually spotted and pulled within days, so this keeps one
+# from landing in a routine bump and then being deployed to GitHub Pages. Do not
+# remove it to "get updates sooner": security fixes already bypass it.
+version: 2
+updates:
+  # The web site, deployed to GitHub Pages. Its code runs in visitors' browsers.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      # All open security fixes in one PR, so a fix is reviewed and deployed together
+      # rather than one advisory at a time.
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+      # Packages that build or ship in the site itself.
+      runtime:
+        patterns: ["astro", "vue", "@astrojs/*"]
+        update-types: [minor, patch]
+      dev-tools:
+        dependency-type: development
+        update-types: [minor, patch]
+      # Major updates are left ungrouped: each gets its own PR, as they need reading.
+
+  # The Python CLI. Not deployed anywhere, but CI installs it.
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+      semver-major-days: 14
+    groups:
+      python:
+        update-types: [minor, patch]
+
+  # Workflow actions. deploy.yml pushes the site with contents: write, so these matter
+  # as much as the npm packages. Third-party actions are pinned to commit SHAs with a
+  # `# vX.Y.Z` comment; Dependabot updates the SHA and the comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
