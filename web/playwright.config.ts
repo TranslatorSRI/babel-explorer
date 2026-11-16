@@ -38,7 +38,11 @@ export default defineConfig({
   webServer: siteUrl
     ? undefined
     : {
-        command: 'npm run build && npm run preview -- --port 4322',
+        // --ignore-lock keeps the server in the foreground, where Playwright can own and
+        // stop it. Astro 7 detaches `astro preview` into a background daemon when it
+        // thinks a coding agent is running it, and Playwright then reports "Process from
+        // config.webServer exited early" and leaves the daemon behind on the port.
+        command: 'npm run build && npm run preview -- --port 4322 --ignore-lock',
         url: baseURL,
         // Never test whatever already answers on the port: that would be an old build,
         // or not a build at all. A busy port is an error instead.
