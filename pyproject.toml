@@ -39,6 +39,13 @@ dev = [
 lint = [
     "actionlint-py>=1.7",
     "ruff>=0.11.0",
+    # actionlint runs shellcheck over `run:` scripts only if it finds it on PATH, and
+    # silently skips them otherwise. shellcheck-py puts a pinned binary in .venv/bin, which
+    # `uv run` adds to PATH, so local runs and CI check the same things with the same
+    # version instead of whatever the machine or runner image happens to have.
+    "shellcheck-py>=0.10",
+    # Likewise for `shell: python` steps (none today), which actionlint checks with pyflakes.
+    "pyflakes>=3",
 ]
 
 [tool.uv]

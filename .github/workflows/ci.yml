@@ -21,8 +21,8 @@ jobs:
       - run: uv run ruff check --output-format github
       - run: uv run ruff format --check
       # Scheduled, workflow_run and workflow_dispatch workflows cannot run from a PR, so
-      # this is the only check a change to one gets before merging. actionlint runs
-      # shellcheck over `run:` scripts when it is on PATH, as on GitHub's Ubuntu runners.
+      # this is the only check a change to one gets before merging. It runs the
+      # shellcheck and pyflakes from the `lint` group, not whatever the runner image has.
       - run: uv run actionlint
 
   test:
