@@ -308,6 +308,10 @@ island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch
   NodeNorm/NameRes interface it relies on against the real services, daily via
   `.github/workflows/live-check.yml`. They are excluded from `npm test` and PR CI on purpose;
   see "Live checks" in `web/tests/README.md`.
+- **`astro preview` runs in the background when an agent starts it.** Astro 7 detects coding
+  agents (`AI_AGENT`, `CLAUDECODE`, …) and turns `npm run preview` into a daemon that returns
+  immediately and keeps the port. Stop it with `npx astro preview stop`, or pass `--ignore-lock`
+  for a foreground server, as `playwright.config.ts` does.
 - `web/README.md` covers development, the component layout and how to add a tool;
   `web/FUTURE.md` lists deferred features.
 
