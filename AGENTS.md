@@ -193,10 +193,19 @@ uv run actionlint          # .github/workflows/*.yml
 it merges.** Scheduled and `workflow_run` runs use the copy on `main`, a `push` trigger limited
 to `main` fires only after the merge, and GitHub offers a workflow for `workflow_dispatch` only
 once it is on `main`. So in `deploy.yml`, `live-check.yml` or `update-prefix-map.yml` a broken
-step reference or `if:` expression otherwise surfaces as a failed run after the merge. It comes from `actionlint-py` in the `dev`
-group, pinned in `uv.lock` like ruff. It checks `run:` scripts with shellcheck only when
-`shellcheck` is on `PATH` (`brew install shellcheck`; GitHub's Ubuntu runners have it), and
-silently skips them otherwise.
+step reference or `if:` expression otherwise surfaces as a failed run after the merge.
+
+The linters live in their own `lint` dependency group, which the CI test jobs skip with
+`UV_NO_GROUP=lint`. `actionlint-py` publishes no wheels: building it downloads the actionlint
+binary from GitHub releases (checked against checksums it ships), so a GitHub outage would
+otherwise fail unit tests that never run actionlint. Two things keep that build reproducible:
+
+- **Its build tools are pinned** by `build-constraint-dependencies` in `pyproject.toml`, which
+  `uv.lock` records. `uv.lock` alone pins only the sdist, and actionlint-py's build-system
+  requirements have no upper bounds. Bumping actionlint-py means re-resolving that list.
+- **shellcheck and pyflakes come from the `lint` group** (`shellcheck-py`, `pyflakes`).
+  actionlint silently skips the checks whose tool is not on `PATH`, so without them a local run
+  checks less than CI does, and CI's checks change with the runner image.
 
 Run them over the whole repository, not just the files you touched — `[tool.ruff]` in
 `pyproject.toml` sets the scope. If `ruff format` reports files you did not edit, the repository
