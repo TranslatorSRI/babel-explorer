@@ -393,6 +393,37 @@ Two concurrent *integration* runs still clash, and nothing here prevents that:
 - **`LabeledCrossReference`** — Extends CrossReference with labels and biolink types from NodeNorm
 - **`IdentifierRecord`** — Frozen dataclass for Identifiers.parquet rows (curie + dynamic extra fields, plus `nodenorm_label` under `--labels`). Returned by `BabelXRefs.get_curie_ids()`. The NodeNorm label is *not* called `label`: Identifiers.parquet has its own `label` column, which lands in `extra_fields` and would collide with it once the record is flattened for json/tsv/csv.
 
+## Dependency updates
+
+The web site's npm dependencies end up in visitors' browsers, and `deploy.yml` publishes
+whatever `main` builds, so a vulnerable or hijacked package matters here more than it would in a
+CLI. Dependabot watches three ecosystems, configured in `.github/dependabot.yml`: npm in `web/`,
+uv at the root, and GitHub Actions.
+
+**Half of the setup is not in any file.** *Dependabot alerts* and *Dependabot security updates*
+are repository settings (Settings → Advanced Security). Without them `dependabot.yml` produces
+only routine version bumps, and nothing reacts to a new advisory. If Dependabot has gone quiet,
+check those settings first. Neither was enabled before November 2026, and by then `web/` had
+built up 28 npm advisories.
+
+- **Security updates ignore `schedule` and `cooldown`.** They open as soon as an advisory
+  matches. The weekly schedule and the `cooldown` (7 days, 14 for a major) apply only to version
+  updates, and the cooldown is there so that a release hijacked upstream is usually pulled before
+  a routine bump can deploy it. Do not shorten or remove it to get fixes faster: fixes already
+  bypass it.
+- **Pin third-party actions to a full commit SHA with a version comment**
+  (`uses: owner/action@<sha> # vX.Y.Z`). Dependabot updates the SHA and the comment together.
+  `actions/*` stay on major tags. Follow the same rule in a new workflow, and resolve the SHA
+  from the action's own repository, dereferencing annotated tags to the commit they point at.
+- **Workflows triggered by Dependabot get no secrets and a read-only `GITHUB_TOKEN`.** `ci.yml`
+  needs neither, which is why Dependabot PRs get the same checks as anyone else's. Keep it that
+  way.
+- **A Dependabot PR that touches `web/` deploys on merge,** like any other change there, so
+  review it as a change to the site and let the `web` job (test, typecheck, build) finish first.
+- **`npm audit` in `web/` is the quick local check.** `npm audit fix` without `--force` stays
+  within the semver ranges in `package.json`. Anything it leaves needs a major upgrade and gets
+  its own change.
+
 ## Repository history was rewritten on 2026-09-01
 
 Every commit was rewritten to remove an internal Babel URL that had been the hardcoded default
