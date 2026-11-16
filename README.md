@@ -8,7 +8,7 @@ babel-explorer allows you to discover why two biological/chemical identifiers ar
 This project uses [uv](https://docs.astral.sh/uv/) for package management:
 
 ```bash
-uv sync --group dev
+uv sync
 cp env.default .env
 ```
 
@@ -106,11 +106,12 @@ uv run pytest -v
 
 ## Linting
 
-Run both checks before committing; CI enforces them on every pull request:
+Run these checks before committing; CI enforces them on every pull request:
 
 ```bash
 uv run ruff check --fix    # lint, with auto-fix
 uv run ruff format         # format
+uv run actionlint          # GitHub Actions workflows
 ```
 
 ### Adding Test CURIEs

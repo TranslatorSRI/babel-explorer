@@ -80,11 +80,8 @@ actually does with them.
 This project uses **uv** for package management:
 
 ```bash
-# Install dependencies
+# Install dependencies, including the `dev` (test) and `lint` groups
 uv sync
-
-# Install with dev dependencies
-uv sync --group dev
 
 # Configure the Babel and NodeNorm endpoints
 cp env.default .env
@@ -181,7 +178,7 @@ Disable it with `-n0`, **not** `-p no:xdist` — unloading the plugin leaves the
 
 ### Linting
 
-**Run both of these before committing or pushing.** CI checks them on every PR, and a push
+**Run these before committing or pushing.** CI checks them on every PR, and a push
 that skips them turns the PR red for reasons unrelated to the change under review.
 
 ```bash
@@ -189,7 +186,26 @@ uv run ruff check          # Python lint
 uv run ruff check --fix    # Python auto-fix
 uv run ruff format --check # Python format check
 uv run ruff format         # Python auto-format
+uv run actionlint          # .github/workflows/*.yml
 ```
+
+**For a workflow with no `pull_request` trigger, actionlint is the only check it gets before
+it merges.** Scheduled and `workflow_run` runs use the copy on `main`, a `push` trigger limited
+to `main` fires only after the merge, and GitHub offers a workflow for `workflow_dispatch` only
+once it is on `main`. So in `deploy.yml`, `live-check.yml` or `update-prefix-map.yml` a broken
+step reference or `if:` expression otherwise surfaces as a failed run after the merge.
+
+The linters live in their own `lint` dependency group, which the CI test jobs skip with
+`UV_NO_GROUP=lint`. `actionlint-py` publishes no wheels: building it downloads the actionlint
+binary from GitHub releases (checked against checksums it ships), so a GitHub outage would
+otherwise fail unit tests that never run actionlint. Two things keep that build reproducible:
+
+- **Its build tools are pinned** by `build-constraint-dependencies` in `pyproject.toml`, which
+  `uv.lock` records. `uv.lock` alone pins only the sdist, and actionlint-py's build-system
+  requirements have no upper bounds. Bumping actionlint-py means re-resolving that list.
+- **shellcheck and pyflakes come from the `lint` group** (`shellcheck-py`, `pyflakes`).
+  actionlint silently skips the checks whose tool is not on `PATH`, so without them a local run
+  checks less than CI does, and CI's checks change with the runner image.
 
 Run them over the whole repository, not just the files you touched — `[tool.ruff]` in
 `pyproject.toml` sets the scope. If `ruff format` reports files you did not edit, the repository

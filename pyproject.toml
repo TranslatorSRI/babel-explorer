@@ -32,7 +32,45 @@ dev = [
     "filelock>=3.16",
     "pytest>=8.3.5",
     "pytest-xdist[psutil]>=3.6",
+]
+# Linters live apart from `dev` so the CI test jobs can skip them (UV_NO_GROUP=lint in
+# ci.yml): actionlint-py has no wheels, and building it downloads the actionlint binary
+# from GitHub releases, which the test jobs have no reason to depend on.
+lint = [
+    "actionlint-py>=1.7",
     "ruff>=0.11.0",
+    # actionlint runs shellcheck over `run:` scripts only if it finds it on PATH, and
+    # silently skips them otherwise. shellcheck-py puts a pinned binary in .venv/bin, which
+    # `uv run` adds to PATH, so local runs and CI check the same things with the same
+    # version instead of whatever the machine or runner image happens to have.
+    "shellcheck-py>=0.10",
+    # Likewise for `shell: python` steps (none today), which actionlint checks with pyflakes.
+    "pyflakes>=3",
+]
+
+[tool.uv]
+# 0.10 is the oldest uv that honours UV_NO_GROUP, which ci.yml relies on to keep the
+# linters out of the test jobs; older ones install every default group regardless.
+# setup-uv reads this too, so CI installs the newest uv that satisfies it. (The uv.lock
+# `revision` is not a reason for the floor: uv back to 0.5 reads revision 5 unchanged.)
+required-version = ">=0.10"
+# `uv sync` and `uv run` install both groups locally; CI opts out per job.
+default-groups = ["dev", "lint"]
+# Exact pins for everything uv installs to build an sdist, which uv.lock does not
+# otherwise record. Today that is only actionlint-py, whose build-system requires
+# setuptools, wheel, requests and semver with no upper bounds. Without these pins a new
+# release of any of them could break `uv sync` with no change in this repository.
+# Regenerate with `uv pip compile` over that requirements list when bumping actionlint-py.
+build-constraint-dependencies = [
+    "certifi==2026.10.23",
+    "charset-normalizer==3.5.2",
+    "idna==3.20",
+    "packaging==26.3",
+    "requests==2.34.2",
+    "semver==3.1.2",
+    "setuptools==84.2.1",
+    "urllib3==2.8.0",
+    "wheel==0.48.0",
 ]
 
 [project.scripts]

@@ -14,28 +14,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync
       # `uv run` uses the ruff pinned in uv.lock, so CI lints with the same version
       # developers have locally. --output-format github annotates the PR diff inline.
       # Paths come from [tool.ruff] in pyproject.toml rather than being repeated here.
       - run: uv run ruff check --output-format github
       - run: uv run ruff format --check
+      # Scheduled, workflow_run and workflow_dispatch workflows cannot run from a PR, so
+      # this is the only check a change to one gets before merging. It runs the
+      # shellcheck and pyflakes from the `lint` group, not whatever the runner image has.
+      - run: uv run actionlint
 
   test:
     runs-on: ubuntu-latest
+    env:
+      # Skip the `lint` group: building actionlint-py downloads its binary from GitHub.
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync
       - run: uv run pytest -v -m "not integration"
 
   integration-test:
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
+    env:
+      UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv sync --group dev
+      - run: uv sync
       - run: uv run pytest -v -m "integration and not slow"
 
   web:
