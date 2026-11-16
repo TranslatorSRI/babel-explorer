@@ -12,6 +12,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/33/75/36ee89db39bb3620d
 name = "babel-explorer"
 version = "0.1.0"
 source = { editable = "." }
+default-groups = ["dev", "lint"]
 dependencies = [
     { name = "click" },
     { name = "duckdb" },
@@ -23,10 +24,12 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "actionlint-py" },
     { name = "filelock" },
     { name = "pytest" },
     { name = "pytest-xdist", extra = ["psutil"] },
+]
+lint = [
+    { name = "actionlint-py" },
     { name = "ruff" },
 ]
 
@@ -42,10 +45,12 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "actionlint-py", specifier = ">=1.7" },
     { name = "filelock", specifier = ">=3.16" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-xdist", extras = ["psutil"], specifier = ">=3.6" },
+]
+lint = [
+    { name = "actionlint-py", specifier = ">=1.7" },
     { name = "ruff", specifier = ">=0.11.0" },
 ]
 

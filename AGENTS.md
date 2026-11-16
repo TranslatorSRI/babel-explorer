@@ -80,11 +80,8 @@ actually does with them.
 This project uses **uv** for package management:
 
 ```bash
-# Install dependencies
+# Install dependencies, including the `dev` (test) and `lint` groups
 uv sync
-
-# Install with dev dependencies
-uv sync --group dev
 
 # Configure the Babel and NodeNorm endpoints
 cp env.default .env

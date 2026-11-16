@@ -8,7 +8,7 @@ babel-explorer allows you to discover why two biological/chemical identifiers ar
 This project uses [uv](https://docs.astral.sh/uv/) for package management:
 
 ```bash
-uv sync --group dev
+uv sync
 cp env.default .env
 ```
 

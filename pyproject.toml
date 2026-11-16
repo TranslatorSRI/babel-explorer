@@ -29,12 +29,26 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "actionlint-py>=1.7",
     "filelock>=3.16",
     "pytest>=8.3.5",
     "pytest-xdist[psutil]>=3.6",
+]
+# Linters live apart from `dev` so the CI test jobs can skip them (UV_NO_GROUP=lint in
+# ci.yml): actionlint-py has no wheels, and building it downloads the actionlint binary
+# from GitHub releases, which the test jobs have no reason to depend on.
+lint = [
+    "actionlint-py>=1.7",
     "ruff>=0.11.0",
 ]
+
+[tool.uv]
+# 0.10 is the oldest uv that honours UV_NO_GROUP, which ci.yml relies on to keep the
+# linters out of the test jobs; older ones install every default group regardless.
+# setup-uv reads this too, so CI installs the newest uv that satisfies it. (The uv.lock
+# `revision` is not a reason for the floor: uv back to 0.5 reads revision 5 unchanged.)
+required-version = ">=0.10"
+# `uv sync` and `uv run` install both groups locally; CI opts out per job.
+default-groups = ["dev", "lint"]
 
 [project.scripts]
 babel-explorer = "babel_explorer.cli:cli"
