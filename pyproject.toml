@@ -49,6 +49,22 @@ lint = [
 required-version = ">=0.10"
 # `uv sync` and `uv run` install both groups locally; CI opts out per job.
 default-groups = ["dev", "lint"]
+# Exact pins for everything uv installs to build an sdist, which uv.lock does not
+# otherwise record. Today that is only actionlint-py, whose build-system requires
+# setuptools, wheel, requests and semver with no upper bounds. Without these pins a new
+# release of any of them could break `uv sync` with no change in this repository.
+# Regenerate with `uv pip compile` over that requirements list when bumping actionlint-py.
+build-constraint-dependencies = [
+    "certifi==2026.10.23",
+    "charset-normalizer==3.5.2",
+    "idna==3.20",
+    "packaging==26.3",
+    "requests==2.34.2",
+    "semver==3.1.2",
+    "setuptools==84.2.1",
+    "urllib3==2.8.0",
+    "wheel==0.48.0",
+]
 
 [project.scripts]
 babel-explorer = "babel_explorer.cli:cli"

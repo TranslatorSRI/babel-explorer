@@ -2,6 +2,19 @@ version = 1
 revision = 5
 requires-python = ">=3.11"
 
+[manifest]
+build-constraints = [
+    { name = "certifi", specifier = "==2026.10.23" },
+    { name = "charset-normalizer", specifier = "==3.5.2" },
+    { name = "idna", specifier = "==3.20" },
+    { name = "packaging", specifier = "==26.3" },
+    { name = "requests", specifier = "==2.34.2" },
+    { name = "semver", specifier = "==3.1.2" },
+    { name = "setuptools", specifier = "==84.2.1" },
+    { name = "urllib3", specifier = "==2.8.0" },
+    { name = "wheel", specifier = "==0.48.0" },
+]
+
 [[package]]
 name = "actionlint-py"
 version = "1.7.12.25"
