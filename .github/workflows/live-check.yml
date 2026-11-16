@@ -1,0 +1,128 @@
+name: Live check
+
+# Checks the published site and the NodeNorm and NameRes interfaces it relies on,
+# daily and after every deploy, since those services can change under the site without
+# any commit here. See "Live checks" in web/tests/README.md.
+#
+# A failure is reported only by GitHub's failed-workflow email, which for a scheduled
+# run goes to whoever last changed the cron line below. GitHub also disables scheduled
+# workflows in a public repository after 60 days with no activity, emailing a warning
+# first; re-enable it from the Actions tab.
+
+on:
+  schedule:
+    - cron: "0 13 * * *"  # Daily 13:00 UTC; clear of ci.yml (Tue) and update-prefix-map.yml (Mon)
+  workflow_run:
+    workflows: ["Deploy to GitHub Pages"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Site to test (must end in /)"
+        default: "https://translatorsri.github.io/babel-explorer/"
+
+permissions:
+  contents: read
+
+env:
+  SITE_URL: ${{ inputs.site_url || 'https://translatorsri.github.io/babel-explorer/' }}
+
+jobs:
+  api-contract:
+    # Not after a deploy: these call NodeNorm and NameRes directly, which a deploy does
+    # not change. A deploy that moves an endpoint in config/ has it checked at the next
+    # daily run, or sooner from workflow_dispatch (#44).
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      - run: npm run test:live
+        working-directory: web
+
+  site:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    # Above the worst case, so the job ends with a report rather than being cancelled:
+    # a couple of minutes of installs, the deploy wait (10), and the tests, which
+    # playwright.config.ts stops at 25 minutes in CI.
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+        working-directory: web
+      # The browser is keyed on the exact @playwright/test version (pinned in package.json),
+      # so it downloads once per upgrade. The system libraries it needs are not in the
+      # cache and are installed on every run either way.
+      - name: Read the Playwright version
+        id: playwright
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+        working-directory: web
+      - uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium
+      - if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+      - if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+        working-directory: web
+      # "Deploy to GitHub Pages" completes when it pushes gh-pages; Pages publishes it
+      # in a separate run some seconds later. Wait for the deployed commit to be served,
+      # so the tests never check (or fail on) the build it replaced.
+      - name: Wait for the deploy to go live
+        if: github.event_name == 'workflow_run'
+        env:
+          WANT: ${{ github.event.workflow_run.head_sha }}
+          WANT_STARTED: ${{ github.event.workflow_run.run_started_at }}
+          DEPLOY_WORKFLOW: ${{ github.event.workflow_run.workflow_id }}
+          GH_TOKEN: ${{ github.token }}
+        # Bounded by elapsed time, not a count of passes, and every network call has its
+        # own timeout: a hanging call would otherwise outlast the job's timeout-minutes,
+        # which cancels the job without the error below.
+        run: |
+          got=
+          while [ "$SECONDS" -lt 600 ]; do
+            got=$(curl -fsS --max-time 15 "${SITE_URL}commit.txt?t=$(date +%s)" || true)
+            [ "$got" = "$WANT" ] && exit 0
+            if [[ "$got" =~ ^[0-9a-f]{40}$ ]]; then
+              # A later deploy may go live first, or replace this one's Pages build.
+              # The site then serves a descendant of WANT, which includes this deploy...
+              status=$(timeout 20 gh api "repos/$GITHUB_REPOSITORY/compare/$WANT...$got" --jq .status || true)
+              [ "$status" = ahead ] && exit 0
+              # ...or, when one of the two was deployed from a branch or a tag off main,
+              # a commit that has diverged from WANT. That still means this deploy was
+              # superseded if a successful Deploy run of it started after this one did.
+              started=$(timeout 20 gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$DEPLOY_WORKFLOW/runs?head_sha=$got&status=success" \
+                --jq '[.workflow_runs[].run_started_at] | max // empty' || true)
+              # ISO 8601 UTC timestamps compare correctly as strings.
+              [[ -n "$started" && "$started" > "$WANT_STARTED" ]] && exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::${SITE_URL}commit.txt is '$got' after 10 minutes, not $WANT or a later deploy"
+          exit 1
+      # SITE_URL (above) points the tests at the published site rather than a local build.
+      - run: npm run test:e2e
+        working-directory: web
+      # Also when cancelled (by timeout-minutes, or a newer run), which failure() misses.
+      - uses: actions/upload-artifact@v4
+        if: failure() || cancelled()
+        with:
+          name: playwright-report
+          path: web/reports/
+          retention-days: 14

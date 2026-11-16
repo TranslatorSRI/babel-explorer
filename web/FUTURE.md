@@ -36,8 +36,8 @@ If multiple tool pages need shared state (e.g. a shared CURIE list across tools)
 
 ### Testing
 Vitest unit and component tests are implemented (see `web/tests/README.md`). Future testing work:
-- **Playwright E2E tests** for full-page interaction (form submission, row expansion, Bootstrap JS)
-- **Integration tests** calling live NodeNorm API to verify response parsing end-to-end
+- **Broader Playwright coverage**: the live checks (see `web/tests/README.md`) drive each tool from a share link; form submission, row expansion and column toggles are untested in a browser
+- **Run the browser tests on PRs** against a local build, once a way to keep a live-service outage from failing an unrelated PR is settled
 - **Coverage thresholds** via `vitest --coverage`
 - **NodeNormForm / NodeNormApp tests** — form validation, orchestration logic, error states
 - **Snapshot tests** once component markup stabilizes
