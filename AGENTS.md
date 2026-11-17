@@ -312,6 +312,18 @@ island (`client:only="vue"`) that calls NodeNorm or NameRes directly with `fetch
   NodeNorm/NameRes interface it relies on against the real services, daily via
   `.github/workflows/live-check.yml`. They are excluded from `npm test` and PR CI on purpose;
   see "Live checks" in `web/tests/README.md`.
+- **`astro dev` and `astro preview` run in the background when an agent starts them.** Astro 7
+  detects coding agents (`AI_AGENT`, `CLAUDECODE`, …) and turns `npm run dev` and
+  `npm run preview` into daemons that return immediately and keep the port, so a second run
+  hits the lock. `npx astro dev stop` / `npx astro preview stop` stops one (`npx astro dev logs`
+  shows its output). Pass `--ignore-lock` (`npm run dev -- --ignore-lock`) for a foreground
+  server, as `playwright.config.ts` does for preview.
+- **Node 22.23.4 or later.** Astro 7's CLI refuses to start on anything older, and npm only
+  warns about `engines`. `web/.nvmrc` holds `22`, and every workflow reads it with
+  `check-latest: true`; without that, `setup-node` uses whichever 22.x the runner has cached.
+- **`compressHTML: true` in `astro.config.mjs` is load-bearing.** Astro 7's default runs prose
+  into links on the next line ("using the<a>…"). `scripts/check-build-whitespace.mjs` runs as
+  `postbuild` and fails the build, the deploy included, if that happens.
 - `web/README.md` covers development, the component layout and how to add a tool;
   `web/FUTURE.md` lists deferred features.
 

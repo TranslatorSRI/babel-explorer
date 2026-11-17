@@ -29,7 +29,10 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          # Astro 7 needs 22.23.4 or later. check-latest fetches the newest 22.x instead of
+          # whichever one the runner image happens to have cached.
+          node-version-file: web/.nvmrc
+          check-latest: true
           cache: npm
           cache-dependency-path: web/package-lock.json
 
