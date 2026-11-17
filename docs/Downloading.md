@@ -82,3 +82,27 @@ permanent, because the file gets stamped with the *correct* ETag:
 response's `Content-Length` (which is only the range's length). Storing the partial length would
 make the Last-Modified fallback in `_remote_unchanged()` compare it against the full remote length
 forever, re-downloading an unchanged multi-gigabyte file on every freshness expiry.
+
+## Concurrent runs
+
+Several processes can share one `BABEL_LOCAL_DIR`: two CLI runs at once, or every pytest-xdist
+worker running the session fixtures. Unlocked, they each rewrite the same `.tmp` and race to
+`os.replace` it, and the version-change sweep above deletes a `.tmp` that another process is still
+writing. `BabelDownloader` takes two cross-process locks, always in this order:
+
+- **`.babel-cache.lock`** in `BABEL_LOCAL_DIR`. `get_downloaded_file()` holds it *shared*.
+  `sync_cache_version()` takes it *exclusive*, and only when the release has changed, so the sweep
+  waits for every download in progress and no download starts while it runs. An unchanged release
+  needs only the shared lock to read the marker, so it never waits.
+- **`<file>.lock`** beside each cached file, held exclusive by `get_downloaded_file()`. One process
+  downloads; the others log that they are waiting, then find the file cached.
+
+Do not collapse these into one exclusive lock for the whole cache. It is simpler, but a run that
+needs only an already-cached `Concord.parquet` would then wait out another run's multi-gigabyte
+`Identifiers.parquet` download.
+
+Both are kernel locks (`flock` on POSIX, `msvcrt.locking` on Windows), released when the process
+exits however it exits, so there is no stale-lock cleanup to write. `msvcrt` has no shared mode,
+so on Windows the shared lock is exclusive: still correct, only more serial. Two runs pointed at
+*different* releases in one directory are still unsupported; the lock makes them take turns, and
+each turn refreshes the cache for its own release.
