@@ -434,6 +434,11 @@ no commit records. Check the settings themselves rather than assuming that step 
 - **`npm audit` in `web/` is the quick local check.** `npm audit fix` without `--force` stays
   within the semver ranges in `package.json`. Anything it leaves needs a major upgrade and gets
   its own change.
+- **Check uv alerts on transitive packages by hand.** Version updates bump only the direct
+  dependencies in `pyproject.toml`, so `certifi`, `urllib3`, `idna` and the rest of `uv.lock`
+  never move on their own. When the alerts were first turned on (November 2026), Dependabot opened
+  security PRs for npm but none for the 19 uv alerts. An alert with no PR beside it is fixed with
+  `uv lock --upgrade-package <name>`, which leaves `pyproject.toml` alone.
 
 ## Repository history was rewritten on 2026-09-01
 
