@@ -172,9 +172,10 @@ uv run pytest -v tests/test_nodenorm.py
 uv run pytest -v -n0 tests/test_nodenorm.py
 ```
 
-`[tool.pytest.ini_options]` puts `-n auto` in `addopts`, so every run is parallel by default.
-Disable it with `-n0`, **not** `-p no:xdist` — unloading the plugin leaves the already-parsed
-`-n` behind and pytest exits with `unrecognized arguments: -n`.
+`[tool.pytest.ini_options]` sets `addopts = "-n auto --max-worker-restart=0"`, so every run is
+parallel by default. Disable it with `-n0`, **not** `-p no:xdist` — unloading the plugin leaves
+the already-parsed options behind and pytest exits with `unrecognized arguments: -n`. See
+[Testing](#testing) for why worker restarts are off.
 
 ### Linting
 
@@ -396,6 +397,27 @@ Two concurrent *integration* runs still clash, and nothing here prevents that:
   to "start clean" without checking first — that is the fastest way to corrupt a run in progress.
 - **Recover**: kill every pytest process, `rm -rf data/test`, and start exactly one run. Nothing
   outside `data/test` is affected, so no repository or cache state needs repairing.
+
+**Recursive integration tests run one at a time.** `get_curie_xrefs(..., recurse=True)`
+materialises the whole Concord relation in DuckDB, and DuckDB sizes its memory limit at 80% of
+physical RAM *per process*, as if it had the machine to itself. With `-n auto`, xdist handed
+several of these tests to different workers at once and a 32 GB machine ran out of memory, while
+`-n 1` passed. So every test that runs a recursive query against real data takes the
+`recursive_query_lock` fixture (`tests/conftest.py`), an exclusive file lock that makes the
+others wait. **A new test that recurses over real Parquet must take that fixture.** The direct
+lookups (`recurse=False`) stream a filtered scan and run in parallel safely.
+
+Do not replace the lock with `@pytest.mark.xdist_group` and `--dist loadgroup`. That was tried
+first and does nothing on pytest 9.2 with xdist 3.8.0: xdist groups tests by rewriting
+`item._nodeid`, which pytest 9 no longer reads, so the "grouped" tests still ran on different
+workers at once and crashed exactly as before, with no warning
+([pytest-xdist#1407](https://github.com/pytest-dev/pytest-xdist/issues/1407)). Grouped
+tests normally get an `@group` suffix on their node IDs in `-v` output; if a future xdist
+release fixes this, that suffix is how to tell.
+
+`--max-worker-restart=0` goes with it. xdist otherwise replaces a crashed worker up to four
+times per worker, and here a crash means memory exhaustion, so each replacement walked back into
+the same pressure and the run never finished. Now the first crash ends the run with an error.
 
 ### Test Infrastructure
 

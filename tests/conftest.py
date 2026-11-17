@@ -12,7 +12,11 @@ import pytest
 import requests
 
 from babel_explorer.core.babel_xrefs import BabelXRefs
-from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
+from babel_explorer.core.downloader import (
+    BabelDownloader,
+    MissingBabelFileError,
+    _file_lock,
+)
 from babel_explorer.core.nodenorm import NodeNorm
 from tests.constants import (
     BABEL_URL,
@@ -158,6 +162,25 @@ def downloaded_identifiers(shared_downloader) -> str:
     whether it publishes ``Concord.parquet`` — see ``_download_or_skip``.
     """
     return _download_or_skip(shared_downloader, IDENTIFIERS_FILE)
+
+
+@pytest.fixture
+def recursive_query_lock(test_data_dir):
+    """Hold an exclusive cross-process lock for the duration of one test.
+
+    Every integration test that calls ``get_curie_xrefs(..., recurse=True)`` must take
+    this. The recursive query materialises the whole Concord relation, and DuckDB budgets
+    80% of physical RAM for each process, so two of them on different xdist workers ran a
+    32 GB machine out of memory. The lock makes the others wait their turn.
+
+    ``@pytest.mark.xdist_group`` with ``--dist loadgroup`` would say the same thing more
+    declaratively, but it does nothing on pytest 9.2: xdist 3.8.0 groups tests by
+    rewriting ``item._nodeid``, which pytest no longer reads, so grouped tests are
+    scheduled as if unmarked and still run concurrently (pytest-dev/pytest-xdist#1407).
+    A lock also holds whatever the scheduler does.
+    """
+    with _file_lock(os.path.join(test_data_dir, ".recursive-query.lock")):
+        yield
 
 
 @pytest.fixture(scope="session")
