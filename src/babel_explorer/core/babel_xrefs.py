@@ -316,8 +316,8 @@ class BabelXRefs:
 
         Unlike ``_query_xrefs``, which streams a filtered scan, this materialises the
         whole Concord relation, so it needs tens of gigabytes of memory or spill space.
-        Integration tests that call it share the ``concord-recursive`` xdist group so
-        that only one runs at a time; see "Testing" in AGENTS.md.
+        Integration tests that call it take the ``recursive_query_lock`` fixture so that
+        only one runs at a time; see "Testing" in AGENTS.md.
         """
         if label_curies:
             self._require_nodenorm()

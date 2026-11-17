@@ -455,9 +455,10 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 
 
 @pytest.mark.integration
-@pytest.mark.xdist_group("concord-recursive")
 @pytest.mark.parametrize("curie", VALID_CURIES)
-def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
+def test_get_curie_xrefs_expanded_includes_original(
+    babel_xrefs, recursive_query_lock, curie
+):
     """Non-expanded results are a subset of expanded results.
 
     This also covers "expansion finds at least as many", which used to be a separate
