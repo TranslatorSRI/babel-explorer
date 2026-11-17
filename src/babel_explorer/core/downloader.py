@@ -1,5 +1,6 @@
 """HTTP downloader for Babel Parquet files with ETag-based freshness checking."""
 
+import contextlib
 import functools
 import glob
 import json
@@ -13,8 +14,82 @@ from datetime import UTC, datetime
 import requests
 from tqdm import tqdm
 
+try:
+    import fcntl
+except ImportError:  # Windows
+    fcntl = None
+    import msvcrt
+
 #: Name of the file recording which Babel release the local cache holds.
 VERSION_MARKER = ".babel-version"
+
+#: Lock file guarding the whole cache; see ``BabelDownloader`` on cache locking.
+CACHE_LOCK = ".babel-cache.lock"
+
+#: How often a Windows lock request polls, since ``msvcrt`` cannot block indefinitely.
+_WINDOWS_LOCK_POLL_SECONDS = 0.5
+
+
+def _acquire_lock(fd: int, shared: bool, blocking: bool) -> bool:
+    """Lock the open file ``fd``; return False if ``blocking`` is off and it is held.
+
+    On POSIX this is ``flock``, a kernel lock tied to the open file: closing it, or the
+    process dying, releases it, so a killed run never leaves a stale lock to clean up.
+    ``msvcrt.locking`` on Windows has the same release-on-close property but no shared
+    mode and no indefinite wait, so there a shared request is taken exclusively (correct,
+    only less concurrent) and a blocking one polls.
+    """
+    if fcntl is not None:
+        flags = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
+        if not blocking:
+            flags |= fcntl.LOCK_NB
+        try:
+            fcntl.flock(fd, flags)
+        except BlockingIOError:
+            return False
+        return True
+
+    while True:
+        # msvcrt locks a byte range starting at the current position.
+        os.lseek(fd, 0, os.SEEK_SET)
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            if not blocking:
+                return False
+            time.sleep(_WINDOWS_LOCK_POLL_SECONDS)
+
+
+def _release_lock(fd: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    else:
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+
+
+@contextlib.contextmanager
+def _file_lock(path: str, shared: bool = False, on_wait=None):
+    """Hold a lock on ``path`` (created if missing) across processes until the block exits.
+
+    :param shared: Take a shared lock, which any number of holders can share but which
+        excludes an exclusive one. Exclusive otherwise.
+    :param on_wait: Called once, with no arguments, if the lock is held elsewhere and
+        this call is about to wait for it — so the user learns why the run has stalled.
+    """
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        if not _acquire_lock(fd, shared, blocking=False):
+            if on_wait is not None:
+                on_wait()
+            _acquire_lock(fd, shared, blocking=True)
+        try:
+            yield
+        finally:
+            _release_lock(fd)
+    finally:
+        os.close(fd)
 
 
 class MissingBabelFileError(RuntimeError):
@@ -73,6 +148,28 @@ def resolve_babel_version(url_base: str, timeout: int = 30) -> str | None:
 class BabelDownloader:
     """
     Class for downloading Babel cross-reference files to a local directory as needed.
+
+    **Cache locking.** Several processes can share one ``local_path``: two CLI runs at
+    once, or every pytest-xdist worker running the session fixtures. Without a lock they
+    each rewrite the same ``.tmp`` and race to ``os.replace`` it, and the version-change
+    sweep in ``sync_cache_version`` deletes ``.tmp`` files that another process is still
+    writing. Two locks, always taken in this order, prevent both:
+
+    * ``CACHE_LOCK`` in ``local_path``. ``get_downloaded_file`` holds it *shared*;
+      ``sync_cache_version`` takes it *exclusive* only when the release has changed and
+      the cache must be rewritten. So the sweep waits for every download in progress to
+      finish, and no download starts while it runs.
+    * ``<file>.lock`` beside each cached file, held exclusive by ``get_downloaded_file``.
+      One process downloads a file while the others wait and then find it cached.
+
+    One exclusive lock for the whole cache would be simpler, but a run that needs only
+    an already-cached ``Concord.parquet`` would then wait out another run's
+    multi-gigabyte ``Identifiers.parquet`` download.
+
+    Both are kernel locks (see ``_acquire_lock``), released when the process exits
+    however it exits. The ``filelock`` package would do the same, but this is a few
+    lines of stdlib, and that package was dropped after it brought nine Dependabot
+    alerts with it as a test-only dependency.
     """
 
     def __init__(
@@ -169,12 +266,27 @@ class BabelDownloader:
             )
             return
 
-        marker_path = os.path.join(self.local_path, VERSION_MARKER)
+        # The usual case, an unchanged release, writes nothing, so a shared lock is
+        # enough and this does not wait for another run's download to finish.
+        with self._cache_lock(shared=True):
+            if self._read_version_marker() == version:
+                return
+
+        with self._cache_lock(shared=False):
+            self._refresh_cache_for(version)
+
+    def _read_version_marker(self) -> str | None:
         try:
-            with open(marker_path) as f:
-                cached_version = f.read().strip()
+            with open(os.path.join(self.local_path, VERSION_MARKER)) as f:
+                return f.read().strip()
         except OSError:
-            cached_version = None
+            return None
+
+    def _refresh_cache_for(self, version: str):
+        """The body of ``sync_cache_version``, run under the exclusive cache lock."""
+        # Read again rather than trusting the check made under the shared lock: another
+        # process may have refreshed the cache while this one waited for the lock.
+        cached_version = self._read_version_marker()
 
         if cached_version and cached_version != version:
             self.logger.warning(
@@ -601,12 +713,36 @@ class BabelDownloader:
         Returns:
             str: Local path to the downloaded file
         """
-        local_path = self._fetch_file(dirpath, chunk_size)
-        # This file may have been the last one still holding the cache back from a
-        # release change sync_cache_version spotted. If so, this is where the version
-        # marker finally gets written.
-        self._write_version_marker_if_synced()
+        local_path = os.path.join(self.local_path, dirpath)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        # Cache lock first, file lock second, everywhere: see "Cache locking" in the
+        # class docstring.
+        with (
+            self._cache_lock(shared=True),
+            _file_lock(
+                local_path + ".lock",
+                on_wait=lambda: self.logger.warning(
+                    f"Waiting for another process to finish with {local_path}"
+                ),
+            ),
+        ):
+            self._fetch_file(dirpath, chunk_size)
+            # This file may have been the last one still holding the cache back from
+            # a release change sync_cache_version spotted. If so, this is where the
+            # version marker finally gets written.
+            self._write_version_marker_if_synced()
         return local_path
+
+    def _cache_lock(self, shared: bool):
+        """The cache-wide lock; see "Cache locking" in the class docstring."""
+        return _file_lock(
+            os.path.join(self.local_path, CACHE_LOCK),
+            shared=shared,
+            on_wait=lambda: self.logger.warning(
+                f"Waiting for another process using the Babel cache in "
+                f"{self.local_path}"
+            ),
+        )
 
     def _fetch_file(self, dirpath: str, chunk_size: int):
         """Do the actual fetching for ``get_downloaded_file``, which see."""

@@ -7,6 +7,8 @@ Integration tests download real files from the Babel server.
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, Mock, patch
@@ -15,11 +17,14 @@ import pytest
 import requests
 from _pytest.outcomes import Skipped
 
+from babel_explorer.core import downloader as downloader_module
 from babel_explorer.core.downloader import (
+    CACHE_LOCK,
     VERSION_MARKER,
     BabelDownloader,
     IncompleteDownloadError,
     MissingBabelFileError,
+    _file_lock,
     compose_babel_url,
     resolve_babel_version,
 )
@@ -1297,6 +1302,138 @@ def test_download_identifiers_parquet(downloaded_identifiers):
         assert f.read(4) == b"PAR1", "missing Parquet footer — download was truncated"
 
 
+# Run in a child process, because a lock only means anything across processes.
+_LOCK_PROBE = """
+import os, sys
+from babel_explorer.core.downloader import _acquire_lock
+fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT)
+print(_acquire_lock(fd, shared=sys.argv[2] == "shared", blocking=False))
+"""
+
+_LOCK_HOLDER = """
+import sys
+from babel_explorer.core.downloader import _file_lock
+with _file_lock(sys.argv[1]):
+    print("locked", flush=True)
+    sys.stdin.readline()
+"""
+
+needs_shared_locks = pytest.mark.skipif(
+    downloader_module.fcntl is None,
+    reason="msvcrt has no shared locks, so a shared request is exclusive on Windows",
+)
+
+
+def _another_process_can_lock(path, shared=False) -> bool:
+    result = subprocess.run(
+        [sys.executable, "-c", _LOCK_PROBE, str(path), "shared" if shared else "ex"],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    )
+    return result.stdout.strip() == "True"
+
+
+class TestCacheLocking:
+    """Processes sharing one cache must not download over, or sweep away, each other's
+    files. See "Cache locking" in the BabelDownloader docstring."""
+
+    def test_exclusive_lock_excludes_another_process(self, tmp_path):
+        path = tmp_path / "x.lock"
+        with _file_lock(str(path)):
+            assert not _another_process_can_lock(path)
+            assert not _another_process_can_lock(path, shared=True)
+        assert _another_process_can_lock(path)
+
+    @needs_shared_locks
+    def test_shared_lock_admits_shared_but_not_exclusive(self, tmp_path):
+        path = tmp_path / "x.lock"
+        with _file_lock(str(path), shared=True):
+            assert _another_process_can_lock(path, shared=True)
+            assert not _another_process_can_lock(path)
+
+    def test_waiter_is_told_and_then_gets_the_lock(self, tmp_path):
+        """on_wait fires only when the lock is held elsewhere, and the wait ends when
+        the holder exits, which is also what frees the lock of a killed run."""
+        path = tmp_path / "x.lock"
+        holder = subprocess.Popen(
+            [sys.executable, "-c", _LOCK_HOLDER, str(path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            assert holder.stdout.readline().strip() == "locked"
+            waits = []
+
+            def release_holder():
+                waits.append(True)
+                holder.stdin.close()  # ends the holder's readline, so it exits
+
+            with _file_lock(str(path), on_wait=release_holder):
+                assert waits == [True]
+        finally:
+            holder.kill()
+            holder.wait(timeout=30)
+
+        uncontended = []
+        with _file_lock(str(path), on_wait=lambda: uncontended.append(True)):
+            pass
+        assert uncontended == []
+
+    @needs_shared_locks
+    def test_download_holds_the_cache_shared_and_its_file_exclusive(self, tmp_path):
+        """Other downloads may proceed; a sweep, or a second download of the same
+        file, may not."""
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        cache_lock = tmp_path / CACHE_LOCK
+        file_lock = tmp_path / (CONCORD_FILE + ".lock")
+        seen = {}
+
+        def probe(dirpath, chunk_size):
+            seen["cache shared"] = _another_process_can_lock(cache_lock, shared=True)
+            seen["cache exclusive"] = _another_process_can_lock(cache_lock)
+            seen["file"] = _another_process_can_lock(file_lock)
+
+        with patch.object(dl, "_fetch_file", side_effect=probe):
+            dl.get_downloaded_file(CONCORD_FILE)
+
+        assert seen == {
+            "cache shared": True,
+            "cache exclusive": False,
+            "file": False,
+        }
+        assert _another_process_can_lock(cache_lock)
+        assert _another_process_can_lock(file_lock)
+
+    def test_sync_rewrites_the_cache_under_the_exclusive_lock(self, tmp_path):
+        """The sweep deletes every .tmp in duckdb/, so no download may be running."""
+        (tmp_path / VERSION_MARKER).write_text("2025nov19\n")
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        dl.babel_version = "2026jul22"
+        seen = []
+
+        def probe(version):
+            seen.append(_another_process_can_lock(tmp_path / CACHE_LOCK, shared=True))
+
+        with patch.object(dl, "_refresh_cache_for", side_effect=probe):
+            dl.sync_cache_version()
+
+        assert seen == [False]
+
+    def test_sync_leaves_an_unchanged_release_alone(self, tmp_path):
+        """No exclusive lock, so no waiting on another run's download."""
+        (tmp_path / VERSION_MARKER).write_text("2026jul22\n")
+        dl = BabelDownloader(url_base="https://example.com/", local_path=str(tmp_path))
+        dl.babel_version = "2026jul22"
+
+        with patch.object(dl, "_refresh_cache_for") as refresh:
+            dl.sync_cache_version()
+
+        refresh.assert_not_called()
+
+
 class TestIdentifiersFixtureSkips:
     """A release that omits Identifiers.parquet must skip, not error.
 
@@ -1307,41 +1444,38 @@ class TestIdentifiersFixtureSkips:
     """
 
     @staticmethod
-    def _call_fixture(downloader, tmp_path):
+    def _call_fixture(downloader):
         """Invoke the fixture's underlying function directly, past the decorator."""
-        return conftest.downloaded_identifiers.__wrapped__(downloader, str(tmp_path))
+        return conftest.downloaded_identifiers.__wrapped__(downloader)
 
-    def test_missing_file_skips(self, tmp_path):
+    def test_missing_file_skips(self):
         downloader = Mock()
         downloader.get_downloaded_file.side_effect = MissingBabelFileError(
             "This Babel release (2026jul22) does not publish duckdb/Identifiers.parquet."
         )
 
         with pytest.raises(Skipped) as excinfo:
-            self._call_fixture(downloader, tmp_path)
+            self._call_fixture(downloader)
 
         # The downloader's own message explains how to point at a release that has it.
         assert "does not publish duckdb/Identifiers.parquet" in str(excinfo.value)
 
-    def test_present_file_is_returned(self, tmp_path):
+    def test_present_file_is_returned(self):
         """The skip must not swallow the normal path."""
         downloader = Mock()
         downloader.get_downloaded_file.return_value = (
             "/cache/duckdb/Identifiers.parquet"
         )
 
-        assert (
-            self._call_fixture(downloader, tmp_path)
-            == "/cache/duckdb/Identifiers.parquet"
-        )
+        assert self._call_fixture(downloader) == "/cache/duckdb/Identifiers.parquet"
 
-    def test_other_errors_still_propagate(self, tmp_path):
+    def test_other_errors_still_propagate(self):
         """Only a missing file is a skip; a real failure must still fail the run."""
         downloader = Mock()
         downloader.get_downloaded_file.side_effect = RuntimeError("connection reset")
 
         with pytest.raises(RuntimeError, match="connection reset"):
-            self._call_fixture(downloader, tmp_path)
+            self._call_fixture(downloader)
 
 
 class TestSessionFinishCleanup:
