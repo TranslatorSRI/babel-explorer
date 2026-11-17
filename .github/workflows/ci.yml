@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync
       # `uv run` uses the ruff pinned in uv.lock, so CI lints with the same version
       # developers have locally. --output-format github annotates the PR diff inline.
@@ -32,7 +32,7 @@ jobs:
       UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync
       - run: uv run pytest -v -m "not integration"
 
@@ -43,7 +43,7 @@ jobs:
       UV_NO_GROUP: lint
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - run: uv sync
       - run: uv run pytest -v -m "integration and not slow"
 
