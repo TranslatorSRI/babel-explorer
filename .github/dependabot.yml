@@ -10,6 +10,11 @@
 #   grouped keeps them to a handful of PRs; making them daily would not make the site
 #   any safer, only noisier.
 #
+# Every group below, security groups included, sets `update-types: [minor, patch]`. A
+# major update matches no group and so gets a PR of its own, because majors need
+# reading. Leaving `update-types` off a group would bundle majors into it: an Astro
+# major would be reviewed, and deployed, alongside an unrelated test-only major.
+#
 # `cooldown` holds back a version update until the release has been public for a while.
 # A hijacked npm release is usually spotted and pulled within days, so this keeps one
 # from landing in a routine bump and then being deployed to GitHub Pages. Do not
@@ -26,19 +31,37 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
-      # All open security fixes in one PR, so a fix is reviewed and deployed together
-      # rather than one advisory at a time.
+      # All open non-major security fixes in one PR, so they are reviewed and deployed
+      # together rather than one advisory at a time.
       security:
         applies-to: security-updates
         patterns: ["*"]
-      # Packages that build or ship in the site itself.
-      runtime:
-        patterns: ["astro", "vue", "@astrojs/*"]
         update-types: [minor, patch]
+      # Astro and Vue, plus the tooling whose version has to track Vue's: the compiler
+      # plugin, the type checker and the test utilities. Splitting these across groups
+      # lets a Vue minor land a week before the plugin release it needs, failing the
+      # build or typecheck in between.
+      astro-vue:
+        patterns:
+          - "astro"
+          - "@astrojs/*"
+          - "vue"
+          - "@vue/*"
+          - "@vitejs/plugin-vue"
+          - "vue-tsc"
+        update-types: [minor, patch]
+      # A group with no `patterns` takes every package of its dependency-type, even one
+      # that a more specific group names: Dependabot only weighs specificity between
+      # groups that both have patterns. So the development packages listed in astro-vue
+      # are excluded here by name, or they would land in both groups' PRs. Keep this
+      # list in step with astro-vue's.
       dev-tools:
         dependency-type: development
+        exclude-patterns:
+          - "@vue/*"
+          - "@vitejs/plugin-vue"
+          - "vue-tsc"
         update-types: [minor, patch]
-      # Major updates are left ungrouped: each gets its own PR, as they need reading.
 
   # The Python CLI. Not deployed anywhere, but CI installs it.
   - package-ecosystem: uv
@@ -50,19 +73,42 @@ updates:
       default-days: 7
       semver-major-days: 14
     groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
+      # actionlint-py and ruff are left out so each gets a PR of its own:
+      # - actionlint-py is built from an sdist with the exact build tools pinned by
+      #   `build-constraint-dependencies` in pyproject.toml. Dependabot cannot regenerate
+      #   those pins, so whoever reviews its bump has to (see the comment there).
+      # - ruff is still 0.x, where a minor release can change lint and format results,
+      #   so its PR may need code changes that have nothing to do with anything else.
       python:
+        patterns: ["*"]
+        exclude-patterns: ["actionlint-py", "ruff"]
         update-types: [minor, patch]
 
   # Workflow actions. deploy.yml pushes the site with contents: write, so these matter
   # as much as the npm packages. Third-party actions are pinned to commit SHAs with a
   # `# vX.Y.Z` comment; Dependabot updates the SHA and the comment together.
+  #
+  # Major action bumps need the most care of all: deploy.yml, live-check.yml and
+  # update-prefix-map.yml have no pull_request trigger, so actionlint is the only check
+  # they get before merging, and a changed input first shows up as a failed run on main.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
       day: monday
+    # Dependabot does not classify action updates by semver for cooldown purposes, so
+    # `semver-major-days` is not available here; every action update waits 7 days.
     cooldown:
       default-days: 7
     groups:
+      security:
+        applies-to: security-updates
+        patterns: ["*"]
+        update-types: [minor, patch]
       actions:
         patterns: ["*"]
+        update-types: [minor, patch]
