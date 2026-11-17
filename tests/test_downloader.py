@@ -1444,41 +1444,38 @@ class TestIdentifiersFixtureSkips:
     """
 
     @staticmethod
-    def _call_fixture(downloader, tmp_path):
+    def _call_fixture(downloader):
         """Invoke the fixture's underlying function directly, past the decorator."""
-        return conftest.downloaded_identifiers.__wrapped__(downloader, str(tmp_path))
+        return conftest.downloaded_identifiers.__wrapped__(downloader)
 
-    def test_missing_file_skips(self, tmp_path):
+    def test_missing_file_skips(self):
         downloader = Mock()
         downloader.get_downloaded_file.side_effect = MissingBabelFileError(
             "This Babel release (2026jul22) does not publish duckdb/Identifiers.parquet."
         )
 
         with pytest.raises(Skipped) as excinfo:
-            self._call_fixture(downloader, tmp_path)
+            self._call_fixture(downloader)
 
         # The downloader's own message explains how to point at a release that has it.
         assert "does not publish duckdb/Identifiers.parquet" in str(excinfo.value)
 
-    def test_present_file_is_returned(self, tmp_path):
+    def test_present_file_is_returned(self):
         """The skip must not swallow the normal path."""
         downloader = Mock()
         downloader.get_downloaded_file.return_value = (
             "/cache/duckdb/Identifiers.parquet"
         )
 
-        assert (
-            self._call_fixture(downloader, tmp_path)
-            == "/cache/duckdb/Identifiers.parquet"
-        )
+        assert self._call_fixture(downloader) == "/cache/duckdb/Identifiers.parquet"
 
-    def test_other_errors_still_propagate(self, tmp_path):
+    def test_other_errors_still_propagate(self):
         """Only a missing file is a skip; a real failure must still fail the run."""
         downloader = Mock()
         downloader.get_downloaded_file.side_effect = RuntimeError("connection reset")
 
         with pytest.raises(RuntimeError, match="connection reset"):
-            self._call_fixture(downloader, tmp_path)
+            self._call_fixture(downloader)
 
 
 class TestSessionFinishCleanup:

@@ -5,7 +5,6 @@ Session-scoped fixtures download Babel files once and share them across all test
 Teardown removes the test data directory so the next run starts fresh.
 """
 
-import contextlib
 import os
 import shutil
 
@@ -83,31 +82,7 @@ def test_data_dir():
     return TEST_DATA_DIR
 
 
-@contextlib.contextmanager
-def _exclusive_lock(path):
-    """Hold an exclusive lock on ``path`` until the block exits, across processes.
-
-    ``-n auto`` means every pytest-xdist worker runs the session fixtures for itself,
-    and ``BabelDownloader`` has no lock of its own, so without this several workers
-    would each start the same multi-gigabyte download into the same ``.tmp`` file.
-    With it, one worker downloads while the rest wait and then find the file cached.
-
-    ``flock`` is a kernel lock: it is released when the file is closed or the process
-    dies, so a killed run leaves no stale lock behind. This is also what the
-    ``filelock`` package does on Linux and macOS; it was dropped as a dependency rather
-    than kept for this one call. ``fcntl`` is POSIX-only, so the integration downloads
-    do not run on Windows. It is imported here rather than at the top of the module so
-    that the unit suite still imports there. None of this affects the installed CLI,
-    which ships without ``tests/``.
-    """
-    import fcntl
-
-    with open(path, "a") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
-        yield
-
-
-def _download_or_skip(downloader, remote_path, test_data_dir, lock_name) -> str:
+def _download_or_skip(downloader, remote_path) -> str:
     """Download one Babel file, skipping the tests that need it if the release omits it.
 
     One rule, one implementation, for every DuckDB file. A release can publish
@@ -116,13 +91,14 @@ def _download_or_skip(downloader, remote_path, test_data_dir, lock_name) -> str:
     for itself, not once for the session. ``MissingBabelFileError`` is what the downloader
     already raises on a 404 for a ``duckdb/`` path, so there is no second HEAD request here
     to drift out of step with the real one.
+
+    Every xdist worker runs this for itself. ``BabelDownloader`` locks the cache across
+    processes, so one worker downloads while the rest wait and then find the file cached.
     """
-    lock_path = os.path.join(test_data_dir, lock_name)
-    with _exclusive_lock(lock_path):
-        try:
-            return downloader.get_downloaded_file(remote_path)
-        except MissingBabelFileError as e:
-            pytest.skip(str(e))
+    try:
+        return downloader.get_downloaded_file(remote_path)
+    except MissingBabelFileError as e:
+        pytest.skip(str(e))
 
 
 @pytest.fixture(scope="session")
@@ -148,23 +124,19 @@ def shared_downloader(test_data_dir) -> BabelDownloader:
 
 
 @pytest.fixture(scope="session")
-def downloaded_concord(shared_downloader, test_data_dir) -> str:
+def downloaded_concord(shared_downloader) -> str:
     """Download duckdb/Concord.parquet. Returns the local path.
 
     Multi-gigabyte in current releases and growing; do not record a figure here,
     it drifts silently and then misleads.
     """
-    return _download_or_skip(
-        shared_downloader, CONCORD_FILE, test_data_dir, "concord.lock"
-    )
+    return _download_or_skip(shared_downloader, CONCORD_FILE)
 
 
 @pytest.fixture(scope="session")
-def downloaded_metadata(shared_downloader, test_data_dir) -> str:
+def downloaded_metadata(shared_downloader) -> str:
     """Download duckdb/Metadata.parquet (small). Returns the local path."""
-    return _download_or_skip(
-        shared_downloader, METADATA_FILE, test_data_dir, "metadata.lock"
-    )
+    return _download_or_skip(shared_downloader, METADATA_FILE)
 
 
 @pytest.fixture(scope="session")
@@ -177,7 +149,7 @@ def downloaded_parquet_files(downloaded_concord, downloaded_metadata) -> dict[st
 
 
 @pytest.fixture(scope="session")
-def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
+def downloaded_identifiers(shared_downloader) -> str:
     """Download duckdb/Identifiers.parquet, the largest file Babel publishes.
 
     Every test that reaches this is marked ``slow``.
@@ -185,9 +157,7 @@ def downloaded_identifiers(shared_downloader, test_data_dir) -> str:
     Skips when the release does not publish it, which is not the same question as
     whether it publishes ``Concord.parquet`` — see ``_download_or_skip``.
     """
-    return _download_or_skip(
-        shared_downloader, IDENTIFIERS_FILE, test_data_dir, "identifiers.lock"
-    )
+    return _download_or_skip(shared_downloader, IDENTIFIERS_FILE)
 
 
 @pytest.fixture(scope="session")

@@ -247,6 +247,10 @@ before rejecting the run.
 1. **BabelDownloader** (`src/babel_explorer/core/downloader.py`):
    - Downloads Babel intermediate files from a remote HTTP(S) server using Python's `requests` library (streaming downloads)
    - Caches files locally in a configurable directory (default: `data/`), one Babel release at a time
+   - Locks the cache across processes (a shared cache lock plus a per-file lock, `flock` on
+     POSIX and `msvcrt` on Windows), so concurrent CLI runs and xdist workers neither download
+     over each other nor sweep away each other's `.tmp`. See "Concurrent runs" in
+     [docs/Downloading.md](docs/Downloading.md)
    - Caching is on disk, keyed by ETag and the `.meta` sidecars — not in memory. Only
      `babel_version` is memoised, via `functools.cached_property`
    - Resolves the Babel version (`resolve_babel_version`) and refreshes the cache when it changes (`sync_cache_version`)
@@ -360,7 +364,8 @@ for `2026jul22`). Use `-m "not integration"` while iterating, and budget for the
 
 **Only one pytest session may touch `data/test` at a time.** It is a fixed path shared by every
 run, not a per-run temporary directory, and `pytest_sessionfinish` deletes it at the end of the
-session. The lock around each download does not help: it guards one file, not a session.
+session. The downloader's cache lock does not help: it lasts for one download, not a session,
+and cannot stop `pytest_sessionfinish` deleting the directory under another run.
 
 `pytest_sessionfinish` skips the cleanup when the session selected no `integration` tests, so the
 fast `-m "not integration"` loop you run while editing is safe alongside a long integration run.
@@ -382,7 +387,7 @@ Two concurrent *integration* runs still clash, and nothing here prevents that:
 
 ### Test Infrastructure
 
-- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. `shared_downloader` HEADs the release root and skips the session if the server is unreachable; `_download_or_skip()` then skips per file if the release does not publish it. `nodenorm` probes `status` the same way, so a NodeNorm outage skips rather than reddening CI. Teardown removes the `data/test/` directory so the next run starts fresh — see the concurrency warning above before running two suites at once. Downloads are serialised across xdist workers by `_exclusive_lock()`, an `fcntl.flock` that is POSIX-only, so the integration downloads do not run on Windows. The installed CLI ships without `tests/` and is unaffected.
+- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. `shared_downloader` HEADs the release root and skips the session if the server is unreachable; `_download_or_skip()` then skips per file if the release does not publish it. `nodenorm` probes `status` the same way, so a NodeNorm outage skips rather than reddening CI. Teardown removes the `data/test/` directory so the next run starts fresh — see the concurrency warning above before running two suites at once. The fixtures take no lock of their own: `BabelDownloader` locks the cache across processes, so one xdist worker downloads each file while the rest wait.
 - **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
 - **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
 
