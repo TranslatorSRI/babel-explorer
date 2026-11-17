@@ -45,6 +45,9 @@ Purpose-built for evaluating NameRes as a real autocomplete (the primary way the
 
 ## Development
 
+Astro 7 needs **Node.js 22.23.4 or later**; `.nvmrc` here selects the latest 22.x (`nvm use`).
+On an older Node, `npm install` only warns, and Astro then refuses to start.
+
 ```bash
 cd web
 npm install
@@ -52,6 +55,12 @@ npm run dev
 ```
 
 This starts a local dev server at `http://localhost:4321/babel-explorer/`.
+
+When Astro detects that a coding agent is running it (`CLAUDECODE`, `AI_AGENT` and similar
+variables), `npm run dev` and `npm run preview` start the server in the background and return
+at once; Ctrl-C does not stop it. Use `npx astro dev stop` (or `npx astro preview stop`), and
+`npx astro dev logs` to see its output. `npm run dev -- --ignore-lock` keeps it in the
+foreground.
 
 ## Testing
 
