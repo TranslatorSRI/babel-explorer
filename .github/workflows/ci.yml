@@ -25,6 +25,11 @@ jobs:
           # this the jobs share one entry and whichever saves first decides whether it
           # holds the lint group (and the actionlint-py wheel built from source).
           cache-suffix: ${{ github.job }}
+          # Download uv from GitHub Releases, not Astral's mirror (setup-uv's default).
+          # required-version lets setup-uv pick a uv newer than the checksums it
+          # bundles, and the checksum for that one comes from the mirror as well, so a
+          # binary from the mirror would only be checked against the mirror.
+          download-from-astral-mirror: false
       - run: uv sync
       # `uv run` uses the ruff pinned in uv.lock, so CI lints with the same version
       # developers have locally. --output-format github annotates the PR diff inline.
@@ -45,9 +50,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          # See the lint job for both.
+          # See the lint job for all three.
           prune-cache: true
           cache-suffix: ${{ github.job }}
+          download-from-astral-mirror: false
       - run: uv sync
       - run: uv run pytest -v -m "not integration"
 
@@ -60,9 +66,10 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
-          # See the lint job for both.
+          # See the lint job for all three.
           prune-cache: true
           cache-suffix: ${{ github.job }}
+          download-from-astral-mirror: false
       - run: uv sync
       - run: uv run pytest -v -m "integration and not slow"
 
