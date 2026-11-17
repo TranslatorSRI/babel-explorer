@@ -455,6 +455,7 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 
 
 @pytest.mark.integration
+@pytest.mark.xdist_group("concord-recursive")
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
     """Expanded results are at least as many as non-expanded."""
@@ -466,6 +467,7 @@ def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
 
 
 @pytest.mark.integration
+@pytest.mark.xdist_group("concord-recursive")
 @pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
     """Non-expanded results are a subset of expanded results."""

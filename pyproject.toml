@@ -95,7 +95,14 @@ ignore = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-n auto"
+# --dist loadgroup: tests marked @pytest.mark.xdist_group run on one worker; every other
+# test is scheduled exactly as under the default `load`. The recursive integration tests
+# share the "concord-recursive" group because each one materialises all of Concord.parquet
+# in DuckDB, and running several at once exhausted 32 GB of RAM. Do not change this back
+# to `load`.
+# --max-worker-restart=0: a worker that crashes here has run out of memory, and xdist's
+# default (4 restarts per worker) just spawns a replacement into the same pressure.
+addopts = "-n auto --dist loadgroup --max-worker-restart=0"
 markers = [
     "integration: tests requiring network access (deselect with '-m \"not integration\"')",
     "slow: tests downloading Identifiers.parquet, the largest file Babel publishes (deselect with '-m \"not slow\"')",
