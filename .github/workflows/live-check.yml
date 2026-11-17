@@ -120,7 +120,7 @@ jobs:
       - run: npm run test:e2e
         working-directory: web
       # Also when cancelled (by timeout-minutes, or a newer run), which failure() misses.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure() || cancelled()
         with:
           name: playwright-report
