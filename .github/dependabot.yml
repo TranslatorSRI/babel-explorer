@@ -72,17 +72,19 @@ updates:
     cooldown:
       default-days: 7
       semver-major-days: 14
+    # actionlint-py and ruff are left out of both groups so each gets a PR of its own,
+    # for security fixes as well as version bumps:
+    # - actionlint-py is built from an sdist with the exact build tools pinned by
+    #   `build-constraint-dependencies` in pyproject.toml. Dependabot cannot regenerate
+    #   those pins, so whoever reviews its bump has to (see the comment there).
+    # - ruff is still 0.x, where a minor release can change lint and format results,
+    #   so its PR may need code changes that have nothing to do with anything else.
     groups:
       security:
         applies-to: security-updates
         patterns: ["*"]
+        exclude-patterns: ["actionlint-py", "ruff"]
         update-types: [minor, patch]
-      # actionlint-py and ruff are left out so each gets a PR of its own:
-      # - actionlint-py is built from an sdist with the exact build tools pinned by
-      #   `build-constraint-dependencies` in pyproject.toml. Dependabot cannot regenerate
-      #   those pins, so whoever reviews its bump has to (see the comment there).
-      # - ruff is still 0.x, where a minor release can change lint and format results,
-      #   so its PR may need code changes that have nothing to do with anything else.
       python:
         patterns: ["*"]
         exclude-patterns: ["actionlint-py", "ruff"]

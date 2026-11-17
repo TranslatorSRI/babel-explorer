@@ -18,7 +18,7 @@ dependencies = [
     "click>=8.3.1",
     "duckdb>=1.4.2",
     "python-dotenv>=1.0",
-    "requests>=2.32.5",
+    "requests>=2.33",
     "rich>=13",
     "tqdm>=4.67.0",
 ]
@@ -29,7 +29,6 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "filelock>=3.16",
     "pytest>=8.3.5",
     "pytest-xdist[psutil]>=3.6",
 ]
