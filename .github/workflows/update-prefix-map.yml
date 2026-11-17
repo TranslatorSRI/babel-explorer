@@ -26,6 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # create-pull-request sets up its own token. With checkout's credentials
+          # saved, it must first find and hide them (by file name, for checkout v6 and
+          # later) or git sends two auth headers. Not saving them leaves nothing to find.
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
