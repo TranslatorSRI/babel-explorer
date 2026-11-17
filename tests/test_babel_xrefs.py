@@ -457,20 +457,13 @@ def test_get_curie_xrefs_single_no_expand(babel_xrefs, curie):
 @pytest.mark.integration
 @pytest.mark.xdist_group("concord-recursive")
 @pytest.mark.parametrize("curie", VALID_CURIES)
-def test_get_curie_xrefs_expansion_finds_more(babel_xrefs, curie):
-    """Expanded results are at least as many as non-expanded."""
-    babel_xrefs.clear_xref_cache()
-    non_expanded = babel_xrefs.get_curie_xrefs([curie], recurse=False)
-    babel_xrefs.clear_xref_cache()
-    expanded = babel_xrefs.get_curie_xrefs([curie], recurse=True)
-    assert len(expanded) >= len(non_expanded)
-
-
-@pytest.mark.integration
-@pytest.mark.xdist_group("concord-recursive")
-@pytest.mark.parametrize("curie", VALID_CURIES)
 def test_get_curie_xrefs_expanded_includes_original(babel_xrefs, curie):
-    """Non-expanded results are a subset of expanded results."""
+    """Non-expanded results are a subset of expanded results.
+
+    This also covers "expansion finds at least as many", which used to be a separate
+    test: both lists are deduplicated, so a subset can never be larger. That test ran
+    the recursive query again for every CURIE, and each one materialises all of Concord.
+    """
     babel_xrefs.clear_xref_cache()
     non_expanded = set(babel_xrefs.get_curie_xrefs([curie], recurse=False))
     babel_xrefs.clear_xref_cache()
