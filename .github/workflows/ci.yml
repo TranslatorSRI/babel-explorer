@@ -12,8 +12,24 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # Save only the wheels uv built from source (actionlint-py) in the Actions
+          # cache, as setup-uv did by default before v9. Pre-built wheels are as quick
+          # to download again as to restore, and a full cache counts against the
+          # repository's 10 GB limit, which the npm caches and live-check.yml's
+          # Playwright browsers share.
+          prune-cache: true
+          # One cache entry per job. The key does not include UV_NO_GROUP, so without
+          # this the jobs share one entry and whichever saves first decides whether it
+          # holds the lint group (and the actionlint-py wheel built from source).
+          cache-suffix: ${{ github.job }}
+          # Download uv from GitHub Releases, not Astral's mirror (setup-uv's default).
+          # required-version lets setup-uv pick a uv newer than the checksums it
+          # bundles, and the checksum for that one comes from the mirror as well, so a
+          # binary from the mirror would only be checked against the mirror.
+          download-from-astral-mirror: false
       - run: uv sync
       # `uv run` uses the ruff pinned in uv.lock, so CI lints with the same version
       # developers have locally. --output-format github annotates the PR diff inline.
@@ -31,8 +47,13 @@ jobs:
       # Skip the `lint` group: building actionlint-py downloads its binary from GitHub.
       UV_NO_GROUP: lint
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # See the lint job for all three.
+          prune-cache: true
+          cache-suffix: ${{ github.job }}
+          download-from-astral-mirror: false
       - run: uv sync
       - run: uv run pytest -v -m "not integration"
 
@@ -42,16 +63,21 @@ jobs:
     env:
       UV_NO_GROUP: lint
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          # See the lint job for all three.
+          prune-cache: true
+          cache-suffix: ${{ github.job }}
+          download-from-astral-mirror: false
       - run: uv sync
       - run: uv run pytest -v -m "integration and not slow"
 
   web:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           # Astro 7 needs 22.23.4 or later. check-latest fetches the newest 22.x instead of
           # whichever one the runner image happens to have cached.
