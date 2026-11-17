@@ -26,6 +26,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # actions-gh-pages pushes from a clone of its own, with github_token in the
+          # remote URL, so nothing here needs the credentials checkout would otherwise
+          # leave in the workspace, and no later step can push with them.
+          persist-credentials: false
 
       - uses: actions/setup-node@v7
         with:
