@@ -5,12 +5,12 @@ Session-scoped fixtures download Babel files once and share them across all test
 Teardown removes the test data directory so the next run starts fresh.
 """
 
+import contextlib
 import os
 import shutil
 
 import pytest
 import requests
-from filelock import FileLock
 
 from babel_explorer.core.babel_xrefs import BabelXRefs
 from babel_explorer.core.downloader import BabelDownloader, MissingBabelFileError
@@ -83,6 +83,30 @@ def test_data_dir():
     return TEST_DATA_DIR
 
 
+@contextlib.contextmanager
+def _exclusive_lock(path):
+    """Hold an exclusive lock on ``path`` until the block exits, across processes.
+
+    ``-n auto`` means every pytest-xdist worker runs the session fixtures for itself,
+    and ``BabelDownloader`` has no lock of its own, so without this several workers
+    would each start the same multi-gigabyte download into the same ``.tmp`` file.
+    With it, one worker downloads while the rest wait and then find the file cached.
+
+    ``flock`` is a kernel lock: it is released when the file is closed or the process
+    dies, so a killed run leaves no stale lock behind. This is also what the
+    ``filelock`` package does on Linux and macOS; it was dropped as a dependency rather
+    than kept for this one call. ``fcntl`` is POSIX-only, so the integration downloads
+    do not run on Windows. It is imported here rather than at the top of the module so
+    that the unit suite still imports there. None of this affects the installed CLI,
+    which ships without ``tests/``.
+    """
+    import fcntl
+
+    with open(path, "a") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        yield
+
+
 def _download_or_skip(downloader, remote_path, test_data_dir, lock_name) -> str:
     """Download one Babel file, skipping the tests that need it if the release omits it.
 
@@ -94,7 +118,7 @@ def _download_or_skip(downloader, remote_path, test_data_dir, lock_name) -> str:
     to drift out of step with the real one.
     """
     lock_path = os.path.join(test_data_dir, lock_name)
-    with FileLock(lock_path):
+    with _exclusive_lock(lock_path):
         try:
             return downloader.get_downloaded_file(remote_path)
         except MissingBabelFileError as e:

@@ -360,7 +360,7 @@ for `2026jul22`). Use `-m "not integration"` while iterating, and budget for the
 
 **Only one pytest session may touch `data/test` at a time.** It is a fixed path shared by every
 run, not a per-run temporary directory, and `pytest_sessionfinish` deletes it at the end of the
-session. The `FileLock` around each download does not help: it guards one file, not a session.
+session. The lock around each download does not help: it guards one file, not a session.
 
 `pytest_sessionfinish` skips the cleanup when the session selected no `integration` tests, so the
 fast `-m "not integration"` loop you run while editing is safe alongside a long integration run.
@@ -382,7 +382,7 @@ Two concurrent *integration* runs still clash, and nothing here prevents that:
 
 ### Test Infrastructure
 
-- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. `shared_downloader` HEADs the release root and skips the session if the server is unreachable; `_download_or_skip()` then skips per file if the release does not publish it. `nodenorm` probes `status` the same way, so a NodeNorm outage skips rather than reddening CI. Teardown removes the `data/test/` directory so the next run starts fresh — see the concurrency warning above before running two suites at once.
+- **`tests/conftest.py`** — Session-scoped fixtures that download Parquet files once and share them across all integration tests. `shared_downloader` HEADs the release root and skips the session if the server is unreachable; `_download_or_skip()` then skips per file if the release does not publish it. `nodenorm` probes `status` the same way, so a NodeNorm outage skips rather than reddening CI. Teardown removes the `data/test/` directory so the next run starts fresh — see the concurrency warning above before running two suites at once. Downloads are serialised across xdist workers by `_exclusive_lock()`, an `fcntl.flock` that is POSIX-only, so the integration downloads do not run on Windows. The installed CLI ships without `tests/` and is unaffected.
 - **`tests/constants.py`** — Shared constants (URLs, file paths) and `load_curies()` helper.
 - **`tests/data/valid_curies.txt`** — One CURIE per line (`#` comments allowed). Integration tests are parametrized over this list — adding a new line automatically expands test coverage.
 
