@@ -73,6 +73,11 @@ npm run build
 
 Output goes to `web/dist/`. This is a fully static site that can be served from any web server or GitHub Pages.
 
+The build then runs `scripts/check-build-whitespace.mjs` (as `postbuild`), which fails if any
+page runs a word into a link or other inline element ("using the<a>NodeNormalization API</a>").
+That is what happens if `compressHTML: true` goes missing from `astro.config.mjs`; see the
+comment there.
+
 ## Deployment
 
 `.github/workflows/deploy.yml` builds the site and pushes it to the `gh-pages` branch on every push to `main` that touches `web/` or `config/`, on published releases, and on demand (`workflow_dispatch`). GitHub Pages serves it at `https://translatorsri.github.io/babel-explorer/`.

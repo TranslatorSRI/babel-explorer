@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "postbuild": "node scripts/check-build-whitespace.mjs",
     "preview": "astro preview",
     "astro": "astro",
     "test": "vitest run",
