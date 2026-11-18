@@ -479,6 +479,38 @@ no commit records. Check the settings themselves rather than assuming that step 
   security PRs for npm but none for the 19 uv alerts. An alert with no PR beside it is fixed with
   `uv lock --upgrade-package <name>`, which leaves `pyproject.toml` alone.
 
+### Upgrading by hand
+
+When Dependabot version PRs pile up, one upgrade pass on a branch clears them faster than
+reviewing each one. Once it merges, Dependabot closes the PRs the new lockfiles cover. Apply the
+same 7-day cooldown on the command line, and leave majors to their own PRs:
+
+```bash
+# Python: preview first, then hold back each major the preview shows (here duckdb 2, rich 15).
+uv lock --upgrade --exclude-newer "7 days" --dry-run
+uv lock --upgrade --exclude-newer "7 days" -P 'duckdb<2' -P 'rich<15'
+uv lock   # drop the cooldown that the previous command recorded in uv.lock
+
+# npm: name the packages to update; see `npm outdated` and the open Dependabot PRs.
+cd web && npm update --min-release-age=7 @vue/test-utils
+```
+
+- **The cooldown is a flag, not configuration, on purpose.** `exclude-newer` under `[tool.uv]`
+  and `min-release-age` in `web/.npmrc` would apply it to every resolve, including the security
+  fixes that are meant to skip it.
+- **The final plain `uv lock` is required.** uv records `--exclude-newer` in `uv.lock` as
+  `exclude-newer-span`. Any later lock without the flag then treats the file as stale, and
+  `uv lock --check` fails. The plain `uv lock` removes it and leaves every version alone.
+- **`-P 'pkg<N'` holds a package below N.** The ranges in `pyproject.toml` are open-ended, so
+  `--upgrade` alone takes every major. Hold `ruff` (`-P 'ruff==<current>'`) and `actionlint-py`
+  the same way when they need commits of their own (see `dependabot.yml`).
+- **Never run a bare `npm update --min-release-age=7`.** It re-resolves the whole tree under the
+  cooldown. It fails when a direct dependency's floor in `package.json` is newer than the cooldown
+  (common right after a security bump). Exempt that package and it *downgrades* whatever the
+  lockfile already holds at a recent version, which can undo a security fix. Naming packages
+  re-resolves only their subtrees. An exact pin, such as `@playwright/test`, has to be edited in
+  `package.json` instead.
+
 ## Repository history was rewritten on 2026-09-01
 
 Every commit was rewritten to remove an internal Babel URL that had been the hardcoded default
